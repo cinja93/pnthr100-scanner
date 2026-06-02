@@ -15,17 +15,20 @@ const GRAD_TIER_1  = 125_000;
 const GRAD_TIER_2  = 166_000;
 
 const STATE_COLORS = {
-  STALKING: '#a78bfa', ATTACK: '#f59e0b', ACTIVE: '#22c55e', PROTECT: '#3b82f6',
+  STALKING: '#a78bfa', HUNTING: '#f59e0b', ATTACK: '#f97316', ACTIVE: '#22c55e', DEVOUR: '#22c55e', PROTECT: '#3b82f6',
 };
+// Display the engine's ACTIVE state as "DEVOUR" (panther hunt cycle). Engine value stays ACTIVE.
+const STATE_DISPLAY = { STALKING: 'STALKING', ATTACK: 'ATTACK', ACTIVE: 'DEVOUR', PROTECT: 'PROTECT' };
 
-// What each phase of the position life-cycle means, and which box it shows up in.
-// New entries flow: a WATCHING candidate breaks its opening range after 10:30 → ACTIVE.
-// Re-entry loop: ACTIVE → exit → STALKING → ATTACK → ACTIVE again.
+// The PNTHR Hunt Cycle. New entry: STALKING → HUNTING → ATTACK → DEVOUR → PROTECT.
+// Re-entry loop: exit → STALKING → ATTACK → DEVOUR.
 const PHASE_INFO = {
-  STALKING: 'STALKING (purple): a name that was stopped out and is now hunting a re-entry. It re-arms and re-enters on a break of the 2-bar high with a tighter stop. These appear in the STALKING box below. (Brand-new candidates that have not entered yet live in the WATCHING box, not here.)',
-  ATTACK: 'ATTACK (amber): a re-entry breakout was just confirmed and the entry order is queued to fire on this tick — a brief hand-off between STALKING and ACTIVE. Shows in the ATTACK box (only visible while one is firing).',
-  ACTIVE: 'ACTIVE (green): an open, working position whose stop is still the first-hour disaster stop or a lot trigger (below entry). New entries from the WATCHING pool land here first. Shown in the LIVE POSITIONS box with a green ACTIVE badge.',
-  PROTECT: 'PROTECT (blue): an open position whose stop has ratcheted to breakeven-or-better — it can no longer turn into a loss. Shown in the LIVE POSITIONS box with a blue PROTECT badge.',
+  STALKING: 'STALKING (purple): the prey pool — every name with an active weekly BL+1 / SS+1 signal (and any name stopped out, now hunting a re-entry). Shown in the STALKING box. The panther is watching, waiting for the daily 2-day-high to clear.',
+  HUNTING: 'HUNTING (amber): the daily 2-day-high has cleared — the panther is closing in. The engine now watches these names every 60s for the real-time break of the prior hourly bar high. Shown in the HUNTING box.',
+  ATTACK: 'ATTACK (orange): the pounce — price just broke the prior hourly bar high (N=1), the entry order fires this tick. A brief hand-off into a live position. Also where re-entries fire on the 2-bar-high break.',
+  DEVOUR: 'DEVOUR (green): a live position, in the kill — stop is still the first-hour disaster stop (below entry). Shown in the LIVE POSITIONS box with a green DEVOUR badge.',
+  ACTIVE: 'DEVOUR (green): a live position, in the kill — stop is still the first-hour disaster stop (below entry). Shown in the LIVE POSITIONS box with a green DEVOUR badge.',
+  PROTECT: 'PROTECT (blue): the kill is secured — a lot has ratcheted the stop to breakeven-or-better, so it can no longer turn into a loss. The panther guards its kill. Shown in the LIVE POSITIONS box with a blue PROTECT badge.',
 };
 
 const ACTION_CONFIG = {
@@ -285,7 +288,7 @@ function ActionItem({ action }) {
 function StateBadge({ state }) {
   return (
     <span className={styles.stateBadge} style={{ background: STATE_COLORS[state] + '22', color: STATE_COLORS[state], borderColor: STATE_COLORS[state] + '44' }}>
-      {state}
+      {STATE_DISPLAY[state] || state}
     </span>
   );
 }
@@ -300,22 +303,28 @@ function DirBadge({ direction }) {
 }
 
 // ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
-function WatchCol({ title, color, items }) {
-  const readyCount = items.filter(i => i.ready).length;
+function WatchCol({ title, color, items, huntingSet }) {
+  const hs = huntingSet || new Set();
+  const readyCount = items.filter(i => i.ready && !hs.has(i.ticker)).length;
+  const movedCount = items.filter(i => hs.has(i.ticker)).length;
   return (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{ color, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
-        {title} <span style={{ color: '#555' }}>· {readyCount} ready / {items.length} total</span>
+        {title} <span style={{ color: '#555' }}>· {readyCount} stalking / {items.length} total{movedCount ? ` · ${movedCount} → HUNTING` : ''}</span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {items.length === 0 ? <span style={{ color: '#555', fontSize: 12 }}>none today</span> : items.map(it => {
-          const reason = it.tracked ? 'already in a position' : !it.regimeOk ? 'waiting on regime' : !it.sectorOk ? 'sector AVOID' : 'ready';
+          const inHunting = hs.has(it.ticker);
+          const reason = inHunting ? 'cleared the daily → now HUNTING' : it.tracked ? 'already in a position' : !it.sectorOk ? 'sector AVOID' : 'stalking';
+          // Moved to HUNTING → dim/gray it out (it has graduated to the HUNTING box).
+          const dim = inHunting || !it.ready || it.tracked;
           return (
             <span key={it.ticker} title={`${it.sector} — ${reason}`} style={{
               fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace',
-              color: it.ready ? '#000' : '#888',
-              background: it.ready ? color : '#161616',
-              border: `1px solid ${it.ready ? color : '#2a2a2a'}`,
+              color: inHunting ? '#555' : (it.ready ? '#000' : '#888'),
+              background: inHunting ? '#141414' : (it.ready ? color : '#161616'),
+              border: `1px solid ${inHunting ? '#3a3a3a' : (it.ready ? color : '#2a2a2a')}`,
+              opacity: dim ? 0.55 : 1,
             }}>{it.ticker}{it.tracked ? ' •' : ''}</span>
           );
         })}
@@ -589,6 +598,7 @@ export default function AmbushPage() {
   const actions = lastResult.actions || [];
   const watching = lastResult.watching || { longs: [], shorts: [] };
   const hunting = lastResult.hunting || []; // daily-cleared candidates (HUNTING stage)
+  const huntingSet = new Set(hunting.map(h => h.ticker));
 
   const byState = {
     STALKING: positions.filter(p => p.state === 'STALKING'),
@@ -711,14 +721,20 @@ export default function AmbushPage() {
 
       {/* ═══ FLOW INDICATOR ═══ */}
       <div className={styles.flowRow}>
-        {['STALKING', 'ATTACK', 'ACTIVE', 'PROTECT'].map((state, i) => (
-          <div key={state} className={styles.flowItem}>
+        {[
+          { key: 'STALKING', count: watching.longs.length + watching.shorts.length },
+          { key: 'HUNTING',  count: hunting.length },
+          { key: 'ATTACK',   count: byState.ATTACK.length },
+          { key: 'DEVOUR',   count: byState.ACTIVE.length },
+          { key: 'PROTECT',  count: byState.PROTECT.length },
+        ].map((s, i) => (
+          <div key={s.key} className={styles.flowItem}>
             {i > 0 && <span className={styles.flowArrow}>{'→'}</span>}
-            <span style={{ color: STATE_COLORS[state], fontWeight: 700, fontSize: 13 }}>{state}</span>
-            <span className={styles.flowCount} style={{ background: STATE_COLORS[state], color: '#000' }}>
-              {byState[state].length}
+            <span style={{ color: STATE_COLORS[s.key], fontWeight: 700, fontSize: 13 }}>{s.key}</span>
+            <span className={styles.flowCount} style={{ background: STATE_COLORS[s.key], color: '#000' }}>
+              {s.count}
             </span>
-            <InfoPopup text={PHASE_INFO[state]} wide />
+            <InfoPopup text={PHASE_INFO[s.key]} wide />
           </div>
         ))}
       </div>
@@ -746,7 +762,7 @@ export default function AmbushPage() {
       <div className={styles.section}>
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
           <span className={styles.sectionTitle}>
-            WATCHING — today's candidates
+            STALKING — today's candidates
             <InfoPopup text="Every name with an active weekly BL+1 (long) or SS+1 (short) signal. V7.4 takes longs AND shorts in any market regime, so a bright chip just needs to pass the sector gate and is ready to enter the moment its breakout confirms after 10:30. A dimmed chip has the signal but its sector is on AVOID, or it's already in a position (•). The engine recomputes this every 60s." wide />
           </span>
           <div className={styles.sectionBadges}>
@@ -760,8 +776,8 @@ export default function AmbushPage() {
             <div className={styles.emptyState}>No active signals loaded yet — appears once the engine ticks.</div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '6px 2px' }}>
-              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} />
-              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} />
+              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} huntingSet={huntingSet} />
+              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} huntingSet={huntingSet} />
             </div>
           )
         )}
@@ -807,10 +823,10 @@ export default function AmbushPage() {
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
             LIVE POSITIONS
-            <InfoPopup text="All open Ambush positions. ACTIVE = pre-Break Even, lots loading. PROTECT = Break Even hit ($75 unrealized), trailing stop ratcheting. Click a row to see lot plan and trailing status." wide />
+            <InfoPopup text="All open Ambush positions. DEVOUR = live and working, stop still at the first-hour disaster low (below entry). PROTECT = a lot has ratcheted the stop to breakeven-or-better — the kill is secured. Click a row to see the lot plan and trailing status." wide />
           </span>
           <div className={styles.sectionBadges}>
-            <span style={{ color: STATE_COLORS.ACTIVE }}>ACTIVE {byState.ACTIVE.length}</span>
+            <span style={{ color: STATE_COLORS.ACTIVE }}>DEVOUR {byState.ACTIVE.length}</span>
             <span style={{ color: STATE_COLORS.PROTECT }}>PROTECT {byState.PROTECT.length}</span>
           </div>
         </div>

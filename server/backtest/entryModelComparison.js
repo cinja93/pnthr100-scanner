@@ -743,82 +743,42 @@ async function main() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  PNTHR AMBUSH V7.4 CANONICAL — no regime gate + 2-bar exit governs
-  //  (validated vs V7.3: +54.8% total value, DD 2.17%->1.28%, edge every year)
-  //  Regenerates the live projection baseline + V7.4 CSVs.
-  // ══════════════════════════════════════════════════════════════════════════
-  const V74 = { gateMode: 'none', exitMode: '2bar', entryMode: 'realtime', lookbackBars: 1 };  // N=1 executable entry
-  console.log('\n[3] V7.4 CANONICAL — GRAD BASELINE (projection) + GRAD WITHDRAW (CSVs)\n');
+  // ── EXECUTABLE ENTRY COMPARISON: look-ahead vs real-time N=1 vs N=2 ─────────
+  console.log('\n[3] ENTRY MODEL COMPARISON — V7.4 rules (no-gate + 2-bar exit), GRAD, $2M->$1M\n');
+  const V74 = { useGraduated: true, withdrawals: true, gateMode: 'none', exitMode: '2bar' };
+  const tvc = (r) => Math.round(r.equity + r.totalWithdrawn);
+  function ds(res){ const Sh=(res.closedTrades||[]).filter(e=>e.direction==='SHORT'); return { shortN:Sh.length, shortPnl:Sh.reduce((s,e)=>s+e.pnl,0) }; }
 
-  process.stdout.write('  GRAD BASELINE (pure compounding)...');
-  const base = runSim({ ...V74, useGraduated: true, withdrawals: false, label: 'V7.4 GRAD BASELINE' });
-  console.log(` equity $${Math.round(base.equity).toLocaleString()}  CAGR ${base.cagr.toFixed(1)}%  DD ${base.maxDD.toFixed(2)}%`);
-
-  process.stdout.write('  GRAD WITHDRAW (live config)...');
-  const wd = runSim({ ...V74, useGraduated: true, withdrawals: true, label: 'V7.4 GRAD WITHDRAW' });
-  console.log(` total value $${Math.round(wd.equity + wd.totalWithdrawn).toLocaleString()}  (banked $${(wd.totalWithdrawn/1e6).toFixed(0)}M + working $${Math.round(wd.equity).toLocaleString()})`);
-
-  // ── Projection baseline (GRAD BASELINE = pure compounding) + metric cards ──
-  const startNav = NAV_INITIAL;
-  const factors = (base.dailyLedger || []).map((s, i) => ({ i, date: s.date, factor: +(s.nav / startNav).toFixed(6) }));
-  const btStart = hourlyTradingDates[0], btEnd = hourlyTradingDates[hourlyTradingDates.length - 1];
-  const spyStartC = (spyWeekly.find(w => (w.weekOf || w.date) >= btStart) || spyWeekly[0])?.close || 0;
-  let spyEndC = spyWeekly[spyWeekly.length - 1]?.close || spyStartC;
-  for (let i = spyWeekly.length - 1; i >= 0; i--) { if ((spyWeekly[i].weekOf || spyWeekly[i].date) <= btEnd) { spyEndC = spyWeekly[i].close; break; } }
-  const spyRet = spyStartC ? (spyEndC / spyStartC - 1) : 0;
-  const calmar = base.maxDD > 0 ? +(base.cagr / base.maxDD).toFixed(2) : null;
-  const recovery = base.maxDDDollar > 0 ? +((base.equity - startNav) / base.maxDDDollar).toFixed(1) : null;
-  const metrics = {
-    netReturnPct: +base.netReturn.toFixed(1),
-    cagrPct: +base.cagr.toFixed(1),
-    sharpe: +base.sharpe.toFixed(2),
-    sortino: +base.sortino.toFixed(1),
-    profitFactor: +base.pf.toFixed(1),
-    calmar,
-    recoveryFactor: recovery,
-    positiveMonthsPct: base.positiveMonthsPct,
-    winRatePct: +base.wr.toFixed(0),
-    payoff: +base.payoff.toFixed(1),
-    maxDDPct: +base.maxDD.toFixed(2),
-    totalClosed: base.trades,
-    endingEquity: Math.round(base.equity),
-    alphaDollar: Math.round(base.equity - startNav * (1 + spyRet)),
-    alphaPct: +(base.netReturn - spyRet * 100).toFixed(1),
-    spyReturnPct: +(spyRet * 100).toFixed(1),
-    startNav,
-  };
-  const projOut = {
-    generatedFrom: 'pai300HourlyV74.js GRAD BASELINE (no-gate + 2-bar + REAL-TIME N=1 entry, pure compounding, no withdrawals)',
-    version: '7.4.0',
-    backtestStartNav: startNav,
-    backtestEndNav: Math.round(base.equity),
-    tradingDays: factors.length,
-    metrics,
-    factors,
-  };
-  const projPath = new URL('../data/ambushProjectionBaseline.json', import.meta.url).pathname;
-  fs.writeFileSync(projPath, JSON.stringify(projOut));
-  console.log(`\n  Wrote projection: server/data/ambushProjectionBaseline.json  (${factors.length} days, end factor ${factors[factors.length-1]?.factor})`);
-  console.log('  METRIC CARDS (V7.4):');
-  console.log(`    Net Total Return  +${metrics.netReturnPct.toLocaleString()}%      CAGR +${metrics.cagrPct}%      Sharpe ${metrics.sharpe}      Sortino ${metrics.sortino}`);
-  console.log(`    Profit Factor ${metrics.profitFactor}x   Calmar ${metrics.calmar}   Recovery ${metrics.recoveryFactor}x   Pos Months ${metrics.positiveMonthsPct}%`);
-  console.log(`    Win Rate ${metrics.winRatePct}% (${metrics.payoff}x payoff)   Max DD ${metrics.maxDDPct}%   Trades ${metrics.totalClosed.toLocaleString()}   Ending $${(metrics.endingEquity/1e6).toFixed(2)}M   Alpha +$${(metrics.alphaDollar/1e6).toFixed(2)}M`);
-
-  // ── V7.4 CSVs (GRAD WITHDRAW) ──
-  try {
-    const dl = path.join(os.homedir(), 'Downloads');
-    const tHead = ['ExitDate','Hour','Ticker','Direction','Shares','AvgCost','ExitPrice','ExitType','PnL','EntryDate'];
-    const tRows = (wd.closedTrades || []).map(e => [e.date, e.hour || '', e.ticker, e.direction, e.shares, e.avgCost, e.exitPrice, e.type, e.pnl, e.entryDate].join(','));
-    fs.writeFileSync(path.join(dl, 'PNTHR_Ambush_V7.4_ClosedTrades.csv'), [tHead.join(','), ...tRows].join('\n'));
-    const cHead = ['Date','Positions','Cash','Deployed','NAV','TotalWithdrawn'];
-    const cRows = (wd.dailyLedger || []).map(s => [s.date, s.positions, s.cash, s.deployed, s.nav, s.withdrawn].join(','));
-    fs.writeFileSync(path.join(dl, 'PNTHR_Ambush_V7.4_CashLedger.csv'), [cHead.join(','), ...cRows].join('\n'));
-    console.log(`\n  Exported ~/Downloads: PNTHR_Ambush_V7.4_ClosedTrades.csv (${tRows.length} trades), PNTHR_Ambush_V7.4_CashLedger.csv (${cRows.length} days)`);
-  } catch (e) { console.error('  CSV export failed:', e.message); }
-
-  console.log('\n' + '='.repeat(120));
-  console.log('  V7.4 CANONICAL COMPLETE');
-  console.log('='.repeat(120));
+  const RUNS = [
+    { key: 'LOOK-AHEAD (old, fill @ 9:30 open)', opts: { ...V74, entryMode: 'lookahead' } },
+    { key: 'REAL-TIME N=1 (break 1H high, ~10:30)', opts: { ...V74, entryMode: 'realtime', lookbackBars: 1 } },
+    { key: 'REAL-TIME N=2 (break prior 2 bars, ~11:30)', opts: { ...V74, entryMode: 'realtime', lookbackBars: 2 } },
+    { key: 'REAL-TIME N=1 + green filter', opts: { ...V74, entryMode: 'realtime', lookbackBars: 1, greenFilter: true } },
+    { key: 'REAL-TIME N=2 + green filter', opts: { ...V74, entryMode: 'realtime', lookbackBars: 2, greenFilter: true } },
+  ];
+  const rows = [];
+  for (const r of RUNS) {
+    process.stdout.write(`  ${r.key} ...`);
+    const res = runSim({ ...r.opts, label: r.key });
+    const d = ds(res);
+    rows.push({ r, res, d });
+    console.log(` TOTAL $${tvc(res).toLocaleString()}  CAGR ${res.cagr.toFixed(1)}%  Sharpe ${res.sharpe.toFixed(2)}  DD ${res.maxDD.toFixed(2)}%  WR ${res.wr.toFixed(0)}%  trades ${res.trades}`);
+  }
+  const L=(s,n)=>String(s).padEnd(n), R=(s,n)=>String(s).padStart(n);
+  console.log('\n' + '='.repeat(140));
+  console.log('  EXECUTABLE ENTRY MODELS — which gives the best ACHIEVABLE result?  ($83K start, slippage+fees+borrow in)');
+  console.log('='.repeat(140));
+  console.log(`  ${L('Entry model',42)} ${R('TOTAL VALUE',14)} ${R('CAGR',8)} ${R('Sharpe',7)} ${R('MaxDD',7)} ${R('PF',6)} ${R('WinR',6)} ${R('Payoff',7)} ${R('Trades',7)} ${R('ShortP&L',12)}`);
+  console.log(`  ${'-'.repeat(136)}`);
+  for (const x of rows) {
+    const e=x.res;
+    console.log(`  ${L(x.r.key,42)} ${R('$'+tvc(e).toLocaleString(),14)} ${R(e.cagr.toFixed(1)+'%',8)} ${R(e.sharpe.toFixed(2),7)} ${R(e.maxDD.toFixed(2)+'%',7)} ${R(e.pf.toFixed(1)+'x',6)} ${R(e.wr.toFixed(0)+'%',6)} ${R(e.payoff.toFixed(1)+'x',7)} ${R(e.trades,7)} ${R('$'+Math.round(x.d.shortPnl).toLocaleString(),12)}`);
+  }
+  console.log(`  ${'-'.repeat(136)}`);
+  const base = tvc(rows[0].res);
+  console.log('\n  vs the OLD look-ahead baseline (the number on the IR cards):');
+  for (const x of rows) { const d = tvc(x.res)-base; const p = base? d/base*100:0; console.log(`     ${L(x.r.key,42)} ${R((d>=0?'+$':'-$')+Math.abs(d).toLocaleString(),14)}  (${(p>=0?'+':'')}${p.toFixed(1)}%)`); }
+  console.log('\n  NOTE: rows 2-5 are EXECUTABLE (stop-buy at the breakout, fill at level/open, real slippage). Row 1 is the old look-ahead (fill at 9:30 open) — NOT achievable.');
   process.exit(0);
 }
 main().catch(err => { console.error(err); process.exit(1); });

@@ -1145,7 +1145,7 @@ def ambush_outbox_poller_loop(app, rate_limiter, stop_event):
     """Background thread: polls Ambush outbox and dispatches commands."""
     print(f"[AMBUSH] Poller starting — every {AMBUSH_POLL_SEC}s | "
           f"writes={'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'} | "
-          f"dryRun={'ON' if IBKR_WRITES_DRY_RUN else 'OFF'}")
+          f"AMBUSH_DRY_RUN={'ON (no real trades)' if (AMBUSH_DRY_RUN or IBKR_WRITES_DRY_RUN) else 'OFF (LIVE)'}")
     while not stop_event.is_set():
         try:
             if not IBKR_WRITES_ENABLED or not AMBUSH_ENABLED:
@@ -1216,7 +1216,7 @@ def main():
     print(f"  Sync:   every {SYNC_INTERVAL}s  |  Outbox poll: every {OUTBOX_POLL_SEC}s")
     print(f"  Phase 4 writes: {'ENABLED' if IBKR_WRITES_ENABLED else 'DISABLED'}"
           f"{'  (DRY-RUN)' if IBKR_WRITES_ENABLED and IBKR_WRITES_DRY_RUN else ''}")
-    print(f"  Ambush V7.3: {'ENABLED' if AMBUSH_ENABLED else 'DISABLED'}"
+    print(f"  Ambush V7.4: {'ENABLED' if AMBUSH_ENABLED else 'DISABLED'}"
           f"{'  (DRY-RUN — no real Ambush trades)' if (AMBUSH_DRY_RUN or IBKR_WRITES_DRY_RUN) else '  (LIVE WRITES)'}"
           f" (poll: {AMBUSH_POLL_SEC}s)")
     print(f"  Staleness guard: {OUTBOX_STALE_SEC}s (commands older than {OUTBOX_STALE_SEC // 60}min auto-rejected)")

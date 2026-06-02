@@ -249,7 +249,7 @@ async function main() {
   }
 
   // ── SIMULATION ENGINE ──────────────────────────────────────────────────────
-  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime' }) {
+  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false }) {
     const twoBarGoverns = exitMode === '2bar';
     const useBE75 = exitMode === 'be75';
     let cash = NAV_INITIAL;
@@ -580,14 +580,36 @@ async function main() {
 
           if (tryLong) (() => {
             if (!isActiveBL(ticker, date)) return;
-            const trigger = Math.max(prev1.high, prev2.high) + 0.01;
-            if (bar.high < trigger) return;
-            let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedGreenBreakout(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
-            if (!ok) return;
-            const ep = entrySlip(Math.max(bar.open, trigger), 'LONG');
+            const dailyTrigger = Math.max(prev1.high, prev2.high) + 0.01;
             const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
             const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
-            if (!firstHourLow || firstHourLow >= ep) { skippedNo1HLow++; return; }
+            if (!firstHourLow) { skippedNo1HLow++; return; }
+            let ep = null;
+            if (entryMode === 'realtime') {
+              // EXECUTABLE: resting stop-buy at max(2-day high, prior-N-bar high). Entry only
+              // after 10:30 (1H stop is set). Fill at the level, or the bar open if it gapped
+              // above by the time we can act. No look-ahead — only prior bars + this bar's high.
+              const seq = hBars.slice().sort((a, b) => a.date.localeCompare(b.date));
+              for (let i = 0; i < seq.length; i++) {
+                const b = seq[i];
+                if (extractTime(b.date) < FIRST_HOUR_END) continue;   // entry only after 10:30
+                if (i < lookbackBars) continue;                       // need N prior bars
+                const priorNHigh = Math.max(...seq.slice(i - lookbackBars, i).map(x => x.high));
+                const level = Math.max(dailyTrigger, +(priorNHigh + 0.01).toFixed(2));
+                if (b.high >= level) {                                // stop-buy triggered this bar
+                  if (greenFilter && !(b.close > b.open)) continue;
+                  ep = entrySlip(Math.max(level, b.open), 'LONG');    // fill at level, or open if gapped above
+                  break;
+                }
+              }
+              if (ep == null) return;
+            } else {
+              if (bar.high < dailyTrigger) return;                    // ORIGINAL look-ahead (daily full-day high)
+              let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedGreenBreakout(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
+              if (!ok) return;
+              ep = entrySlip(Math.max(bar.open, dailyTrigger), 'LONG'); // ORIGINAL: fill at 9:30 open / trigger
+            }
+            if (firstHourLow >= ep) { skippedNo1HLow++; return; }
             const stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
             if (stop >= ep) return;
             candidates.push({ ticker, ep, stop, rps: ep - stop, direction: 'LONG' });
@@ -595,14 +617,34 @@ async function main() {
 
           if (tryShort) (() => {
             if (!isActiveSS(ticker, date)) return;
-            const trigger = Math.min(prev1.low, prev2.low) - 0.01;
-            if (bar.low > trigger) return;
-            let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedRedBreakdown(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
-            if (!ok) return;
-            const ep = entrySlip(Math.min(bar.open, trigger), 'SHORT');
+            const dailyTrigger = Math.min(prev1.low, prev2.low) - 0.01;
             const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
             const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
-            if (!firstHourHigh || firstHourHigh <= ep) { skippedNo1HLow++; return; }
+            if (!firstHourHigh) { skippedNo1HLow++; return; }
+            let ep = null;
+            if (entryMode === 'realtime') {
+              // EXECUTABLE: resting stop-sell at min(2-day low, prior-N-bar low). Mirror of the long.
+              const seq = hBars.slice().sort((a, b) => a.date.localeCompare(b.date));
+              for (let i = 0; i < seq.length; i++) {
+                const b = seq[i];
+                if (extractTime(b.date) < FIRST_HOUR_END) continue;
+                if (i < lookbackBars) continue;
+                const priorNLow = Math.min(...seq.slice(i - lookbackBars, i).map(x => x.low));
+                const level = Math.min(dailyTrigger, +(priorNLow - 0.01).toFixed(2));
+                if (b.low <= level) {
+                  if (greenFilter && !(b.close < b.open)) continue;
+                  ep = entrySlip(Math.min(level, b.open), 'SHORT');
+                  break;
+                }
+              }
+              if (ep == null) return;
+            } else {
+              if (bar.low > dailyTrigger) return;
+              let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedRedBreakdown(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
+              if (!ok) return;
+              ep = entrySlip(Math.min(bar.open, dailyTrigger), 'SHORT');
+            }
+            if (firstHourHigh <= ep) { skippedNo1HLow++; return; }
             const stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
             if (stop <= ep) return;
             candidates.push({ ticker, ep, stop, rps: stop - ep, direction: 'SHORT' });
@@ -700,6 +742,7 @@ async function main() {
     };
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
   // ── Generate per-tier Ambush IR data (daily NAV + capped trade log + stats) ─
   const fsMod = fs; const pathMod = path;
   const { computeTradeStats } = await import('../irLiveService.js');
@@ -708,7 +751,7 @@ async function main() {
     { key: '500k', seedNav: 500_000 },
     { key: '100k', seedNav: 100_000 },
   ];
-  const V74 = { gateMode: 'none', exitMode: '2bar' };
+  const V74 = { gateMode: 'none', exitMode: '2bar', entryMode: 'realtime', lookbackBars: 1 };
   const outDir = new URL('../data/ambushIr/', import.meta.url).pathname;
   try { fsMod.mkdirSync(outDir, { recursive: true }); } catch {}
   function wdays(entry, exit) {

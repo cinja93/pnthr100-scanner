@@ -1007,51 +1007,47 @@ async function _runAmbushTickInner() {
       for (const { ticker, direction } of breakoutCandidates) {
         try {
           const hBars = hourlyBars[ticker];
-          if (!hBars || hBars.length < 2) continue;
-
+          if (!hBars || hBars.length < 1) continue;
           const todayOnlyBars = hBars.filter(b => b.date.startsWith(today));
-          if (todayOnlyBars.length < 2) continue;
+          if (todayOnlyBars.length < 1) continue;
 
-          // Hourly confirmed breakout
-          const afterFirst = todayOnlyBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
-          if (afterFirst.length < 2) continue;
-
-          let breakoutFound = false;
-          for (let i = 1; i < afterFirst.length; i++) {
-            const bar = afterFirst[i], prevBar = afterFirst[i - 1];
-            if (direction === 'LONG' && isConfirmedGreenBreakout(bar, prevBar)) {
-              breakoutFound = true;
-              break;
-            }
-            if (direction === 'SHORT' && isConfirmedRedBreakdown(bar, prevBar)) {
-              breakoutFound = true;
-              break;
-            }
-          }
-
-          if (!breakoutFound) continue;
-
-          // Calculate entry price using LIVE price (not stale bar open)
+          // ── V7.4 N=1 ENTRY (validated, executable) ──────────────────────────
+          // The daily 2-day-high is already cleared (breakoutCandidate). The trigger
+          // is a REAL-TIME break of the high of the most-recent COMPLETED hourly bar
+          // (N=1), caught on this 60s tick — NOT a closed-bar green confirmation, and
+          // NOT a 2-bar wait. Fill at the live price (≈ the breakout, caught <60s).
+          // Stop = first-hour low/high. Earliest entry ~10:30 (break the opening hour).
           const currentPrice = livePrices[ticker];
           if (!currentPrice) continue;
-          const ep = direction === 'LONG'
-            ? entrySlip(currentPrice, 'LONG')
-            : entrySlip(currentPrice, 'SHORT');
+          const barEndMin = (b) => {
+            const t = extractTime(b.date);
+            return parseInt(t.slice(0, 2), 10) * 60 + parseInt(t.slice(3, 5), 10) + 60;
+          };
+          const completed = todayOnlyBars
+            .filter(b => barEndMin(b) <= et.totalMinutes)          // bar's hour has fully ended
+            .sort((a, b) => a.date.localeCompare(b.date));
+          if (completed.length < 1) continue;                      // need the prior (≥ first-hour) bar
+          const priorBar = completed[completed.length - 1];        // most-recent completed hourly bar (N=1 reference)
 
-          // 1H Stop: firstHourLow - fees (LONG) / firstHourHigh + fees (SHORT)
           const firstHourBars = todayOnlyBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
-          let stop;
+          let ep, stop;
           if (direction === 'LONG') {
+            const breakoutLevel = +(priorBar.high + 0.01).toFixed(2);
+            if (currentPrice < breakoutLevel) continue;            // hasn't broken the prior bar's high yet
+            ep = entrySlip(currentPrice, 'LONG');
             const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
             if (!firstHourLow || firstHourLow >= ep) continue;
             stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
+            if (stop >= ep) continue;
           } else {
+            const breakoutLevel = +(priorBar.low - 0.01).toFixed(2);
+            if (currentPrice > breakoutLevel) continue;            // hasn't broken the prior bar's low yet
+            ep = entrySlip(currentPrice, 'SHORT');
             const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
             if (!firstHourHigh || firstHourHigh <= ep) continue;
             stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
+            if (stop <= ep) continue;
           }
-          if (direction === 'LONG' && stop >= ep) continue;
-          if (direction === 'SHORT' && stop <= ep) continue;
 
           const sizing = sizeLots(ep, stop, direction, tradingNav, sizeMult);
           if (!sizing) continue;

@@ -18,6 +18,16 @@ const STATE_COLORS = {
   STALKING: '#a78bfa', ATTACK: '#f59e0b', ACTIVE: '#22c55e', PROTECT: '#3b82f6',
 };
 
+// What each phase of the position life-cycle means, and which box it shows up in.
+// New entries flow: a WATCHING candidate breaks its opening range after 10:30 → ACTIVE.
+// Re-entry loop: ACTIVE → exit → STALKING → ATTACK → ACTIVE again.
+const PHASE_INFO = {
+  STALKING: 'STALKING (purple): a name that was stopped out and is now hunting a re-entry. It re-arms and re-enters on a break of the 2-bar high with a tighter stop. These appear in the STALKING box below. (Brand-new candidates that have not entered yet live in the WATCHING box, not here.)',
+  ATTACK: 'ATTACK (amber): a re-entry breakout was just confirmed and the entry order is queued to fire on this tick — a brief hand-off between STALKING and ACTIVE. Shows in the ATTACK box (only visible while one is firing).',
+  ACTIVE: 'ACTIVE (green): an open, working position whose stop is still the first-hour disaster stop or a lot trigger (below entry). New entries from the WATCHING pool land here first. Shown in the LIVE POSITIONS box with a green ACTIVE badge.',
+  PROTECT: 'PROTECT (blue): an open position whose stop has ratcheted to breakeven-or-better — it can no longer turn into a loss. Shown in the LIVE POSITIONS box with a blue PROTECT badge.',
+};
+
 const ACTION_CONFIG = {
   NEW_ENTRY:          { icon: '●', color: '#22c55e', label: 'NEW ENTRY' },
   RE_ENTRY:           { icon: '●', color: '#22c55e', label: 'RE-ENTRY' },
@@ -648,11 +658,23 @@ export default function AmbushPage() {
             <span>{livePositions.length} / {config.maxPositions || 999}</span>
           </div>
 
+          {/* Verified engine-health status (NOT a clock): TRADING only shows if the
+              engine actually ticked in the last ~2.5 min — a stalled engine goes red. */}
+          {(() => {
+            const tickAgeMs = config.lastCronRun ? Date.now() - new Date(config.lastCronRun).getTime() : Infinity;
+            const fresh = tickAgeMs < 150000; // engine ticks every 60s; <2.5 min = alive
+            const firstHour = lastResult?.isFirstHour;
+            let cls, label, title;
+            if (!config.enabled) { cls = styles.statusOff; label = '○ OFF'; title = 'Engine is OFF — toggle it LIVE to run'; }
+            else if (!fresh) { cls = styles.statusStalled; label = '● STALLED'; title = `Engine not ticking (last tick ${config.lastCronRun ? Math.round(tickAgeMs/1000)+'s ago' : 'never'}). NOT trading — check the server/cron.`; }
+            else if (firstHour) { cls = styles.statusCapturing; label = '● CAPTURING'; title = 'Engine is LIVE and building the first-hour opening ranges. Entries begin after 10:30 ET.'; }
+            else { cls = styles.statusTrading; label = '● TRADING'; title = 'Verified: engine is LIVE, ticking, and running entry logic (past 10:30 ET).'; }
+            return <span className={`${styles.engineStatus} ${cls}`} title={title}>{label}</span>;
+          })()}
           {config.lastCronRun && (
             <span className={styles.lastTick}>
               Last tick: {new Date(config.lastCronRun).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               {lastResult.priceSource && <span style={{ color: '#444', marginLeft: 6 }}>({lastResult.priceSource})</span>}
-              {lastResult.isFirstHour && <span style={{ color: '#f59e0b', marginLeft: 6, fontWeight: 700 }}>1H CAPTURE</span>}
             </span>
           )}
         </div>
@@ -695,6 +717,7 @@ export default function AmbushPage() {
             <span className={styles.flowCount} style={{ background: STATE_COLORS[state], color: '#000' }}>
               {byState[state].length}
             </span>
+            <InfoPopup text={PHASE_INFO[state]} wide />
           </div>
         ))}
       </div>

@@ -612,9 +612,23 @@ export default function AmbushPage() {
           <button
             className={styles.toggleBtn}
             onClick={handleToggle}
-            style={{ background: config.enabled ? '#22c55e' : '#333', color: config.enabled ? '#000' : '#888' }}
+            title={config.enabled ? 'Engine is LIVE — click to STOP' : 'Engine is OFF — click to GO LIVE'}
+            style={{
+              background: config.enabled ? '#16a34a' : '#7f1d1d',
+              color: '#fff',
+              border: config.enabled ? '2px solid #22c55e' : '2px solid #ef4444',
+              boxShadow: config.enabled ? '0 0 10px rgba(34,197,94,0.55)' : 'none',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              minWidth: 96,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
           >
-            {config.enabled ? 'LIVE' : 'OFF'}
+            <span style={{ fontSize: 9 }}>{config.enabled ? '🟢' : '🔴'}</span>
+            {config.enabled ? 'LIVE' : 'OFF — CLICK TO GO LIVE'}
           </button>
 
           <div className={styles.statusGroup}>

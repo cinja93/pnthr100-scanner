@@ -584,12 +584,32 @@ async function processNewPositions(db, userId, ibkrPositions, syncedAt, ibkrStop
   // ACTIVE, compounding the damage.
   const activeTickerSet = new Set(activePnthr.map(p => p.ticker?.toUpperCase()));
 
+  // Ambush ownership guard. Tickers managed by the intraday Ambush engine live
+  // in pnthr_ambush_positions and are managed END TO END there: entries, exits,
+  // lot pyramids, and protective/trailing stops (all via pnthr_ambush_outbox).
+  // The weekly ai300/679 portfolio must NEVER auto-adopt an Ambush fill. Both
+  // engines share ONE IBKR account, so a shadow adoption creates (a) a duplicate
+  // portfolio record with a divergent share count and (b) a competing protective
+  // stop. When Ambush later exits its position, that shadow stop is orphaned and
+  // can fire on the next dip — flipping the net account position to the opposite
+  // side. ROOT CAUSE of AVGO 2026-06-02: Ambush opened long 3, closed it, the
+  // shadow SELL STP @477.75 then fired → account went SHORT 3 with zero short
+  // intent anywhere in PNTHR. Mirrors orphanOrderJanitor.js, which already reads
+  // this same collection to protect Ambush's stops.
+  const ambushDocs = await db.collection('pnthr_ambush_positions')
+    .find({}).project({ ticker: 1 }).toArray();
+  const ambushTickers = new Set(ambushDocs.map(a => a.ticker?.toUpperCase()).filter(Boolean));
+
   for (const pos of ibkrPositions) {
     if (!pos.symbol || pos.symbol === 'USD') continue;
     const shares = +pos.shares || 0;
     if (shares === 0) continue;
 
     const ticker    = pos.symbol.toUpperCase();
+    if (ambushTickers.has(ticker)) {
+      console.log(`[IBKR Phase 3] ${ticker}: SKIP auto-open — owned by Ambush engine (pnthr_ambush_positions). Portfolio sync hands off.`);
+      continue;
+    }
     const direction = shares > 0 ? 'LONG' : 'SHORT';
     const key       = `${ticker}_${direction}`;
     if (activeKeys.has(key)) continue; // already tracked

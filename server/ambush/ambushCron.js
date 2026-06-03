@@ -711,31 +711,14 @@ async function _runAmbushTickInner() {
           // Timestamp this lot fill for the Lot Plan panel (lot index = pos.nextLot - 1).
           pos.lotFills = [...(pos.lotFills || []), { lot: pos.nextLot - 1, at: now, price: fillPrice }];
 
-          // V7.3: post-BE, stop moves to the PREVIOUS lot's trigger price,
-          // but NEVER worse than the recomputed breakeven (guardrail).
-          if (pos.atBE) {
-            const feePer = calcCommission(pos.totalShares, pos.avgCost) / pos.totalShares;
-            const breakeven = isLong
-              ? +(pos.avgCost + feePer).toFixed(2)
-              : +(pos.avgCost - feePer).toFixed(2);
-            const prevLotIdx = pos.nextLot - 2; // lot just below the one that filled
-            let lotStop = breakeven;
-            if (prevLotIdx >= 0) {
-              lotStop = isLong
-                ? +(pos.originalEntry * (1 + LOT_OFFSETS[prevLotIdx])).toFixed(2)
-                : +(pos.originalEntry * (1 - LOT_OFFSETS[prevLotIdx])).toFixed(2);
-            }
-            const newStop = isLong
-              ? Math.max(pos.stop, lotStop, breakeven)
-              : Math.min(pos.stop, lotStop, breakeven);
-            if (newStop !== pos.stop) {
-              pos.stop = newStop;
-              await enqueueAmbushOrder(db, 'MODIFY_STOP', {
-                ticker: pos.ticker, direction: pos.direction,
-                newStopPrice: pos.stop, shares: pos.totalShares, reason: 'LOT_TRAIL',
-              });
-            }
-          }
+          // V7.6 (2026-06-03): the protective stop is the CURRENT 2-bar-low and is
+          // managed SOLELY by Check B (2BAR_TRACK) below. The old V7.3 lot-based
+          // trailing stop (move the stop to the previous lot's trigger on each lot
+          // fill) was REMOVED — it was a SECOND, conflicting protective-stop manager
+          // that raced Check B and left TWO resting SELL stops in IBKR (the ALAB
+          // duplicate: LOT_TRAIL @365.04 + 2BAR_TRACK @352.26 on 2026-06-03). On a
+          // lot fill, Check A now ONLY records the fill + places the next lot trigger;
+          // it never touches the protective stop. One manager, one stop.
 
           actions.push({
             type: 'LOT_FILL', ticker: pos.ticker,

@@ -706,6 +706,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [moversBannerVisible, setMoversBannerVisible] = useState(false);
   const [nowOrdersBannerVisible, setNowOrdersBannerVisible] = useState(false);
   const [reentryBannerHeight, setReentryBannerHeight] = useState(0);
+  const [discBannerHeight, setDiscBannerHeight] = useState(0);
   const [lotAlerts,         setLotAlerts]         = useState([]);
   const [dismissedLotKeys,  setDismissedLotKeys]  = useState(new Set());
   const [positions,         setPositions]         = useState([]); // full positions for EMA alerts
@@ -1272,9 +1273,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
         : (trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
           + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
           + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)
-          + reentryBannerHeight || undefined,
+          + reentryBannerHeight
+          + discBannerHeight || undefined,
     }}>
-      {isAuthenticated && !isImpersonating && <AmbushDiscrepancyBanner />}
       {isAuthenticated && !isImpersonating && (
         <TrendlineAlertBanner
           onNavigateToAssistant={() => navigate('assistant')}
@@ -1312,6 +1313,13 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           setChartStocks([{ ticker }]);
           setChartIndex(0);
         }}
+      />}
+      {isAuthenticated && !isImpersonating && <AmbushDiscrepancyBanner
+        topOffset={(trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
+          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
+          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)
+          + reentryBannerHeight}
+        onLayout={setDiscBannerHeight}
       />}
       <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAmbushDiscrepancies, ambushDiscrepancyAction } from '../services/api';
 
 // ── Ambush ↔ IBKR discrepancy banner (2026-06-03) ───────────────────────────
@@ -10,9 +10,10 @@ import { fetchAmbushDiscrepancies, ambushDiscrepancyAction } from '../services/a
 //                   stop + pyramid (same as adopting a manual order)
 //   • Clear       — (phantom only) reconcile the stale engine record to flat
 // Polls every 45s; only renders when there is at least one discrepancy.
-export default function AmbushDiscrepancyBanner() {
+export default function AmbushDiscrepancyBanner({ topOffset = 0, onLayout }) {
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(null);
+  const ref = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -26,6 +27,12 @@ export default function AmbushDiscrepancyBanner() {
     const iv = setInterval(load, 45000);
     return () => clearInterval(iv);
   }, [load]);
+
+  // Report rendered height so the page can reserve space (matches the other
+  // fixed banners' topOffset/paddingTop pattern; 0 when there are no items).
+  useEffect(() => {
+    onLayout?.(items.length && ref.current ? ref.current.offsetHeight : 0);
+  }, [items, onLayout]);
 
   if (!items.length) return null;
 
@@ -49,7 +56,7 @@ export default function AmbushDiscrepancyBanner() {
   );
 
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 6000, width: '100%' }}>
+    <div ref={ref} style={{ position: 'fixed', top: topOffset, left: 0, right: 0, zIndex: 9999 }}>
       <style>{`@keyframes ambushDiscFlash { 0%,100%{background:#8b0000;} 50%{background:#d11f1f;} }`}</style>
       <div style={{
         animation: 'ambushDiscFlash 1.1s ease-in-out infinite',

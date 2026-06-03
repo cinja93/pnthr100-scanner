@@ -588,6 +588,33 @@ class PNTHRBridge(EWrapper, EClient):
             'failures':  failures,
         }
 
+    def cancel_pnthr_protective_stops(self, ticker, action=None):
+        """Cancel EVERY PNTHR-tagged protective stop (STP / STP LMT) open for `ticker`
+        on the given `action` side, so after placing a fresh one there is EXACTLY ONE.
+        Manual stops the user entered in TWS (empty orderRef) are LEFT ALONE —
+        tightest-stop-wins. This sweeps any duplicate/orphan a single-orderId cancel
+        missed: the pre-fix LOT_TRAIL/2BAR_TRACK race AND a cache-miss 'placed_new'
+        both left two SE cover stops (90.65 + 92.89). `action` (BUY = short cover /
+        SELL = long exit) keeps us off the opposite-side lot triggers (a LONG's BUY-STP
+        pyramid adds, a SHORT's SELL-STP adds). Idempotent (ALREADY_GONE = success)."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        ticker = ticker.upper()
+        cancelled, failures = [], []
+        for k, o in list(self.open_orders.items()):
+            if o.get('symbol') != ticker:
+                continue
+            if o.get('orderType') not in ('STP', 'STP LMT'):
+                continue
+            if (o.get('orderRef') or '').strip() != self.PNTHR_ORDER_REF:
+                continue  # manual TWS stop — protect it (tightest-stop-wins)
+            if action and o.get('action') and o.get('action') != action:
+                continue  # opposite side (lot-trigger add) — not a protective stop
+            res = self.cancel_order_by_perm_id(o['permId'])
+            (cancelled if res['ok'] else failures).append(
+                {'permId': o['permId'], 'orderId': o['orderId'], 'stopPrice': o.get('stopPrice'), 'result': res})
+        return {'ok': len(failures) == 0, 'cancelled': cancelled, 'failures': failures}
+
     def sell_position(self, ticker, action, shares, order_type='MKT',
                       limit_price=None, tif='DAY', rth=True):
         """Place a closing sell (LONG) or cover (SHORT) for an existing position.
@@ -660,20 +687,23 @@ class PNTHRBridge(EWrapper, EClient):
 
         Order shape (STP vs STP LMT) is plumbed through to place_protective_stop
         so a position toggling stopExtendedHours mid-life rebuilds the order
-        in the right form on the next 4c sync."""
-        cancel = self.cancel_order_by_perm_id(old_perm_id)
-        if not cancel['ok']:
-            return {'ok': False, 'phase': 'CANCEL', 'cancelResult': cancel}
+        in the right form on the next 4c sync.
+
+        2026-06-03: cancels ALL PNTHR protective stops for this ticker+side, not just
+        old_perm_id, so a duplicate/orphan from a past cancel race or a cache-miss
+        'placed_new' is swept too — end state = exactly ONE PNTHR stop at the new
+        level. Manual TWS stops are untouched. old_perm_id is now advisory only."""
+        cancel = self.cancel_pnthr_protective_stops(ticker, action=action)
         place = self.place_protective_stop(
             ticker, action, shares, new_stop_price,
             tif=tif, rth=rth, order_type=order_type, limit_price=limit_price,
         )
         return {
             'ok':           place['ok'],
-            'phase':        'PLACE_AFTER_CANCEL',
+            'phase':        'PLACE_AFTER_CANCEL_ALL',
             'cancelResult': cancel,
             'placeResult':  place,
-            'naked':        not place['ok'],  # true == we cancelled but couldn't replace
+            'naked':        not place['ok'],  # true == we swept but couldn't replace
         }
 
     # ── Payload builder ───────────────────────────────────────────────────────
@@ -1173,24 +1203,17 @@ def _execute_ambush_command(app, rate_limiter, cmd):
         stop_action = 'SELL' if is_long else 'BUY'
         new_stop = request.get('newStopPrice')
         shares = request.get('shares')
-
-        perm_id = _find_protective_stop(app, ticker, stop_action)
-        if perm_id:
-            result = app.modify_stop(
-                ticker=ticker, old_perm_id=perm_id, new_stop_price=new_stop,
-                action=stop_action, shares=shares, tif='GTC', rth=True,
-            )
-            return result.get('ok', False), result, (
-                None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
-        else:
-            # No existing stop found — place a new one
-            result = app.place_protective_stop(
-                ticker=ticker, action=stop_action, shares=shares,
-                stop_price=new_stop, tif='GTC', rth=True,
-            )
-            return result.get('ok', False), {
-                'placed_new': True, **result
-            }, (None if result.get('ok') else result.get('error') or 'PLACE_NEW_STOP_FAILED')
+        # Always sweep ALL PNTHR stops for this ticker+side, then place exactly one
+        # (modify_stop does both, and a clean sweep with nothing to cancel just places).
+        # Replaces the old _find_protective_stop path that, on a cache miss, fell through
+        # to placing a NEW stop WITHOUT cancelling the existing one — a second source of
+        # the SE double-stop (the 'placed_new:true' events in SE's history).
+        result = app.modify_stop(
+            ticker=ticker, old_perm_id=None, new_stop_price=new_stop,
+            action=stop_action, shares=shares, tif='GTC', rth=True,
+        )
+        return result.get('ok', False), result, (
+            None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
 
     # ── PLACE_LOT_TRIGGER ────────────────────────────────────────────────
     # Same as main outbox PLACE_LOT_TRIGGER

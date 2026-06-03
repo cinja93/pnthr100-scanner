@@ -1282,10 +1282,22 @@ def ambush_outbox_poller_loop(app, rate_limiter, stop_event):
 # Uses reqHistoricalData ONLY — never places an order. Paced under IBKR's
 # 60-requests/10-min historical limit.
 HOURLY_BARS_ENABLED  = os.getenv('HOURLY_BARS_ENABLED', 'true').lower() == 'true'
-HOURLY_BARS_POLL_SEC = int(os.getenv('HOURLY_BARS_POLL_SEC', '600'))   # full sweep every 10 min
-HOURLY_BARS_SPACING  = float(os.getenv('HOURLY_BARS_SPACING', '11'))   # sec between requests (pacing)
+HOURLY_BARS_POLL_SEC = int(os.getenv('HOURLY_BARS_POLL_SEC', '180'))   # per-ticker refresh staleness (catches each new completed hourly bar)
+HOURLY_BARS_SPACING  = float(os.getenv('HOURLY_BARS_SPACING', '11'))   # sec between requests (IBKR 60-req/10-min pacing)
+BAR_DISCOVERY_SEC    = int(os.getenv('BAR_DISCOVERY_SEC', '20'))       # how often we re-poll the monitored list for NEW tickers
+HOURLY_BARS_BATCH    = int(os.getenv('HOURLY_BARS_BATCH', '6'))        # max stale refreshes per cycle (new tickers always fetched first)
 
 def hourly_bars_loop(app, stop_event):
+    # Per-ticker last-fetch epoch. NEW tickers (a manual entry, an adopted position, a
+    # STALKING->HUNTING re-entry candidate) are fetched on the very NEXT discovery poll
+    # (~BAR_DISCOVERY_SEC) — FIRST priority, every cycle — so they get their 2-bar stop
+    # within ~30-60s instead of waiting a full sweep. The old loop swept ALL tickers
+    # then slept 10 min, leaving a manual entry naked for 10-20 min. Already-known
+    # tickers refresh round-robin, a capped batch per cycle, so a new completed hourly
+    # bar reaches the engine within a few minutes of the hour close while staying under
+    # IBKR's 60-request/10-min historical-data limit.
+    last_fetched = {}
+    rr = 0
     while not stop_event.is_set():
         try:
             if app.connected and PNTHR_TOKEN:
@@ -1293,20 +1305,35 @@ def hourly_bars_loop(app, stop_event):
                     f"{PNTHR_API_URL}/api/admin/ambush/bar-tickers",
                     headers={'Authorization': f'Bearer {PNTHR_TOKEN}'}, timeout=10)
                 tickers = r.json().get('tickers', []) if r.status_code == 200 else []
+                # Forget tickers no longer monitored (so a re-add fetches fresh).
+                for gone in [t for t in list(last_fetched) if t not in tickers]:
+                    last_fetched.pop(gone, None)
+                now_t = time.time()
+                new_t = [t for t in tickers if t not in last_fetched]            # never fetched -> priority
+                stale = [t for t in tickers if t in last_fetched
+                         and now_t - last_fetched[t] >= HOURLY_BARS_POLL_SEC]     # due for refresh
+                if stale:
+                    rr %= len(stale)
+                    refresh = (stale[rr:] + stale[:rr])[:HOURLY_BARS_BATCH]       # rotate so we don't always hit the same few
+                    rr += len(refresh)
+                else:
+                    refresh = []
+                work = new_t + refresh
                 posted = 0
-                for t in tickers:
+                for t in work:
                     if stop_event.is_set():
                         break
                     bars = app.fetch_hourly_bars(t)
+                    last_fetched[t] = time.time()
                     if bars and _ambush_post('/api/admin/ambush/hourly-bars',
                                              {'ticker': t, 'bars': bars, 'source': 'IBKR'}):
                         posted += 1
                     stop_event.wait(HOURLY_BARS_SPACING)  # IBKR pacing
-                if tickers:
-                    print(f"[BARS] posted IBKR hourly bars: {posted}/{len(tickers)} tickers")
+                if work:
+                    print(f"[BARS] posted {posted}/{len(work)} ({len(new_t)} new, {len(refresh)} refresh)")
         except Exception as e:
             print(f"[BARS] loop error: {e}")
-        stop_event.wait(HOURLY_BARS_POLL_SEC)
+        stop_event.wait(BAR_DISCOVERY_SEC)
 
 
 def main():

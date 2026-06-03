@@ -36,7 +36,6 @@ import {
   STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS,
   FIRST_HOUR_END, WITHDRAWAL_THRESHOLD, WITHDRAWAL_AMOUNT,
   COMMISSION_PER_SHARE,
-  isConfirmedGreenBreakout, isConfirmedRedBreakdown,
   entrySlip, exitSlip, extractTime, sizeLots,
   getSizingMultiplier, getSizingTierLabel,
   loadSignalContext, getRegime, getSectorOk, isActiveBL, isActiveSS,
@@ -666,7 +665,37 @@ async function _runAmbushTickInner() {
         const ibkrConfirms = ibkrSnapAgeMin <= 10
           && typeof ibSh === 'number' && ibSh !== 0 && Math.sign(ibSh) === wantSign;
         if (!ibkrConfirms) {
-          const why = ibkrSnapAgeMin > 10 ? `snapshot ${ibkrSnapAgeMin.toFixed(0)}m stale` : `IBKR holds ${ibSh ?? 0}`;
+          // ── AUTO-RECONCILE PHANTOMS (2026-06-03) ──────────────────────────────
+          // If a FRESH snapshot shows IBKR is FLAT in this ticker, the engine record
+          // is a stale phantom (the stop fired in IBKR, or the trader closed by hand)
+          // — clear it to FLAT automatically instead of leaving "Ambush: LONG 21 |
+          // IBKR: flat" lingering on the banner (the MGA case). Drops to STALKING so
+          // the name can re-enter on a fresh 1-bar break. Safeguards: only when the
+          // snapshot is fresh (≤10m) AND IBKR is truly flat (not opposite — auto-adopt
+          // owns that) AND the position was NOT opened/added in the last 90s (a brand-
+          // new fill may not be in the 60s sync yet). We do NOT fabricate an exit
+          // trade/PnL — the real fill lives in IBKR.
+          const snapFresh = ibkrSnapAgeMin <= 10;
+          const ibFlat = !(typeof ibSh === 'number' && ibSh !== 0);
+          const stamps = [pos.adoptedAt, pos.lotFills?.[0]?.at, pos.lotFills?.[pos.lotFills.length - 1]?.at]
+            .filter(Boolean).map(x => new Date(x).getTime()).filter(n => !isNaN(n));
+          const newestActivity = stamps.length ? Math.max(...stamps) : 0;
+          const tooFresh = newestActivity && (Date.now() - newestActivity) < 90000;
+          if (snapFresh && ibFlat && !tooFresh) {
+            await upsertAmbushPosition(db, pos.ticker, {
+              state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
+              entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
+              atBE: false, trailingActive: false, beDate: null, peak: 0,
+              prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
+              cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
+              reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
+            });
+            actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibSh ?? 0 });
+            console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${pos.totalShares}sh -> FLAT (IBKR holds ${ibSh ?? 0}, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Stale phantom cleared; no order placed.`);
+            continue;
+          }
+          const why = ibkrSnapAgeMin > 10 ? `snapshot ${ibkrSnapAgeMin.toFixed(0)}m stale`
+            : tooFresh ? `fill <90s old — awaiting sync` : `IBKR holds ${ibSh ?? 0}`;
           console.warn(`[Ambush] RECONCILE-GUARD: skip ${pos.ticker} ${pos.direction} ${pos.totalShares}sh — ${why}. No order placed.`);
           continue;
         }
@@ -1034,8 +1063,9 @@ async function _runAmbushTickInner() {
         if (price < (stalk.runningLow || Infinity)) stalk.runningLow = price;
         if (price > (stalk.runningHigh || -Infinity)) stalk.runningHigh = price;
 
-        // Need at least prevSyntheticBar + current syntheticBar for breakout check
-        if (!stalk.prevSyntheticBar || !stalk.syntheticBar) {
+        // Need the most-recent completed bar (prevSyntheticBar) as the 1-bar re-entry
+        // reference. Seeded from the verified IBKR feed; until it arrives, just track.
+        if (!stalk.prevSyntheticBar) {
           // Save updated tracking data
           await upsertAmbushPosition(db, stalk.ticker, {
             runningLow: stalk.runningLow,
@@ -1051,76 +1081,57 @@ async function _runAmbushTickInner() {
           continue;
         }
 
-        // Check for confirmed breakout using synthetic bars.
-        // IMPORTANT: Only evaluate breakout on the FIRST tick after hour rollover
-        // (when prevSyntheticBar just finalized). Evaluating mid-bar would cause
-        // false positives because the in-progress bar's close changes every 60s.
-        const bar = stalk.syntheticBar;      // current in-progress bar
-        const prevBar = stalk.prevSyntheticBar; // last completed bar
-
-        // Skip breakout check if we already checked this hour (avoid re-firing)
-        if (stalk._lastBreakoutCheckHour === bar.hourKey) {
-          await upsertAmbushPosition(db, stalk.ticker, {
-            runningLow: stalk.runningLow, runningHigh: stalk.runningHigh,
-            syntheticBar: stalk.syntheticBar, prevSyntheticBar: stalk.prevSyntheticBar,
-            todayFirstHourLow: stalk.todayFirstHourLow, todayFirstHourHigh: stalk.todayFirstHourHigh,
-            todayDate: stalk.todayDate, livePrice: price, livePriceAt: now,
-          });
-          continue;
-        }
-
-        // Use the completed prevBar as "current" for breakout pattern check,
-        // and the bar before that (stored as prevBarLow/High) as the reference.
-        // This ensures we're evaluating fully-formed bars, not mid-hour noise.
-        const checkBar = prevBar;  // last completed bar
-        const refBar = (stalk.prevBarLow != null && stalk.prevBarHigh != null)
-          ? { low: stalk.prevBarLow, high: stalk.prevBarHigh, open: stalk.prevBarLow, close: stalk.prevBarHigh }
-          : null;
-
-        const breakoutDetected = refBar
-          ? (isLong
-              ? isConfirmedGreenBreakout(checkBar, refBar)
-              : isConfirmedRedBreakdown(checkBar, refBar))
-          : false;
+        // ── 1-BAR LIVE RE-ENTRY (2026-06-03) ──────────────────────────────────────
+        // Scott's rule: re-enter the moment LIVE PRICE breaks the most-recent COMPLETED
+        // hourly bar's high (long) / low (short) — a 1-BAR break, evaluated EVERY 60s
+        // tick. The old path used isConfirmedGreenBreakout/RedBreakdown (a 2-bar
+        // wait-for-CLOSE confirmation) and only ran once per hour on bar rollover, so
+        // fast intra-hour re-entries (AVGO/ARCT/AKAM) were missed entirely. The
+        // reference is prevSyntheticBar = the most-recent completed bar, seeded from the
+        // verified IBKR feed (= the trader's TWS chart). (A protective exit is a 2-bar
+        // break; a re-entry is a 1-bar break — different rules, per Scott.)
+        const prevBar = stalk.prevSyntheticBar;  // most-recent completed hourly bar
+        const breakoutLevel = isLong
+          ? +(prevBar.high + 0.01).toFixed(2)
+          : +(prevBar.low - 0.01).toFixed(2);
+        const breakoutDetected = isLong ? price >= breakoutLevel : price <= breakoutLevel;
 
         if (breakoutDetected) {
-          // Transition STALKING -> ATTACK (queue entry for next tick)
+          // Transition STALKING -> ATTACK; Phase B fills at the live price next tick.
           await upsertAmbushPosition(db, stalk.ticker, {
             state: STATES.ATTACK,
             direction: stalk.direction,
             originalEntry: stalk.originalEntry,
-            runningLow: stalk.runningLow || bar.low,
-            runningHigh: stalk.runningHigh || bar.high,
+            runningLow: stalk.runningLow || prevBar.low,
+            runningHigh: stalk.runningHigh || prevBar.high,
             cycleNum: stalk.cycleNum || 0,
             todayFirstHourLow: stalk.todayFirstHourLow,
             todayFirstHourHigh: stalk.todayFirstHourHigh,
             todayDate: today,
             syntheticBar: null,
             prevSyntheticBar: null,
-            prevBarLow: prevBar.low,
-            prevBarHigh: prevBar.high,
-            _lastBreakoutCheckHour: bar.hourKey,
+            prevBarLow: stalk.prevBarLow,
+            prevBarHigh: stalk.prevBarHigh,
             livePrice: price,
             livePriceAt: now,
           });
 
           actions.push({
             type: 'BREAKOUT_DETECTED', ticker: stalk.ticker,
-            direction: stalk.direction, price,
+            direction: stalk.direction, price, level: breakoutLevel,
           });
         } else {
-          // Save updated tracking data + mark this hour as checked
+          // No break yet — keep tracking; re-check on the NEXT tick (no per-hour gate).
           await upsertAmbushPosition(db, stalk.ticker, {
             runningLow: stalk.runningLow,
             runningHigh: stalk.runningHigh,
             syntheticBar: stalk.syntheticBar,
             prevSyntheticBar: stalk.prevSyntheticBar,
-            prevBarLow: prevBar.low,
-            prevBarHigh: prevBar.high,
+            prevBarLow: stalk.prevBarLow,
+            prevBarHigh: stalk.prevBarHigh,
             todayFirstHourLow: stalk.todayFirstHourLow,
             todayFirstHourHigh: stalk.todayFirstHourHigh,
             todayDate: stalk.todayDate,
-            _lastBreakoutCheckHour: bar.hourKey,
             livePrice: price,
             livePriceAt: now,
           });

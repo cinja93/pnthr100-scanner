@@ -8618,8 +8618,9 @@ app.post('/api/ambush/discrepancy/:ticker/adopt', authenticateJWT, requireAdmin,
     // 2-bar stop from the verified IBKR feed (last 2 completed bars).
     const barsDoc = await db.collection('pnthr_ambush_hourly_bars').findOne({ ticker });
     let stop = null;
-    if (barsDoc?.bars?.length >= 3) {
-      const n = barsDoc.bars.length, A = barsDoc.bars[n - 2], B = barsDoc.bars[n - 3];
+    if (barsDoc?.bars?.length >= 2) {
+      // IBKR feed = COMPLETED bars only (no partial bar): last 2 bars = last-2-completed.
+      const n = barsDoc.bars.length, A = barsDoc.bars[n - 1], B = barsDoc.bars[n - 2];
       stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
     }
     if (stop == null) return res.status(400).json({ error: `No IBKR hourly bars yet for ${ticker} — cannot set the 2-bar stop. Try again shortly.` });

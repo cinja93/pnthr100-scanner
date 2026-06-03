@@ -496,7 +496,10 @@ async function _runAmbushTickInner() {
         const ageM = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;
         if (ageM > 45) continue;
         const isLong = dir === 'LONG';
-        const n = d.bars.length, A = d.bars[n - 2], B = d.bars[n - 3];
+        // IBKR reqHistoricalData(keepUpToDate=false) returns COMPLETED bars only — no
+        // partial in-progress bar. So the LAST bar (n-1) is the most-recent completed
+        // hour and n-2 is the one before: the last-2-completed for the 2-bar stop.
+        const n = d.bars.length, A = d.bars[n - 1], B = d.bars[n - 2];
         const stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
         const entry = ibkrAvgByTicker[t] || +A.close;
         // Build the L2-L5 pyramid plan from the adopted entry + 2-bar stop, same as a
@@ -606,13 +609,18 @@ async function _runAmbushTickInner() {
         const ageMin = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;
         if (ageMin > 45) continue; // stale feed (bridge sweep+cycle ~18m) — keep engine's own synthetic bars
         const n = d.bars.length;
-        const curBar  = d.bars[n - 1];  // in-progress current hour
-        const compA   = d.bars[n - 2];  // most recent COMPLETED hourly bar
-        const compB   = d.bars[n - 3];  // the completed bar before it
+        // CRITICAL (2026-06-03): IBKR reqHistoricalData(keepUpToDate=false) returns
+        // COMPLETED bars ONLY — the feed has NO partial in-progress bar. So the LAST
+        // bar (n-1) is the most-recent COMPLETED hour, and n-2 is the one before it:
+        // together they are the last-2-completed the 2-bar exit must use. The old code
+        // treated n-1 as "in-progress" and used n-2/n-3 ("3 bars ago"), so the trailing
+        // stop never ratcheted up to the most recent completed bar's higher low —
+        // GFS/FN/MKSI/EA sat one bar too far back and failed to fire at the true 2-bar low.
+        const compA   = d.bars[n - 1];  // most recent COMPLETED hourly bar
+        const compB   = d.bars[n - 2];  // the completed bar before it
         pos.prevSyntheticBar = { hourKey: String(compA.date), open: +compA.open, high: +compA.high, low: +compA.low, close: +compA.close };
         pos.prevBarLow  = +compB.low;
         pos.prevBarHigh = +compB.high;
-        if (!pos.syntheticBar) pos.syntheticBar = { hourKey: String(curBar.date), open: +curBar.open, high: +curBar.high, low: +curBar.low, close: +curBar.close };
         // NOTE: pos.stop is NOT set here. The exit block below (Check B) computes the
         // current 2-bar-low/high from these IBKR bars and places/updates the REAL resting
         // STP order in IBKR at that level (cancel+replace on every change, up or down).

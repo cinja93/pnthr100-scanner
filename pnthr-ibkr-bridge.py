@@ -447,6 +447,22 @@ class PNTHRBridge(EWrapper, EClient):
         self._hist_done.pop(req_id, None)
         if not got:
             print(f"[BARS] {ticker}: timeout after {timeout}s ({len(bars)} partial bars)")
+        # Drop the still-forming current-hour bar (2026-06-03). reqHistoricalData with
+        # endDateTime='' returns the in-progress bar as the LAST element while its hour
+        # is still open. The engine's 2-bar exit must use COMPLETED bars only — shipping
+        # the forming bar made the trailing stop flip between bars and sit at the wrong
+        # level (GFS/FN/MKSI/EA never fired at the true 2-bar low). Bar labels and
+        # datetime.now() are both this machine's local TZ (= the TWS account TZ), so the
+        # last bar is still forming whenever now < bar_start + 1 hour.
+        if bars:
+            try:
+                parts = bars[-1]['date'].split()
+                bar_start = datetime.strptime(parts[0] + ' ' + parts[1], '%Y%m%d %H:%M:%S')
+                if datetime.now() < bar_start + timedelta(hours=1):
+                    dropped = bars.pop()
+                    print(f"[BARS] {ticker}: dropped forming bar {dropped['date']} (completed bars only)")
+            except Exception as e:
+                print(f"[BARS] {ticker}: forming-bar check skipped ({e})")
         return bars
 
     # Order-reference tag stamped on every order PNTHR places via the API.

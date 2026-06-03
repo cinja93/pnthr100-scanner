@@ -57,6 +57,7 @@ import IrLivePage from './components/IrLivePage';
 import TestPage from './components/TestPage';
 import TrendlineAlertBanner, { TRENDLINE_BANNER_HEIGHT } from './components/TrendlineAlertBanner';
 import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';
+import AmbushDiscrepancyBanner from './components/AmbushDiscrepancyBanner';
 import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import ReentryBanner from './components/ReentryBanner';
 import AssistantPage from './components/AssistantPage';
@@ -1273,6 +1274,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)
           + reentryBannerHeight || undefined,
     }}>
+      {isAuthenticated && !isImpersonating && <AmbushDiscrepancyBanner />}
       {isAuthenticated && !isImpersonating && (
         <TrendlineAlertBanner
           onNavigateToAssistant={() => navigate('assistant')}

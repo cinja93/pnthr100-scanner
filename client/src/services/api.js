@@ -1091,6 +1091,21 @@ export async function fetchIbkrDiscrepancies() {
   return res.json();
 }
 
+// Ambush ↔ IBKR discrepancy banner: detect mismatches + act on them.
+export async function fetchAmbushDiscrepancies() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/discrepancies`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+// action = 'flatten' | 'adopt' | 'clear'
+export async function ambushDiscrepancyAction(ticker, action) {
+  const res = await apiFetch(`${API_BASE}/api/ambush/discrepancy/${encodeURIComponent(ticker)}/${action}`, {
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: '{}',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // Returns { ema: { [TICKER]: { ema21h, computedAt } }, closedToday: { [TICKER]: { direction, exitPrice, exitReason, closedAt } } }
 // Server-cached for 60 minutes per ticker — safe to call every 60s on the client.
 export async function fetchHourlyEma() {

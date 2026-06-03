@@ -8509,6 +8509,136 @@ app.post('/api/admin/ambush/hourly-bars', authenticateJWT, requireAdmin, async (
   }
 });
 
+// ── Ambush ↔ IBKR discrepancy banner (2026-06-03) ────────────────────────────
+// Surfaces every mismatch between what the Ambush engine thinks it holds and
+// what IBKR actually holds, for the global flashing banner. Each item offers:
+//   • flatten — close the live IBKR position (engine enqueues exit/cover)
+//   • adopt   — engine takes the live IBKR position as-is (sets its record to
+//               match direction+size+avg) so it auto-places the 2-bar exit stop
+//               + pyramid, exactly like adopting a manual order.
+//   • clear   — (PHANTOM only) reconcile the stale engine record to flat.
+
+// Helper: signed IBKR shares per ticker for a user.
+async function _ambushIbkrMap(db, userId) {
+  const doc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });
+  const map = {};
+  for (const p of (doc?.positions || [])) {
+    const t = (p.symbol || '').toUpperCase();
+    const sh = +p.shares || 0;
+    if (t && sh !== 0) map[t] = { shares: sh, avgCost: +p.avgCost || +p.marketPrice || 0 };
+  }
+  return { map, doc };
+}
+
+app.get('/api/ambush/discrepancies', authenticateJWT, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { map: ibkr, doc } = await _ambushIbkrMap(db, req.user.userId);
+    if (!doc) return res.json({ discrepancies: [], ibkrConnected: false });
+    const ageMin = doc.syncedAt ? (Date.now() - new Date(doc.syncedAt).getTime()) / 60000 : Infinity;
+    const amb = await db.collection('pnthr_ambush_positions').find({}).toArray();
+    const engine = {};
+    for (const a of amb) {
+      const t = (a.ticker || '').toUpperCase();
+      const sh = +a.totalShares || 0;
+      if (t && sh !== 0 && a.state !== 'CLOSED' && a.state !== 'STALKING') engine[t] = { dir: a.direction, shares: sh };
+    }
+    const fmt = (dir, sh) => (sh ? `${dir} ${sh}` : 'flat');
+    const discrepancies = [];
+    for (const t of new Set([...Object.keys(ibkr), ...Object.keys(engine)])) {
+      const ib = ibkr[t]; const eng = engine[t];
+      const ibDir = ib ? (ib.shares > 0 ? 'LONG' : 'SHORT') : null;
+      const ibAbs = ib ? Math.abs(ib.shares) : 0;
+      if (eng && ib && eng.dir !== ibDir) {
+        discrepancies.push({ ticker: t, type: 'DIRECTION', severity: 'CRITICAL', ambush: fmt(eng.dir, eng.shares), ibkr: fmt(ibDir, ibAbs), canFlatten: true, canAdopt: true });
+      } else if (eng && ib && eng.shares !== ibAbs) {
+        discrepancies.push({ ticker: t, type: 'SHARES', severity: 'MEDIUM', ambush: fmt(eng.dir, eng.shares), ibkr: fmt(ibDir, ibAbs), canFlatten: true, canAdopt: true });
+      } else if (eng && !ib) {
+        discrepancies.push({ ticker: t, type: 'PHANTOM', severity: 'CRITICAL', ambush: fmt(eng.dir, eng.shares), ibkr: 'flat', canClear: true });
+      } else if (!eng && ib) {
+        discrepancies.push({ ticker: t, type: 'UNMANAGED', severity: 'HIGH', ambush: 'not tracked', ibkr: fmt(ibDir, ibAbs), canFlatten: true, canAdopt: true });
+      }
+    }
+    discrepancies.sort((a, b) => ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2 }[a.severity] - { CRITICAL: 0, HIGH: 1, MEDIUM: 2 }[b.severity]));
+    res.json({ discrepancies, ibkrConnected: true, stale: ageMin > 10, ageMin: Math.round(ageMin) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// FLATTEN — close the live IBKR position (engine enqueues the exit/cover order).
+app.post('/api/ambush/discrepancy/:ticker/flatten', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const ticker = (req.params.ticker || '').toUpperCase();
+    const { map: ibkr } = await _ambushIbkrMap(db, req.user.userId);
+    const ib = ibkr[ticker];
+    if (!ib) return res.status(400).json({ error: `IBKR holds no position in ${ticker}` });
+    const isLong = ib.shares > 0;
+    const { enqueueAmbushOrder, upsertAmbushPosition } = await import('./ambush/ambushStateManager.js');
+    await enqueueAmbushOrder(db, isLong ? 'SELL_EXIT' : 'COVER_EXIT', {
+      ticker, shares: Math.abs(ib.shares), direction: isLong ? 'LONG' : 'SHORT', reason: 'DISCREPANCY_FLATTEN',
+    });
+    await upsertAmbushPosition(db, ticker, { state: 'STALKING', totalShares: 0, stop: null, lotPlan: null, nextLot: 0, atBE: false, updatedAt: new Date() });
+    res.json({ ok: true, action: 'flatten', ticker, shares: Math.abs(ib.shares) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ADOPT — engine takes over the live IBKR position: record matches IBKR
+// (direction+size+avg), with a lot plan + 2-bar stop, so the engine auto-places
+// the exit stop and pyramids it (same as adopting a manual order).
+app.post('/api/ambush/discrepancy/:ticker/adopt', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const ticker = (req.params.ticker || '').toUpperCase();
+    const { map: ibkr } = await _ambushIbkrMap(db, req.user.userId);
+    const ib = ibkr[ticker];
+    if (!ib) return res.status(400).json({ error: `IBKR holds no position in ${ticker}` });
+    const isLong = ib.shares > 0;
+    const dir = isLong ? 'LONG' : 'SHORT';
+    const entry = ib.avgCost;
+    // 2-bar stop from the verified IBKR feed (last 2 completed bars).
+    const barsDoc = await db.collection('pnthr_ambush_hourly_bars').findOne({ ticker });
+    let stop = null;
+    if (barsDoc?.bars?.length >= 3) {
+      const n = barsDoc.bars.length, A = barsDoc.bars[n - 2], B = barsDoc.bars[n - 3];
+      stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
+    }
+    if (stop == null) return res.status(400).json({ error: `No IBKR hourly bars yet for ${ticker} — cannot set the 2-bar stop. Try again shortly.` });
+    // NAV for lot sizing.
+    let nav = 83000;
+    try { const prof = await getUserProfile(req.user.userId); if (prof?.accountSize > 0) nav = prof.accountSize; } catch {}
+    const { sizeLots } = await import('./ambush/ambushEngine.js');
+    const { upsertAmbushPosition } = await import('./ambush/ambushStateManager.js');
+    const sizing = sizeLots(entry, stop, dir, nav, 1.0);
+    await upsertAmbushPosition(db, ticker, {
+      state: 'ACTIVE', direction: dir, totalShares: Math.abs(ib.shares),
+      avgCost: +entry.toFixed(4), entryPrice: +entry.toFixed(4), originalEntry: +entry.toFixed(4),
+      stop, atBE: true, trailingActive: true, peak: 0,
+      lotPlan: sizing?.lotPlan || null, nextLot: 2, // current IBKR size = base; engine can pyramid L2+ from here
+      adoptedAt: new Date(), adoptedFrom: 'IBKR_DISCREPANCY', updatedAt: new Date(),
+    });
+    res.json({ ok: true, action: 'adopt', ticker, direction: dir, shares: Math.abs(ib.shares), stop });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// CLEAR — reconcile a PHANTOM engine record (IBKR flat) to flat.
+app.post('/api/ambush/discrepancy/:ticker/clear', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const ticker = (req.params.ticker || '').toUpperCase();
+    const { upsertAmbushPosition } = await import('./ambush/ambushStateManager.js');
+    await upsertAmbushPosition(db, ticker, { state: 'STALKING', totalShares: 0, stop: null, lotPlan: null, nextLot: 0, atBE: false, prevSyntheticBar: null, syntheticBar: null, prevBarLow: null, prevBarHigh: null, clearedAt: new Date(), updatedAt: new Date() });
+    res.json({ ok: true, action: 'clear', ticker });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Unified every-minute reconciliation cron (replaces the two daily 4:30 PM
 // ET crons). Runs runStopRatchet + runLotTriggerSync in sequence per tick
 // during market hours (9 AM - 4:59 PM ET, Mon-Fri). Triple-gated:

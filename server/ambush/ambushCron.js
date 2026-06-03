@@ -527,6 +527,53 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // 5b. ── Seed last-2-completed bars + exit level from the VERIFIED IBKR feed ──
+  // (2026-06-03) The 2-bar-low exit (Check C, via Check B's level) and breakout
+  // re-entry (Phase C) must use TRUE IBKR hourly bars — matching the trader's TWS
+  // chart — NOT the live-sampled synthetic bars (which gap after a restart) or FMP
+  // (whose 1h bars are :30-misaligned). The bridge posts IBKR :00 clock bars to
+  // pnthr_ambush_hourly_bars; here we override each position's last-2-completed bars
+  // and set the exit level to the CURRENT 2-bar-low — exactly the trader's stated
+  // rule: exit when live price breaks (lowest low of the last two completed hourly
+  // bars) − $0.01. Bars are chronological; the LAST element is the in-progress hour,
+  // so the two before it are the last two COMPLETED. Falls back to synthetic bars if
+  // the feed is missing or stale (>25 min). Gated by AMBUSH_IBKR_BARS (default on).
+  if (process.env.AMBUSH_IBKR_BARS !== 'false') {
+    try {
+      const barDocs = await db.collection('pnthr_ambush_hourly_bars').find({}).toArray();
+      const barMap = {};
+      for (const d of barDocs) barMap[(d.ticker || '').toUpperCase()] = d;
+      let seeded = 0;
+      for (const pos of allPositions) {
+        const d = barMap[(pos.ticker || '').toUpperCase()];
+        if (!d || !Array.isArray(d.bars) || d.bars.length < 3) continue;
+        const ageMin = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;
+        if (ageMin > 45) continue; // stale feed (bridge sweep+cycle ~18m) — keep engine's own synthetic bars
+        const n = d.bars.length;
+        const curBar  = d.bars[n - 1];  // in-progress current hour
+        const compA   = d.bars[n - 2];  // most recent COMPLETED hourly bar
+        const compB   = d.bars[n - 3];  // the completed bar before it
+        pos.prevSyntheticBar = { hourKey: String(compA.date), open: +compA.open, high: +compA.high, low: +compA.low, close: +compA.close };
+        pos.prevBarLow  = +compB.low;
+        pos.prevBarHigh = +compB.high;
+        if (!pos.syntheticBar) pos.syntheticBar = { hourKey: String(curBar.date), open: +curBar.open, high: +curBar.high, low: +curBar.low, close: +curBar.close };
+        // Exit level = CURRENT 2-bar-low/high − / + $0.01 (the trader's rule). For HELD
+        // positions overwrite pos.stop so Check C exits at the true level and the prior
+        // too-tight (bad-bar) stop is corrected. STALKING positions keep stop=null.
+        const isLongPos = pos.direction === 'LONG';
+        if ((+pos.totalShares || 0) !== 0) {
+          pos.stop = isLongPos
+            ? +(Math.min(compA.low, compB.low) - 0.01).toFixed(2)
+            : +(Math.max(compA.high, compB.high) + 0.01).toFixed(2);
+        }
+        seeded++;
+      }
+      if (seeded) console.log(`[Ambush] seeded IBKR 2-bar levels for ${seeded} positions (true bars, matches TWS chart)`);
+    } catch (e) {
+      console.warn(`[Ambush] IBKR bar seeding skipped (${e.message}) — using engine synthetic bars`);
+    }
+  }
+
   const actions = [];
   const errors = [];
 

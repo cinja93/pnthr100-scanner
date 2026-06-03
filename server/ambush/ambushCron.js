@@ -401,6 +401,15 @@ async function _runAmbushTickInner() {
   const hourKey = et.hourKey;
   const isFirstHour = et.totalMinutes < 630; // before 10:30 ET
   const maxPositions = config.maxPositions || 999;
+  // Mirror the bridge's open/close blackout (server/ibkrOutbox + bridge
+  // is_in_blackout_window): the bridge REJECTS any order during 9:25-9:35 and
+  // 15:55-16:05 ET. The engine must not ATTEMPT a NEW entry then — it would write an
+  // ACTIVE record whose BUY/SHORT_ENTRY is rejected (BLACKOUT:CLOSE_BLACKOUT) and
+  // left as a phantom (2026-06-03: 13 entries fired at 16:05 → all phantoms). Existing
+  // positions are still managed (exits/stops) right through the close; only NEW entries
+  // (Phase B re-entries + Phase D new entries) are paused in the window.
+  const inEntryBlackout = (et.totalMinutes >= 565 && et.totalMinutes <= 575)
+                       || (et.totalMinutes >= 955 && et.totalMinutes <= 965);
 
   // ── Live NAV: read IBKR-synced accountSize from user profile ──────────
   let nav = config.nav || 83000;
@@ -637,6 +646,42 @@ async function _runAmbushTickInner() {
   const actions = [];
   const errors = [];
 
+  // ── RECONCILE PHANTOMS (2026-06-03) ──────────────────────────────────────────
+  // Any ACTIVE/PROTECT engine record a FRESH IBKR snapshot shows FLAT is a phantom:
+  // the stop fired, the trader closed by hand, OR — the common case — an entry order
+  // was REJECTED after the engine optimistically wrote the record (e.g. BUY_ENTRY hit
+  // the bridge's CLOSE_BLACKOUT at 15:55-16:05; that produced the 13 TXG/MOD/SMCI/...
+  // phantoms). Clear it to STALKING so the banner stops flashing 'Ambush: LONG X |
+  // IBKR: flat' and the name can re-enter on a fresh 1-bar break. Runs WITHOUT a live
+  // price (unlike the in-loop guard), so phantoms clear after the close too. Safeguards:
+  // fresh snapshot (≤10m), IBKR truly FLAT (not opposite — auto-adopt owns that), and
+  // the position was NOT opened/added in the last 90s (a brand-new fill may not be in
+  // the 60s sync). We do NOT fabricate an exit PnL — the real fill is in IBKR.
+  if (ibkrSnapAgeMin <= 10) {
+    for (const pos of allPositions) {
+      if (pos.state !== STATES.ACTIVE && pos.state !== STATES.PROTECT) continue;
+      if ((+pos.totalShares || 0) === 0) continue;
+      const ibSh = ibkrSharesByTicker[pos.ticker];
+      if (typeof ibSh === 'number' && ibSh !== 0) continue; // IBKR holds it (same or opp side)
+      const stamps = [pos.adoptedAt, pos.lotFills?.[0]?.at, pos.lotFills?.[pos.lotFills.length - 1]?.at]
+        .filter(Boolean).map(x => new Date(x).getTime()).filter(n => !isNaN(n));
+      const newestActivity = stamps.length ? Math.max(...stamps) : 0;
+      if (newestActivity && (Date.now() - newestActivity) < 90000) continue; // too fresh — await sync
+      const engineShares = pos.totalShares;
+      await upsertAmbushPosition(db, pos.ticker, {
+        state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
+        entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
+        atBE: false, trailingActive: false, beDate: null, peak: 0,
+        prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
+        cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePriceAt: now,
+        reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
+      });
+      pos.state = STATES.STALKING; pos.totalShares = 0; // reflect in-memory so Phase A skips it
+      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0 });
+      console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${engineShares}sh -> FLAT (IBKR flat, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Phantom cleared.`);
+    }
+  }
+
   // ═══ PHASE A: Process existing ACTIVE + PROTECT positions ═══
   const activePositions = allPositions.filter(p =>
     p.state === STATES.ACTIVE || p.state === STATES.PROTECT
@@ -665,37 +710,10 @@ async function _runAmbushTickInner() {
         const ibkrConfirms = ibkrSnapAgeMin <= 10
           && typeof ibSh === 'number' && ibSh !== 0 && Math.sign(ibSh) === wantSign;
         if (!ibkrConfirms) {
-          // ── AUTO-RECONCILE PHANTOMS (2026-06-03) ──────────────────────────────
-          // If a FRESH snapshot shows IBKR is FLAT in this ticker, the engine record
-          // is a stale phantom (the stop fired in IBKR, or the trader closed by hand)
-          // — clear it to FLAT automatically instead of leaving "Ambush: LONG 21 |
-          // IBKR: flat" lingering on the banner (the MGA case). Drops to STALKING so
-          // the name can re-enter on a fresh 1-bar break. Safeguards: only when the
-          // snapshot is fresh (≤10m) AND IBKR is truly flat (not opposite — auto-adopt
-          // owns that) AND the position was NOT opened/added in the last 90s (a brand-
-          // new fill may not be in the 60s sync yet). We do NOT fabricate an exit
-          // trade/PnL — the real fill lives in IBKR.
-          const snapFresh = ibkrSnapAgeMin <= 10;
-          const ibFlat = !(typeof ibSh === 'number' && ibSh !== 0);
-          const stamps = [pos.adoptedAt, pos.lotFills?.[0]?.at, pos.lotFills?.[pos.lotFills.length - 1]?.at]
-            .filter(Boolean).map(x => new Date(x).getTime()).filter(n => !isNaN(n));
-          const newestActivity = stamps.length ? Math.max(...stamps) : 0;
-          const tooFresh = newestActivity && (Date.now() - newestActivity) < 90000;
-          if (snapFresh && ibFlat && !tooFresh) {
-            await upsertAmbushPosition(db, pos.ticker, {
-              state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
-              entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
-              atBE: false, trailingActive: false, beDate: null, peak: 0,
-              prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
-              cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
-              reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
-            });
-            actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibSh ?? 0 });
-            console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${pos.totalShares}sh -> FLAT (IBKR holds ${ibSh ?? 0}, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Stale phantom cleared; no order placed.`);
-            continue;
-          }
-          const why = ibkrSnapAgeMin > 10 ? `snapshot ${ibkrSnapAgeMin.toFixed(0)}m stale`
-            : tooFresh ? `fill <90s old — awaiting sync` : `IBKR holds ${ibSh ?? 0}`;
+          // IBKR flat/opposite or snapshot stale → place NOTHING this tick. A true
+          // phantom (IBKR fresh-flat) was already cleared by the reconcile pass before
+          // Phase A; reaching here means stale snapshot or a <90s fill awaiting sync.
+          const why = ibkrSnapAgeMin > 10 ? `snapshot ${ibkrSnapAgeMin.toFixed(0)}m stale` : `IBKR holds ${ibSh ?? 0}`;
           console.warn(`[Ambush] RECONCILE-GUARD: skip ${pos.ticker} ${pos.direction} ${pos.totalShares}sh — ${why}. No order placed.`);
           continue;
         }
@@ -920,8 +938,9 @@ async function _runAmbushTickInner() {
   }
 
   // ═══ PHASE B: Process ATTACK positions (execute pending re-entries) ═══
-  // During first hour, skip re-entries (need first-hour data first).
-  if (!isFirstHour) {
+  // During first hour, skip re-entries (need first-hour data first). During the
+  // open/close blackout, skip too — the bridge would reject the entry and leave a phantom.
+  if (!isFirstHour && !inEntryBlackout) {
     const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
 
     for (const pend of attackPositions) {
@@ -1146,7 +1165,7 @@ async function _runAmbushTickInner() {
   // Pre-filters use live prices + cached daily bars (fast, no FMP hourly).
   // Final breakout confirmation uses FMP hourly bars for the narrow candidate set.
   // During first hour, skip MCE scanning entirely.
-  if (!isFirstHour && mceCandidates.length > 0) {
+  if (!isFirstHour && !inEntryBlackout && mceCandidates.length > 0) {
     // Step 1: Pre-filter — regime + sector + signal + 2-day trigger
     const priorDayData = await fetchPriorDayData(mceCandidates, today);
     const breakoutCandidates = [];

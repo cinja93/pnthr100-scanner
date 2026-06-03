@@ -188,56 +188,55 @@ async function fetchLivePrices(db, positions, candidateTickers, ownerId) {
   return merged;
 }
 
-// ── Data Source: Prior-Day Data (cached per day, for MCE 2-day trigger) ────
-// Fetches last 5 daily bars per ticker from FMP. Cached in memory — only
-// re-fetched when the date changes. Returns { ticker: { highs, lows } }.
+// ── Data Source: Prior-Day Data (per-day incremental cache, for the 2-day trigger) ──
+// Fetches last 5 daily bars per ticker from FMP. Returns { ticker: { highs, lows } }
+// for the requested tickers. The cache is per-DAY but INCREMENTAL: it keeps every
+// ticker fetched today and only fetches the ones it doesn't yet have. The old cache
+// was all-or-nothing — it returned the FIRST caller's ticker set to every later caller,
+// so when re-entry (Phase C) and new-entry (Phase D) ask for different tickers, the
+// later one was starved. Failed fetches are NOT cached, so a transient FMP error retries
+// next tick (we never want to miss a re-entry/entry because of one bad fetch).
 
 let _priorDayCache = { date: null, data: {} };
 
 async function fetchPriorDayData(tickers, today) {
-  if (_priorDayCache.date === today && Object.keys(_priorDayCache.data).length > 0) {
-    return _priorDayCache.data;
-  }
-
-  console.log(`[Ambush] Fetching prior-day data for ${tickers.length} MCE candidates...`);
-  const data = {};
-  const batchSize = 5;
-
-  for (let i = 0; i < tickers.length; i += batchSize) {
-    const batch = tickers.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map(async (ticker) => {
-        try {
-          const url = `https://financialmodelingprep.com/api/v3/historical-chart/1day/${ticker}?apikey=${FMP_API_KEY}`;
-          const resp = await fetch(url);
-          if (!resp.ok) return { ticker, bars: [] };
-          const raw = await resp.json();
-          const bars = (Array.isArray(raw) ? raw : []).slice(0, 5).reverse();
-          return { ticker, bars };
-        } catch {
-          return { ticker, bars: [] };
-        }
-      })
-    );
-
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) {
-        const { ticker, bars } = r.value;
-        const priorBars = bars.filter(b => !b.date?.startsWith(today));
-        const lastTwo = priorBars.slice(-2);
-        if (lastTwo.length > 0) {
-          data[ticker] = {
-            highs: lastTwo.map(b => +b.high),
-            lows: lastTwo.map(b => +b.low),
-          };
+  if (_priorDayCache.date !== today) _priorDayCache = { date: today, data: {} };
+  const missing = [...new Set(tickers)].filter(t => t && !(t in _priorDayCache.data));
+  if (missing.length) {
+    console.log(`[Ambush] Fetching prior-day data for ${missing.length} ticker(s)...`);
+    const batchSize = 5;
+    for (let i = 0; i < missing.length; i += batchSize) {
+      const batch = missing.slice(i, i + batchSize);
+      const results = await Promise.allSettled(
+        batch.map(async (ticker) => {
+          try {
+            const url = `https://financialmodelingprep.com/api/v3/historical-chart/1day/${ticker}?apikey=${FMP_API_KEY}`;
+            const resp = await fetch(url);
+            if (!resp.ok) return { ticker, bars: [] };
+            const raw = await resp.json();
+            const bars = (Array.isArray(raw) ? raw : []).slice(0, 5).reverse();
+            return { ticker, bars };
+          } catch {
+            return { ticker, bars: [] };
+          }
+        })
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) {
+          const { ticker, bars } = r.value;
+          const priorBars = bars.filter(b => !b.date?.startsWith(today));
+          const lastTwo = priorBars.slice(-2);
+          if (lastTwo.length > 0) {
+            _priorDayCache.data[ticker] = { highs: lastTwo.map(b => +b.high), lows: lastTwo.map(b => +b.low) };
+          }
+          // no data → leave uncached so it retries next tick
         }
       }
     }
   }
-
-  _priorDayCache = { date: today, data };
-  console.log(`[Ambush] Cached prior-day data for ${Object.keys(data).length} tickers`);
-  return data;
+  const out = {};
+  for (const t of tickers) if (_priorDayCache.data[t]) out[t] = _priorDayCache.data[t];
+  return out;
 }
 
 // ── Data Source: FMP Hourly Bars (MCE breakout confirmation only) ──────────
@@ -1125,6 +1124,11 @@ async function _runAmbushTickInner() {
   // During first hour, skip breakout detection.
   if (!isFirstHour) {
     const stalkingPositions = allPositions.filter(p => p.state === STATES.STALKING);
+    // Re-entry candidacy = SAME gates as a fresh entry (Scott 2026-06-03): weekly BL+1/
+    // SS+1 still intact + the DAILY 2-day-high/low trigger still intact AT PRESENT PRICE
+    // + the 1-bar live break. Fetch prior-day highs/lows for the daily-trigger check
+    // (incremental cache; shared with Phase D).
+    const reEntryPriorData = await fetchPriorDayData(stalkingPositions.map(p => p.ticker), today);
 
     for (const stalk of stalkingPositions) {
       try {
@@ -1152,6 +1156,24 @@ async function _runAmbushTickInner() {
           if (!isLong && regime) continue;
         }
         if (!getSectorOk(ctx, stalk.ticker, today)) continue;
+
+        // DAILY GATE (2026-06-03): the daily 2-day breakout must still be intact AT THE
+        // PRESENT PRICE — identical to the fresh-entry check in Phase D. A name only
+        // re-enters while price holds above the prior 2 days' high (long) / below the
+        // prior 2 days' low (short). If the daily breakout has reversed, it is NOT a
+        // candidate this tick (stay STALKING and re-check next tick — do NOT delete; the
+        // daily can re-intact). If we have no prior-day data yet, wait (don't re-enter blind).
+        {
+          const pd = reEntryPriorData[stalk.ticker];
+          if (!pd || !pd.highs.length) continue;
+          if (isLong) {
+            const trigger = +(Math.max(...pd.highs) + 0.01).toFixed(2);
+            if (price < trigger) continue; // daily breakout not intact at present price
+          } else {
+            const trigger = +(Math.min(...pd.lows) - 0.01).toFixed(2);
+            if (price > trigger) continue;
+          }
+        }
 
         // Update running low/high from live price
         if (price < (stalk.runningLow || Infinity)) stalk.runningLow = price;

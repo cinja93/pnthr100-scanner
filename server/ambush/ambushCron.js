@@ -557,15 +557,12 @@ async function _runAmbushTickInner() {
         pos.prevBarLow  = +compB.low;
         pos.prevBarHigh = +compB.high;
         if (!pos.syntheticBar) pos.syntheticBar = { hourKey: String(curBar.date), open: +curBar.open, high: +curBar.high, low: +curBar.low, close: +curBar.close };
-        // Exit level = CURRENT 2-bar-low/high − / + $0.01 (the trader's rule). For HELD
-        // positions overwrite pos.stop so Check C exits at the true level and the prior
-        // too-tight (bad-bar) stop is corrected. STALKING positions keep stop=null.
-        const isLongPos = pos.direction === 'LONG';
-        if ((+pos.totalShares || 0) !== 0) {
-          pos.stop = isLongPos
-            ? +(Math.min(compA.low, compB.low) - 0.01).toFixed(2)
-            : +(Math.max(compA.high, compB.high) + 0.01).toFixed(2);
-        }
+        // NOTE: pos.stop is NOT set here. The exit block below (Check B) computes the
+        // current 2-bar-low/high from these IBKR bars and places/updates the REAL resting
+        // STP order in IBKR at that level (cancel+replace on every change, up or down).
+        // For HELD positions, ensure the 2-bar exit is active (atBE) so Check B maintains
+        // the resting stop from the first tick.
+        if ((+pos.totalShares || 0) !== 0) pos.atBE = true;
         seeded++;
       }
       if (seeded) console.log(`[Ambush] seeded IBKR 2-bar levels for ${seeded} positions (true bars, matches TWS chart)`);
@@ -729,28 +726,27 @@ async function _runAmbushTickInner() {
         }
       }
 
-      // Check B: 2-BAR TRAIL (V7.5) — ratchet the SINGLE protective stop UP to the most
-      // conservative level = (lowest low of the last 2 completed bars − $0.01), up only.
-      // Pushed to IBKR via MODIFY_STOP (cancel + replace), so there is always exactly ONE
-      // resting protective stop, it is always the most conservative, and it survives an
-      // engine/computer outage. Check C below is the engine fast-path that exits at
-      // pos.stop; the resting IBKR stop at the same level is the backstop. Matches the
-      // backtest '2bartrail' exit byte-for-byte (min of last 2 completed bar lows).
+      // Check B: 2-BAR-LOW EXIT STOP (V7.6, 2026-06-03) — maintain a REAL resting STP order
+      // in IBKR at the CURRENT 2-bar level = (lowest low of the last 2 COMPLETED hourly bars
+      // − $0.01) for longs / (highest high + $0.01) for shorts, computed from the verified
+      // IBKR feed (pos.prevSyntheticBar/prevBarLow are seeded from it above). The stop TRACKS
+      // that level — it moves UP *and* DOWN with it (the trader's explicit rule, confirmed
+      // 2026-06-03), NOT a one-way ratchet. Whenever the level changes by ≥ $0.01 we push
+      // MODIFY_STOP (cancel + replace), so IBKR always holds exactly one resting order at the
+      // exact rule level and executes the exit itself — even if the engine/bridge is down.
+      // Check C below is a redundant engine fast-path; the reconcile-before-act guard prevents
+      // any double-exit if both fire.
       if (!exited && pos.atBE && pos.prevSyntheticBar && pos.prevBarLow != null && pos.prevBarHigh != null) {
-        let moved = false;
-        if (isLong) {
-          const trail = +(Math.min(pos.prevSyntheticBar.low, pos.prevBarLow) - 0.01).toFixed(2);
-          if (trail > pos.stop) { pos.stop = trail; moved = true; }
-        } else {
-          const trail = +(Math.max(pos.prevSyntheticBar.high, pos.prevBarHigh) + 0.01).toFixed(2);
-          if (trail < pos.stop) { pos.stop = trail; moved = true; }
-        }
-        if (moved) {
+        const trail = isLong
+          ? +(Math.min(pos.prevSyntheticBar.low, pos.prevBarLow) - 0.01).toFixed(2)
+          : +(Math.max(pos.prevSyntheticBar.high, pos.prevBarHigh) + 0.01).toFixed(2);
+        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01) {
+          pos.stop = trail;
           await enqueueAmbushOrder(db, 'MODIFY_STOP', {
             ticker: pos.ticker, direction: pos.direction,
-            newStopPrice: pos.stop, shares: pos.totalShares, reason: '2BAR_TRAIL',
+            newStopPrice: pos.stop, shares: pos.totalShares, reason: '2BAR_TRACK',
           });
-          actions.push({ type: 'TRAIL_STOP', ticker: pos.ticker, stop: pos.stop });
+          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop });
         }
       }
 

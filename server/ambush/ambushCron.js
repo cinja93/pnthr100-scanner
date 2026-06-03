@@ -464,12 +464,23 @@ async function _runAmbushTickInner() {
   // this map before placing any exit. See AUDIT_PROTOCOL.md.
   const ibkrSharesByTicker = {};
   const ibkrAvgByTicker = {};
+  const ibkrStopSidesByTicker = {}; // ticker -> Set of protective stop actions present in IBKR ('SELL'/'BUY')
   let ibkrSnapAgeMin = Infinity;
   try {
     const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
     if (snap?.positions) for (const p of snap.positions) {
       const t = (p.symbol || p.ticker || '').toUpperCase();
       if (t) { ibkrSharesByTicker[t] = +p.shares || 0; ibkrAvgByTicker[t] = +p.avgCost || +p.marketPrice || 0; }
+    }
+    // Index the live IBKR protective stops so Check B can VERIFY a stop actually exists
+    // (the record's pos.stop is only the engine's INTENT — it diverges when a stop was
+    // never placed, e.g. an adopted position, or a manual cancel). A protective stop is
+    // a STP/STP LMT on the exit side (SELL for a long, BUY for a short).
+    if (snap?.stopOrders) for (const s of snap.stopOrders) {
+      const t = (s.symbol || '').toUpperCase();
+      if (t && (s.orderType === 'STP' || s.orderType === 'STP LMT') && s.action) {
+        (ibkrStopSidesByTicker[t] = ibkrStopSidesByTicker[t] || new Set()).add(s.action);
+      }
     }
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
   } catch (e) {
@@ -654,9 +665,12 @@ async function _runAmbushTickInner() {
   // pnthr_ambush_hourly_bars; here we override each position's last-2-completed bars
   // and set the exit level to the CURRENT 2-bar-low — exactly the trader's stated
   // rule: exit when live price breaks (lowest low of the last two completed hourly
-  // bars) − $0.01. Bars are chronological; the LAST element is the in-progress hour,
-  // so the two before it are the last two COMPLETED. Falls back to synthetic bars if
-  // the feed is missing or stale (>25 min). Gated by AMBUSH_IBKR_BARS (default on).
+  // bars) − $0.01. Bars are chronological and the bridge ships COMPLETED bars ONLY
+  // (it drops the still-forming current-hour bar), so the LAST element (n-1) is the
+  // most-recent COMPLETED hour and n-2 is the one before it — together the last two
+  // completed. (Do NOT revert to n-2/n-3: that was the off-by-one that left GFS/FN/
+  // MKSI/EA stops a bar too far back.) Falls back to synthetic bars if the feed is
+  // missing or stale (>45 min). Gated by AMBUSH_IBKR_BARS (default on).
   if (process.env.AMBUSH_IBKR_BARS !== 'false') {
     try {
       const barDocs = await db.collection('pnthr_ambush_hourly_bars').find({}).toArray();
@@ -905,13 +919,22 @@ async function _runAmbushTickInner() {
         const trail = isLong
           ? +(Math.min(pos.prevSyntheticBar.low, pos.prevBarLow) - 0.01).toFixed(2)
           : +(Math.max(pos.prevSyntheticBar.high, pos.prevBarHigh) + 0.01).toFixed(2);
-        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01) {
+        // VERIFY the stop actually EXISTS in IBKR — not just that the record's level
+        // matches. pos.stop is the engine's intent; it diverges when the stop was never
+        // placed (an adopted position set pos.stop but enqueued no order → Check B then
+        // skipped because trail≈pos.stop → NAKED: MKSI/TXN on 2026-06-03) or a stop was
+        // cancelled. Force a (re)place when a FRESH snapshot shows no protective stop on
+        // the exit side. The bridge's MODIFY_STOP sweeps+places exactly one, so a repeat
+        // place while the 60s snapshot catches up is idempotent (never a duplicate).
+        const wantAction = isLong ? 'SELL' : 'BUY';
+        const stopMissingInIbkr = ibkrSnapAgeMin <= 10 && !(ibkrStopSidesByTicker[pos.ticker]?.has(wantAction));
+        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr) {
           pos.stop = trail;
           await enqueueAmbushOrder(db, 'MODIFY_STOP', {
             ticker: pos.ticker, direction: pos.direction,
-            newStopPrice: pos.stop, shares: pos.totalShares, reason: '2BAR_TRACK',
+            newStopPrice: pos.stop, shares: pos.totalShares, reason: stopMissingInIbkr ? '2BAR_TRACK_REPLACE_NAKED' : '2BAR_TRACK',
           });
-          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop });
+          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, naked: stopMissingInIbkr || undefined });
         }
       }
 

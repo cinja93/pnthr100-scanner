@@ -131,11 +131,16 @@ export async function runCrossEngineAudit(db, ownerId) {
       if (ib.shares === 0) continue;
       const dir = ib.shares > 0 ? 'LONG' : 'SHORT';
       const wantAction = dir === 'LONG' ? 'SELL' : 'BUY';
-      const ref = ib.avgCost || (ib.marketValue && ib.shares ? Math.abs(ib.marketValue / ib.shares) : null);
+      // A protective stop is any STP/STP LMT on the correct exit side (SELL for a long,
+      // BUY for a short). Do NOT filter by price vs avgCost: a 2-bar TRAILING stop that
+      // has ratcheted INTO PROFIT sits on the other side of entry (above entry for a
+      // long, below for a short), and the old avgCost filter wrongly rejected those —
+      // it false-flagged every profitable position as naked (AMAT/GRAB/KLAC/... on
+      // 2026-06-03, masking the 2 genuinely naked names). The opposite-side lot-trigger
+      // adds use the OPPOSITE action, so the action filter already excludes them.
       const stops = (ibkr.stopsByTicker[t] || []).filter(s =>
         s.action === wantAction && (s.orderType === 'STP' || s.orderType === 'STP LMT') &&
-        Number.isFinite(s.stopPrice) &&
-        (ref == null ? true : (dir === 'LONG' ? s.stopPrice < ref : s.stopPrice > ref)));
+        Number.isFinite(s.stopPrice));
       if (stops.length === 0) add('VIOLATION', 'NO_PROTECTIVE_STOP', t, `${dir} ${Math.abs(ib.shares)}sh has NO ${wantAction} STP protecting it — naked.`);
       else if (stops.length > 1) add('WARN', 'DUPLICATE_STOPS', t, `${stops.length} protective stops (expected 1): ${stops.map(s => s.stopPrice).join(', ')}.`);
     }

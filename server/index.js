@@ -8554,9 +8554,11 @@ app.get('/api/ambush/discrepancies', authenticateJWT, async (req, res) => {
     const ageMin = doc.syncedAt ? (Date.now() - new Date(doc.syncedAt).getTime()) / 60000 : Infinity;
     const amb = await db.collection('pnthr_ambush_positions').find({}).toArray();
     const engine = {};
+    const pending = new Set(); // FILLING = entry order in flight, owned by the confirm pass
     for (const a of amb) {
       const t = (a.ticker || '').toUpperCase();
       const sh = +a.totalShares || 0;
+      if (a.state === 'FILLING') { if (t) pending.add(t); continue; }
       if (t && sh !== 0 && a.state !== 'CLOSED' && a.state !== 'STALKING') engine[t] = { dir: a.direction, shares: sh };
     }
     const fmt = (dir, sh) => (sh ? `${dir} ${sh}` : 'flat');
@@ -8572,6 +8574,7 @@ app.get('/api/ambush/discrepancies', authenticateJWT, async (req, res) => {
       } else if (eng && !ib) {
         discrepancies.push({ ticker: t, type: 'PHANTOM', severity: 'CRITICAL', ambush: fmt(eng.dir, eng.shares), ibkr: 'flat', canClear: true });
       } else if (!eng && ib) {
+        if (pending.has(t)) continue; // entry just filled — the confirm pass promotes it next tick
         discrepancies.push({ ticker: t, type: 'UNMANAGED', severity: 'HIGH', ambush: 'not tracked', ibkr: fmt(ibDir, ibAbs), canFlatten: true, canAdopt: true });
       }
     }

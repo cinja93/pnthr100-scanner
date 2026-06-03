@@ -453,6 +453,8 @@ async function _runAmbushTickInner() {
 
   // 2. Get all current Ambush positions
   const allPositions = await getAmbushPositions(db);
+  const actions = [];
+  const errors = [];
 
   // ── RECONCILE-BEFORE-ACT data (2026-06-03 incident) ──────────────────────────
   // Load the live IBKR share count (signed) per ticker from the bridge snapshot.
@@ -472,6 +474,56 @@ async function _runAmbushTickInner() {
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
   } catch (e) {
     console.warn(`[Ambush] reconcile guard: could not load IBKR snapshot (${e.message}) — exits will use engine share count`);
+  }
+
+  // ── 2b. CONFIRM FILLING ENTRIES (2026-06-03 root-cause fix) ──────────────────
+  // An entry is FILLING until IBKR confirms the fill. This is the ROOT-CAUSE fix for
+  // phantoms: the engine NEVER marks a position ACTIVE on its own optimism — only when
+  // the broker actually holds it. A rejected entry (CLOSE_BLACKOUT, buying power, a
+  // halt, a dropped order) therefore can NEVER become a phantom — it just stays FILLING
+  // (totalShares 0, not a held position, not flagged on the banner) and reverts.
+  //   • IBKR confirms the position (right side) → promote FILLING→ACTIVE with the real
+  //     fill size/avg; the entry order already placed the protective stop, so it's
+  //     protected the instant it fills.
+  //   • IBKR still flat past the fill timeout → the order never filled (rejected/lost) →
+  //     revert FILLING→STALKING so the name can re-arm. No phantom, no naked order.
+  // Runs BEFORE auto-adopt so a promoted entry keeps its intended (first-hour) stop
+  // rather than being re-adopted with a 2-bar stop. Needs a fresh snapshot to judge.
+  const FILL_TIMEOUT_MIN = 3;
+  if (ibkrSnapAgeMin <= 10) {
+    for (const pos of allPositions) {
+      if (pos.state !== STATES.FILLING) continue;
+      const ibSh = ibkrSharesByTicker[pos.ticker];
+      const wantSign = pos.direction === 'LONG' ? 1 : -1;
+      const confirmed = typeof ibSh === 'number' && ibSh !== 0 && Math.sign(ibSh) === wantSign;
+      const ageMin = pos.orderEnqueuedAt ? (Date.now() - new Date(pos.orderEnqueuedAt).getTime()) / 60000 : Infinity;
+      if (confirmed) {
+        const filledShares = Math.abs(ibSh);
+        const filledAvg = ibkrAvgByTicker[pos.ticker] || pos.avgCost;
+        await upsertAmbushPosition(db, pos.ticker, {
+          state: STATES.ACTIVE, pendingFill: false,
+          totalShares: filledShares, avgCost: +(+filledAvg).toFixed(4),
+          lotFills: [{ lot: 0, at: pos.orderEnqueuedAt || now, price: +(+filledAvg).toFixed(4) }],
+          livePriceAt: now,
+        });
+        pos.state = STATES.ACTIVE; pos.totalShares = filledShares; pos.avgCost = +(+filledAvg).toFixed(4); pos.pendingFill = false;
+        actions.push({ type: 'ENTRY_CONFIRMED', ticker: pos.ticker, direction: pos.direction, shares: filledShares });
+        console.log(`[Ambush] ENTRY CONFIRMED ${pos.ticker} ${pos.direction} ${filledShares}sh @${filledAvg} — IBKR filled, FILLING->ACTIVE.`);
+      } else if (ageMin > FILL_TIMEOUT_MIN) {
+        await upsertAmbushPosition(db, pos.ticker, {
+          state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
+          entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
+          atBE: false, trailingActive: false, beDate: null, peak: 0, pendingFill: false,
+          prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
+          cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePriceAt: now,
+          reconciledFlat: `ENTRY_UNFILLED_${today}`,
+        });
+        pos.state = STATES.STALKING; pos.totalShares = 0;
+        actions.push({ type: 'ENTRY_UNFILLED', ticker: pos.ticker, direction: pos.direction });
+        console.log(`[Ambush] ENTRY UNFILLED ${pos.ticker} ${pos.direction} — IBKR flat ${ageMin.toFixed(1)}m after order (rejected/never filled). Reverted to STALKING.`);
+      }
+      // else: still within the fill window, IBKR flat — keep FILLING, wait for the next snapshot.
+    }
   }
 
   // ── 2c. AUTO-ADOPT every live IBKR position (2026-06-03) ─────────────────────
@@ -642,9 +694,6 @@ async function _runAmbushTickInner() {
       console.warn(`[Ambush] IBKR bar seeding skipped (${e.message}) — using engine synthetic bars`);
     }
   }
-
-  const actions = [];
-  const errors = [];
 
   // ── RECONCILE PHANTOMS (2026-06-03) ──────────────────────────────────────────
   // Any ACTIVE/PROTECT engine record a FRESH IBKR snapshot shows FLAT is a phantom:
@@ -995,16 +1044,19 @@ async function _runAmbushTickInner() {
         }
         availableCash -= reL1Cost;
 
-        // Transition ATTACK -> ACTIVE
+        // Transition ATTACK -> FILLING (NOT held until IBKR confirms the fill)
         await upsertAmbushPosition(db, pend.ticker, {
-          state: STATES.ACTIVE,
+          state: STATES.FILLING,
+          pendingFill: true,
+          orderEnqueuedAt: now,
           direction: pend.direction,
           entryPrice: rePrice,
           avgCost: rePrice,
-          totalShares: sizing.l1Shares,
+          totalShares: 0,                  // promoted to sizing.l1Shares only on IBKR confirmation
+          intendedShares: sizing.l1Shares,
           lotPlan: sizing.lotPlan,
           nextLot: 1,
-          lotFills: [{ lot: 0, at: now, price: rePrice }],
+          lotFills: null,
           originalEntry: pend.originalEntry || rePrice,
           stop: reStop,
           atBE: !AMBUSH_BE75_SNAP, // V7.4: 2-bar exit + lot-trail active from entry
@@ -1293,14 +1345,17 @@ async function _runAmbushTickInner() {
           const todayLow = Math.min(...todayOnlyBars.map(b => b.low));
 
           await upsertAmbushPosition(db, ticker, {
-            state: STATES.ACTIVE,
+            state: STATES.FILLING,           // NOT held until IBKR confirms the fill
+            pendingFill: true,
+            orderEnqueuedAt: now,
             direction,
             entryPrice: ep,
             avgCost: ep,
-            totalShares: sizing.l1Shares,
+            totalShares: 0,                  // promoted to sizing.l1Shares only on IBKR confirmation
+            intendedShares: sizing.l1Shares,
             lotPlan: sizing.lotPlan,
             nextLot: 1,
-            lotFills: [{ lot: 0, at: now, price: ep }],
+            lotFills: null,
             originalEntry: ep,
             stop,
             atBE: !AMBUSH_BE75_SNAP, // V7.4: 2-bar exit + lot-trail active from entry

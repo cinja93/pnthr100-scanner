@@ -64,7 +64,8 @@ export function getSizingTierLabel(currentNav) {
 export const STATES = {
   STALKING: 'STALKING',   // First-hour low captured, watching for break
   ATTACK:   'ATTACK',     // Tripwire broken, confirmed breakout queued for next bar
-  ACTIVE:   'ACTIVE',     // Position open, lots loading, pre-Break Even
+  FILLING:  'FILLING',    // Entry order sent — NOT held until IBKR confirms the fill
+  ACTIVE:   'ACTIVE',     // Position open (IBKR-confirmed), lots loading, pre-Break Even
   PROTECT:  'PROTECT',    // Break Even hit, trailing stop ratcheting
 };
 

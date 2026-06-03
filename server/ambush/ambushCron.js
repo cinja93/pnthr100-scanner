@@ -586,6 +586,28 @@ async function _runAmbushTickInner() {
 
       const isLong = pos.direction === 'LONG';
 
+      // ══ RECONCILE-BEFORE-ACT — THE comprehensive guard (2026-06-03) ══════════
+      // The engine places an order for this position ONLY if a FRESH IBKR snapshot
+      // confirms IBKR actually holds it on the SAME side. Otherwise it places
+      // NOTHING. This is the single chokepoint that prevents every naked-order
+      // failure seen today: stops placed on sold positions, exits of phantom
+      // shares, and resting stops that flipped positions short. If IBKR shows the
+      // ticker flat / opposite, or the snapshot is stale (bridge down → can't
+      // verify → don't act), skip ALL order management for it this tick. A
+      // just-entered position not yet in the 60s sync is simply skipped one tick,
+      // then managed normally once it appears in IBKR.
+      {
+        const ibSh = ibkrSharesByTicker[pos.ticker];
+        const wantSign = isLong ? 1 : -1;
+        const ibkrConfirms = ibkrSnapAgeMin <= 10
+          && typeof ibSh === 'number' && ibSh !== 0 && Math.sign(ibSh) === wantSign;
+        if (!ibkrConfirms) {
+          const why = ibkrSnapAgeMin > 10 ? `snapshot ${ibkrSnapAgeMin.toFixed(0)}m stale` : `IBKR holds ${ibSh ?? 0}`;
+          console.warn(`[Ambush] RECONCILE-GUARD: skip ${pos.ticker} ${pos.direction} ${pos.totalShares}sh — ${why}. No order placed.`);
+          continue;
+        }
+      }
+
       // ── During first hour: only collect data, skip price checks ──
       if (isFirstHour) {
         await upsertAmbushPosition(db, pos.ticker, {
@@ -844,6 +866,17 @@ async function _runAmbushTickInner() {
         }
 
         const isLong = pend.direction === 'LONG';
+
+        // RECONCILE-BEFORE-ACT (entry): only enter if a FRESH IBKR snapshot confirms we
+        // are FLAT in this ticker. If IBKR already holds it (any side) or the snapshot is
+        // stale (can't verify), do NOT enter on top — skip this tick.
+        {
+          const ibSh = ibkrSharesByTicker[pend.ticker];
+          if (!(ibkrSnapAgeMin <= 10) || (typeof ibSh === 'number' && ibSh !== 0)) {
+            console.warn(`[Ambush] ENTRY GUARD: skip re-entry ${pend.ticker} — ${ibkrSnapAgeMin > 10 ? 'snapshot stale' : 'IBKR already holds ' + ibSh}.`);
+            continue;
+          }
+        }
 
         // Enter at current live price (with slippage)
         const rePrice = isLong
@@ -1166,6 +1199,17 @@ async function _runAmbushTickInner() {
           ).length;
           const currentActive = mceBaseActive + mceNewEntries - mceExits;
           if (currentActive >= maxPositions) continue;
+
+          // RECONCILE-BEFORE-ACT (entry): only open a new position if a FRESH IBKR
+          // snapshot confirms we are FLAT in this ticker. Never enter on top of an
+          // existing IBKR position, and never enter blind on a stale snapshot.
+          {
+            const ibSh = ibkrSharesByTicker[ticker];
+            if (!(ibkrSnapAgeMin <= 10) || (typeof ibSh === 'number' && ibSh !== 0)) {
+              console.warn(`[Ambush] ENTRY GUARD: skip new entry ${ticker} — ${ibkrSnapAgeMin > 10 ? 'snapshot stale' : 'IBKR already holds ' + ibSh}.`);
+              continue;
+            }
+          }
 
           // Create new ACTIVE position
           const todayHigh = Math.max(...todayOnlyBars.map(b => b.high));

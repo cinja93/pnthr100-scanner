@@ -149,6 +149,13 @@ class PNTHRBridge(EWrapper, EClient):
         self._next_order_lock   = threading.Lock()
         self._order_status      = {}  # orderId → {status, permId, filled, ...}
         self._order_status_lock = threading.Lock()
+        # ── IBKR historical hourly bars (2026-06-03, READ-ONLY) ───────────────
+        # Feeds the Ambush 2-bar-low exit + breakout re-entry with TRUE IBKR bars
+        # (matching the trader's TWS chart). Separate reqId space from orders.
+        self._hist_req_id   = 9000
+        self._hist_lock     = threading.Lock()
+        self._hist_bars     = {}   # reqId → [bar dicts]
+        self._hist_done     = {}   # reqId → threading.Event
 
     # ── Connection lifecycle ──────────────────────────────────────────────────
     def connectAck(self):
@@ -397,6 +404,50 @@ class PNTHRBridge(EWrapper, EClient):
         c.exchange = 'SMART'
         c.currency = 'USD'
         return c
+
+    # ── IBKR historical hourly bars (2026-06-03, READ-ONLY) ──────────────────
+    def historicalData(self, reqId, bar):
+        with self._hist_lock:
+            self._hist_bars.setdefault(reqId, []).append({
+                'date':  bar.date,
+                'open':  float(bar.open),
+                'high':  float(bar.high),
+                'low':   float(bar.low),
+                'close': float(bar.close),
+            })
+
+    def historicalDataEnd(self, reqId, start, end):
+        ev = self._hist_done.get(reqId)
+        if ev:
+            ev.set()
+
+    def fetch_hourly_bars(self, ticker, timeout=15):
+        """READ-ONLY: ~2 days of 1-hour RTH bars from IBKR via reqHistoricalData.
+        Returns [{date,open,high,low,close}] (TWS order) or [] on timeout/error.
+        Never places an order."""
+        with self._hist_lock:
+            self._hist_req_id += 1
+            req_id = self._hist_req_id
+            self._hist_bars[req_id] = []
+        ev = threading.Event()
+        self._hist_done[req_id] = ev
+        try:
+            self.reqHistoricalData(
+                req_id, self._build_stock_contract(ticker),
+                '', '2 D', '1 hour', 'TRADES', 1, 1, False, [])
+        except Exception as e:
+            print(f"[BARS] reqHistoricalData failed for {ticker}: {e}")
+            self._hist_done.pop(req_id, None)
+            with self._hist_lock:
+                self._hist_bars.pop(req_id, None)
+            return []
+        got = ev.wait(timeout)
+        with self._hist_lock:
+            bars = self._hist_bars.pop(req_id, [])
+        self._hist_done.pop(req_id, None)
+        if not got:
+            print(f"[BARS] {ticker}: timeout after {timeout}s ({len(bars)} partial bars)")
+        return bars
 
     # Order-reference tag stamped on every order PNTHR places via the API.
     # TWS's manual order entry UI does NOT expose this field, so any order
@@ -1208,6 +1259,40 @@ def ambush_outbox_poller_loop(app, rate_limiter, stop_event):
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
+# ── IBKR hourly-bar feed loop (2026-06-03, READ-ONLY) ───────────────────────
+# Fetches true IBKR 1-hour bars for every ticker the Ambush engine tracks and
+# POSTs them to the server, which the engine seeds its 2-bar-low exit + breakout
+# re-entry from (matching the trader's TWS chart, unlike FMP's :30-aligned bars).
+# Uses reqHistoricalData ONLY — never places an order. Paced under IBKR's
+# 60-requests/10-min historical limit.
+HOURLY_BARS_ENABLED  = os.getenv('HOURLY_BARS_ENABLED', 'true').lower() == 'true'
+HOURLY_BARS_POLL_SEC = int(os.getenv('HOURLY_BARS_POLL_SEC', '600'))   # full sweep every 10 min
+HOURLY_BARS_SPACING  = float(os.getenv('HOURLY_BARS_SPACING', '11'))   # sec between requests (pacing)
+
+def hourly_bars_loop(app, stop_event):
+    while not stop_event.is_set():
+        try:
+            if app.connected and PNTHR_TOKEN:
+                r = requests.get(
+                    f"{PNTHR_API_URL}/api/admin/ambush/bar-tickers",
+                    headers={'Authorization': f'Bearer {PNTHR_TOKEN}'}, timeout=10)
+                tickers = r.json().get('tickers', []) if r.status_code == 200 else []
+                posted = 0
+                for t in tickers:
+                    if stop_event.is_set():
+                        break
+                    bars = app.fetch_hourly_bars(t)
+                    if bars and _ambush_post('/api/admin/ambush/hourly-bars',
+                                             {'ticker': t, 'bars': bars, 'source': 'IBKR'}):
+                        posted += 1
+                    stop_event.wait(HOURLY_BARS_SPACING)  # IBKR pacing
+                if tickers:
+                    print(f"[BARS] posted IBKR hourly bars: {posted}/{len(tickers)} tickers")
+        except Exception as e:
+            print(f"[BARS] loop error: {e}")
+        stop_event.wait(HOURLY_BARS_POLL_SEC)
+
+
 def main():
     print("=" * 60)
     print("  PNTHR Den — IBKR TWS Bridge")
@@ -1283,6 +1368,20 @@ def main():
     else:
         print("[AMBUSH] Poller disabled (AMBUSH_ENABLED=false)")
 
+    # IBKR hourly-bar feed — READ-ONLY reqHistoricalData; posts bars for the engine.
+    bars_stop_event = threading.Event()
+    if HOURLY_BARS_ENABLED:
+        bars_thread = threading.Thread(
+            target=hourly_bars_loop,
+            args=(app, bars_stop_event),
+            daemon=True,
+            name='hourly-bars',
+        )
+        bars_thread.start()
+        print("[BARS] IBKR hourly-bar feed started (read-only)")
+    else:
+        print("[BARS] Hourly-bar feed disabled (HOURLY_BARS_ENABLED=false)")
+
     print(f"[BRIDGE] Syncing every {SYNC_INTERVAL}s. Press Ctrl+C to stop.\n")
 
     try:
@@ -1339,6 +1438,7 @@ def main():
         print("\n[BRIDGE] Shutting down...")
         outbox_stop_event.set()
         ambush_stop_event.set()
+        bars_stop_event.set()
         try:
             app.reqAccountUpdates(False, "")
             app.cancelPositions()

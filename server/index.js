@@ -8465,6 +8465,50 @@ app.post('/api/admin/ambush-outbox/:id/failed', authenticateJWT, requireAdmin, a
   }
 });
 
+// ── IBKR hourly-bar feed (2026-06-03) ────────────────────────────────────────
+// The Ambush 2-bar-low exit and breakout re-entry must run on TRUE IBKR hourly
+// bars (matching the trader's TWS chart), not the engine's live-sampled synthetic
+// bars (which gap after any restart) and not FMP (whose 1h bars are :30-aligned,
+// offset from TWS :00 bars). The local bridge fetches IBKR historical hourly bars
+// via reqHistoricalData and POSTs them here; the engine seeds its last-two-completed
+// bars from this collection. READ-ONLY market data — never places an order.
+
+// Bridge asks which tickers to fetch bars for: every ticker the engine tracks.
+app.get('/api/admin/ambush/bar-tickers', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const docs = await db.collection('pnthr_ambush_positions')
+      .find({ state: { $ne: 'CLOSED' } }).project({ ticker: 1 }).toArray();
+    const tickers = [...new Set(docs.map(d => (d.ticker || '').toUpperCase()).filter(Boolean))];
+    res.json({ tickers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bridge delivers IBKR hourly bars for one ticker.
+app.post('/api/admin/ambush/hourly-bars', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const ticker = (req.body?.ticker || '').toUpperCase();
+    const bars = Array.isArray(req.body?.bars) ? req.body.bars : null;
+    if (!ticker || !bars) return res.status(400).json({ error: 'ticker and bars[] required' });
+    // Normalize + keep only sane OHLC rows. Bars: [{ date, open, high, low, close }]
+    const clean = bars
+      .filter(b => b && b.date && Number.isFinite(+b.low) && Number.isFinite(+b.high))
+      .map(b => ({ date: String(b.date), open: +b.open, high: +b.high, low: +b.low, close: +b.close }))
+      .sort((a, b) => a.date.localeCompare(b.date)); // chronological
+    await db.collection('pnthr_ambush_hourly_bars').updateOne(
+      { ticker },
+      { $set: { ticker, bars: clean, source: req.body?.source || 'IBKR', syncedAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ ok: true, ticker, count: clean.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Unified every-minute reconciliation cron (replaces the two daily 4:30 PM
 // ET crons). Runs runStopRatchet + runLotTriggerSync in sequence per tick
 // during market hours (9 AM - 4:59 PM ET, Mon-Fri). Triple-gated:

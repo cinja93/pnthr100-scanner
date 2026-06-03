@@ -8479,7 +8479,23 @@ app.get('/api/admin/ambush/bar-tickers', authenticateJWT, requireAdmin, async (r
     const db = await connectToDatabase();
     const docs = await db.collection('pnthr_ambush_positions')
       .find({ state: { $ne: 'CLOSED' } }).project({ ticker: 1 }).toArray();
-    const tickers = [...new Set(docs.map(d => (d.ticker || '').toUpperCase()).filter(Boolean))];
+    const set = new Set(docs.map(d => (d.ticker || '').toUpperCase()).filter(Boolean));
+    // Also fetch bars for every ticker IBKR currently holds, even with NO engine
+    // record yet (2026-06-03 AVGO naked-stop deadlock): a manually-entered ticker
+    // has no engine record, so auto-adopt can't run until its 2-bar stop can be
+    // computed — which needs these bars. Without this, no record → not in this list
+    // → no bars → can't adopt → never gets a stop. Including IBKR-held tickers here
+    // breaks the deadlock: the bridge fetches the bars, then auto-adopt fires next tick.
+    try {
+      const ibkrDocs = await db.collection('pnthr_ibkr_positions').find({}).project({ positions: 1 }).toArray();
+      for (const doc of ibkrDocs) {
+        for (const p of (doc?.positions || [])) {
+          const t = (p.symbol || p.ticker || '').toUpperCase();
+          if (t && (+p.shares || 0) !== 0) set.add(t);
+        }
+      }
+    } catch { /* engine records alone if the IBKR snapshot is unavailable */ }
+    const tickers = [...set];
     res.json({ tickers });
   } catch (err) {
     res.status(500).json({ error: err.message });

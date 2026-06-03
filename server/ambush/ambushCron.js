@@ -472,8 +472,11 @@ async function _runAmbushTickInner() {
   // ACTIVE record matching IBKR (direction + size + avg) seeded with the current
   // 2-bar exit stop, so Phase A maintains its cover/exit stop. A real position can
   // NEVER sit unmanaged again — the ARCT/AKAM miss was the engine record saying
-  // FLAT while IBKR held the position, so it placed no cover stop. Protect-only: no
-  // pyramid on an adopted position (lotPlan=null). Needs a fresh snapshot + bars.
+  // FLAT while IBKR held the position, so it placed no cover stop. The live IBKR
+  // shares are the L1 base and the L2-L5 pyramid plan is built from the adopted
+  // entry + 2-bar stop, exactly like a real entry (Scott 2026-06-03: manual/adopted
+  // trades MUST pyramid like any other — the AVGO manual re-entry had no buy orders).
+  // Needs a fresh snapshot + bars.
   if (ibkrSnapAgeMin <= 10) {
     try {
       const managed = new Set(
@@ -496,17 +499,22 @@ async function _runAmbushTickInner() {
         const n = d.bars.length, A = d.bars[n - 2], B = d.bars[n - 3];
         const stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
         const entry = ibkrAvgByTicker[t] || +A.close;
+        // Build the L2-L5 pyramid plan from the adopted entry + 2-bar stop, same as a
+        // real entry; nextLot=2 means the live IBKR shares are L1 and Check A queues
+        // L2+ as price runs. Mirrors the manual "Keep (adopt)" path in index.js.
+        const sizing = sizeLots(entry, stop, dir, tradingNav, sizeMult);
         const adopted = {
           state: STATES.ACTIVE, direction: dir, totalShares: Math.abs(sh),
           avgCost: +entry.toFixed(4), entryPrice: +entry.toFixed(4), originalEntry: +entry.toFixed(4),
-          stop, atBE: true, trailingActive: true, peak: 0, lotPlan: null, nextLot: 99,
+          stop, atBE: true, trailingActive: true, peak: 0,
+          lotPlan: sizing?.lotPlan || null, nextLot: 2,
           prevSyntheticBar: { hourKey: String(A.date), open: +A.open, high: +A.high, low: +A.low, close: +A.close },
           prevBarLow: +B.low, prevBarHigh: +B.high,
           adoptedAt: now, adoptedFrom: 'AUTO_IBKR', todayDate: today, livePriceAt: now,
         };
         await upsertAmbushPosition(db, t, adopted);
         allPositions.push({ ticker: t, ...adopted });
-        console.log(`[Ambush] AUTO-ADOPT ${t} ${dir} ${Math.abs(sh)}sh @${entry} — IBKR holds it, engine was not managing. Cover/exit stop ${stop}.`);
+        console.log(`[Ambush] AUTO-ADOPT ${t} ${dir} ${Math.abs(sh)}sh @${entry} — IBKR holds it, engine was not managing. 2-bar stop ${stop}; pyramid L2-L5 armed.`);
       }
     } catch (e) {
       console.warn(`[Ambush] auto-adopt skipped: ${e.message}`);

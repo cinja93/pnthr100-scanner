@@ -446,6 +446,25 @@ async function _runAmbushTickInner() {
   // 2. Get all current Ambush positions
   const allPositions = await getAmbushPositions(db);
 
+  // ── RECONCILE-BEFORE-ACT data (2026-06-03 incident) ──────────────────────────
+  // Load the live IBKR share count (signed) per ticker from the bridge snapshot.
+  // The engine must NEVER exit on its own `totalShares` alone — a manual trade or a
+  // missed fill can leave it tracking a position IBKR no longer holds, and a
+  // SELL/COVER then OPENS the opposite side (the AVGO short). doLiveExit consults
+  // this map before placing any exit. See AUDIT_PROTOCOL.md.
+  const ibkrSharesByTicker = {};
+  let ibkrSnapAgeMin = Infinity;
+  try {
+    const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
+    if (snap?.positions) for (const p of snap.positions) {
+      const t = (p.symbol || p.ticker || '').toUpperCase();
+      if (t) ibkrSharesByTicker[t] = +p.shares || 0;
+    }
+    if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
+  } catch (e) {
+    console.warn(`[Ambush] reconcile guard: could not load IBKR snapshot (${e.message}) — exits will use engine share count`);
+  }
+
   // ── V7.3 cash gate: approximate available cash = tradingNav - capital deployed in
   // open positions. Mirrors the backtest's cash-skip so we never queue an entry we
   // can't fund. Conservative (overstates deployed); IBKR buying power is the backstop.
@@ -542,21 +561,50 @@ async function _runAmbushTickInner() {
 
       // Close the position, log the trade, drop to STALKING, queue the exit order.
       const doLiveExit = async (exitLevel, exitType, actionType) => {
+        // ── RECONCILE-BEFORE-ACT GUARD (2026-06-03) ──────────────────────────
+        // Verify the live IBKR position before placing any exit. If IBKR holds 0
+        // or the OPPOSITE side, the engine's position is a phantom — a SELL/COVER
+        // here would OPEN the wrong side (the AVGO short). Refuse, reconcile the
+        // engine record to FLAT, and place NO order. Only enforced when the IBKR
+        // snapshot is fresh (<=10 min); when stale, fall back to the engine count
+        // (the bridge is down in that case, so nothing executes anyway).
+        const ibkrSh    = ibkrSharesByTicker[pos.ticker];
+        const wantSign  = isLong ? 1 : -1;
+        const snapFresh = ibkrSnapAgeMin <= 10;
+        if (snapFresh && !(typeof ibkrSh === 'number' && ibkrSh !== 0 && Math.sign(ibkrSh) === wantSign)) {
+          console.error(`[Ambush] RECONCILE GUARD: refusing ${actionType} on ${pos.ticker} ${pos.direction} ${pos.totalShares}sh — IBKR holds ${ibkrSh ?? 0}. Reconciling engine record to FLAT; no phantom order placed.`);
+          await upsertAmbushPosition(db, pos.ticker, {
+            state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
+            entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
+            atBE: false, trailingActive: false, beDate: null, peak: 0,
+            prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
+            cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
+            reconciledFlat: `IBKR_${ibkrSh ?? 0}_AT_${exitType}_${today}`,
+          });
+          actions.push({ type: 'RECONCILE_SKIP_EXIT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibkrSh ?? 0, reason: exitType });
+          exited = true;
+          return;
+        }
+        // Never exit more than IBKR actually holds (partial divergence guard).
+        const exitShares = (snapFresh && typeof ibkrSh === 'number')
+          ? Math.min(pos.totalShares, Math.abs(ibkrSh))
+          : pos.totalShares;
+
         const exitPrice = exitSlip(exitLevel, pos.direction);
-        const comm = calcCommission(pos.totalShares, exitPrice);
+        const comm = calcCommission(exitShares, exitPrice);
         let pnl, borrow = 0;
         if (isLong) {
-          pnl = +(pos.totalShares * exitPrice - comm - pos.totalShares * pos.avgCost).toFixed(2);
+          pnl = +(exitShares * exitPrice - comm - exitShares * pos.avgCost).toFixed(2);
         } else {
           const entryD = pos.entryDate ? new Date(pos.entryDate) : new Date();
           const exitD = new Date(today);
           const tradingDays = Math.max(1, Math.round((exitD - entryD) / 86400000 * 5 / 7));
-          borrow = calcBorrowCost(pos.totalShares, pos.avgCost, tradingDays, getSectorName(pos.ticker));
-          pnl = +(pos.totalShares * (pos.avgCost - exitPrice) - comm - borrow).toFixed(2);
+          borrow = calcBorrowCost(exitShares, pos.avgCost, tradingDays, getSectorName(pos.ticker));
+          pnl = +(exitShares * (pos.avgCost - exitPrice) - comm - borrow).toFixed(2);
         }
         const trade = {
           ticker: pos.ticker, direction: pos.direction, entryPrice: pos.avgCost,
-          exitPrice, shares: pos.totalShares, pnl, entryDate: pos.entryDate,
+          exitPrice, shares: exitShares, pnl, entryDate: pos.entryDate,
           exitDate: today, exitType, cycleNum: pos.cycleNum,
           commission: comm, peakProfit: pos.peak,
         };
@@ -574,7 +622,7 @@ async function _runAmbushTickInner() {
           todayDate: today, livePrice: price, livePriceAt: now,
         });
         await enqueueAmbushOrder(db, isLong ? 'SELL_EXIT' : 'COVER_EXIT', {
-          ticker: pos.ticker, shares: pos.totalShares, direction: pos.direction, reason: exitType,
+          ticker: pos.ticker, shares: exitShares, direction: pos.direction, reason: exitType,
         });
         actions.push({ type: actionType, ticker: pos.ticker, pnl });
         exited = true;

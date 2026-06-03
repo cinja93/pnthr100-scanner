@@ -453,16 +453,64 @@ async function _runAmbushTickInner() {
   // SELL/COVER then OPENS the opposite side (the AVGO short). doLiveExit consults
   // this map before placing any exit. See AUDIT_PROTOCOL.md.
   const ibkrSharesByTicker = {};
+  const ibkrAvgByTicker = {};
   let ibkrSnapAgeMin = Infinity;
   try {
     const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
     if (snap?.positions) for (const p of snap.positions) {
       const t = (p.symbol || p.ticker || '').toUpperCase();
-      if (t) ibkrSharesByTicker[t] = +p.shares || 0;
+      if (t) { ibkrSharesByTicker[t] = +p.shares || 0; ibkrAvgByTicker[t] = +p.avgCost || +p.marketPrice || 0; }
     }
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
   } catch (e) {
     console.warn(`[Ambush] reconcile guard: could not load IBKR snapshot (${e.message}) — exits will use engine share count`);
+  }
+
+  // ── 2c. AUTO-ADOPT every live IBKR position (2026-06-03) ─────────────────────
+  // The engine manages EXACTLY what IBKR holds. For any live IBKR position NOT
+  // already tracked as a held engine record on the SAME side, adopt it: create an
+  // ACTIVE record matching IBKR (direction + size + avg) seeded with the current
+  // 2-bar exit stop, so Phase A maintains its cover/exit stop. A real position can
+  // NEVER sit unmanaged again — the ARCT/AKAM miss was the engine record saying
+  // FLAT while IBKR held the position, so it placed no cover stop. Protect-only: no
+  // pyramid on an adopted position (lotPlan=null). Needs a fresh snapshot + bars.
+  if (ibkrSnapAgeMin <= 10) {
+    try {
+      const managed = new Set(
+        allPositions
+          .filter(p => (+p.totalShares || 0) !== 0 && p.state !== 'CLOSED')
+          .map(p => `${(p.ticker || '').toUpperCase()}_${p.direction}`)
+      );
+      const barDocs = await db.collection('pnthr_ambush_hourly_bars').find({}).toArray();
+      const barMap = {};
+      for (const d of barDocs) barMap[(d.ticker || '').toUpperCase()] = d;
+      for (const [t, sh] of Object.entries(ibkrSharesByTicker)) {
+        if (!sh) continue;
+        const dir = sh > 0 ? 'LONG' : 'SHORT';
+        if (managed.has(`${t}_${dir}`)) continue; // engine already holds this side — skip
+        const d = barMap[t];
+        if (!d || !Array.isArray(d.bars) || d.bars.length < 3) continue; // need bars for the stop — retry next tick
+        const ageM = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;
+        if (ageM > 45) continue;
+        const isLong = dir === 'LONG';
+        const n = d.bars.length, A = d.bars[n - 2], B = d.bars[n - 3];
+        const stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
+        const entry = ibkrAvgByTicker[t] || +A.close;
+        const adopted = {
+          state: STATES.ACTIVE, direction: dir, totalShares: Math.abs(sh),
+          avgCost: +entry.toFixed(4), entryPrice: +entry.toFixed(4), originalEntry: +entry.toFixed(4),
+          stop, atBE: true, trailingActive: true, peak: 0, lotPlan: null, nextLot: 99,
+          prevSyntheticBar: { hourKey: String(A.date), open: +A.open, high: +A.high, low: +A.low, close: +A.close },
+          prevBarLow: +B.low, prevBarHigh: +B.high,
+          adoptedAt: now, adoptedFrom: 'AUTO_IBKR', todayDate: today, livePriceAt: now,
+        };
+        await upsertAmbushPosition(db, t, adopted);
+        allPositions.push({ ticker: t, ...adopted });
+        console.log(`[Ambush] AUTO-ADOPT ${t} ${dir} ${Math.abs(sh)}sh @${entry} — IBKR holds it, engine was not managing. Cover/exit stop ${stop}.`);
+      }
+    } catch (e) {
+      console.warn(`[Ambush] auto-adopt skipped: ${e.message}`);
+    }
   }
 
   // ── V7.3 cash gate: approximate available cash = tradingNav - capital deployed in

@@ -146,4 +146,4 @@ Only when all 6 are checked may an engine be turned on. Record the run (date, re
 ### Audit log
 | Date | Run by | Result | Notes |
 |---|---|---|---|
-| 2026-06-03 | incident response | FAIL → remediation in progress | 45 violations found (15 collisions, phantoms); MCE see-saw identified; ai300 suite being hard-disabled. |
+| 2026-06-03 | incident response | FAIL → remediated | 45 violations (15 collisions, phantoms); MCE see-saw found. FIXED: auto-open guard `4e6b83c`; ai300 retired `949ec5a` (+Render env AI_AUTO_EXECUTE/IBKR_MCE_AUTO_EXECUTE=false); reconcile-before-act `a1e1560`. Cleaned: pnthr_portfolio empty for owner; collisions=0. REMAINING before re-enable: bridge restart (fresh sync) → reconcile Ambush book to IBKR → `crossEngineAudit.js` PASS → enable Ambush. |

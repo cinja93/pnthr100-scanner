@@ -122,13 +122,34 @@ Run `node server/crossEngineAudit.js`. Invariants checked against the live books
 | `CROSS_ENGINE_COLLISION` | VIOLATION | No ticker in BOTH `pnthr_portfolio` (ACTIVE/PARTIAL) and `pnthr_ambush_positions`. |
 | `DIRECTION_INVERSION` | VIOLATION | Recorded direction matches IBKR share sign (catches the AVGO flip). |
 | `PHANTOM_POSITION` | VIOLATION | Engine tracks shares but IBKR holds 0 (catches phantom-share trades). |
-| `NO_PROTECTIVE_STOP` | VIOLATION | Every held IBKR position has a correct-side STP. |
+| `NO_PROTECTIVE_STOP` | VIOLATION | Every held IBKR position has a correct-side STP (SELL for long, BUY for short). Matches on the exit-side action ONLY — must NOT filter by price vs avgCost (a trailing stop ratcheted into profit sits on the other side of entry; the avgCost filter false-flagged every profitable position on 2026-06-03 — fixed `0fcb10b`). |
 | `UNTRACKED_IBKR_POSITION` | WARN | IBKR holds a name no engine tracks. |
 | `SHARE_DIVERGENCE` | WARN | Engine share count ≠ IBKR. |
 | `DUPLICATE_STOPS` | WARN | More than one protective stop on a name. |
 | `STALE_IBKR_SNAPSHOT` | WARN | IBKR snapshot older than 5 min (bridge down) — comparisons unreliable. |
 
 **PASS:** zero VIOLATIONS. (Warnings are advisory but every one must be explained.)
+
+---
+
+## Section 5b — AMBUSH ENGINE INVARIANTS (V7.4+, locked 2026-06-03)
+
+These are the engine-behavior invariants established during the 2026-06-03 stop/phantom
+root-cause work. Each must hold; the grep is a quick regression check.
+
+| # | Invariant | Why | Quick check |
+|---|---|---|---|
+| 1 | **Fill-confirmed entry.** Entries write state `FILLING` (0 shares, not held); `ACTIVE` is set ONLY when a fresh IBKR snapshot confirms the fill (confirmation pass) or by auto-adopt. No optimistic `ACTIVE`. | A rejected order (blackout, buying power, halt) can never become a phantom. | `grep -n "state: STATES.ACTIVE" server/ambush/ambushCron.js` → expect exactly 2 hits, both IBKR-confirmed (confirmation promotion + auto-adopt). Entries write `STATES.FILLING`. |
+| 2 | **Completed bars only.** The bridge drops the still-forming current-hour bar; the engine uses the LAST two feed elements (`n-1`,`n-2`) as the last-2-completed. NEVER `n-2`/`n-3`. | Off-by-one left stops a bar too far back (GFS/FN/MKSI/EA). | bridge `fetch_hourly_bars` drops forming bar; `grep -n "n - 3" server/ambush/ambushCron.js` → expect NONE. |
+| 3 | **Exit = 2-bar break; re-entry = 1-bar live break.** Protective exit trails the last-2-completed low/high; re-entry triggers when live price breaks the most-recent completed bar, every tick. | Distinct rules; re-entry must be fast. | Phase C uses `prevSyntheticBar.high/low` live break, no once-per-hour gate. |
+| 4 | **Re-entry gates == fresh-entry gates.** Weekly BL+1/SS+1 intact **AND** daily 2-day breakout intact at present price **AND** sector, then the 1-bar break. | A name re-enters only while the daily breakout holds (Scott 2026-06-03). | Phase C applies the same 2-day-trigger check as Phase D. |
+| 5 | **One protective stop per ticker.** Bridge `modify_stop` sweeps ALL PNTHR-tagged STP on the exit side, then places one. Manual TWS stops (empty orderRef) untouched. | Kills duplicate stops (SE). | `grep -n "cancel_pnthr_protective_stops" pnthr-ibkr-bridge.py`. |
+| 6 | **Engine verifies the stop EXISTS in IBKR.** Check B force-(re)places when a fresh snapshot shows no exit-side stop — regardless of the record's `pos.stop`. | The record is intent, not truth; adopted/cancelled stops left positions naked (MKSI/TXN). | `grep -n "stopMissingInIbkr" server/ambush/ambushCron.js`. |
+| 7 | **Book reconciles to IBKR truth every tick** (price-independent): any `ACTIVE`/`PROTECT` record IBKR shows flat → `STALKING`. Backstop for stop-fires / manual closes. | No lingering phantoms. | reconcile pass before Phase A, not gated by `!price`. |
+| 8 | **Manual exit ≠ sidelined.** Every exit lands in `STALKING` (never CLOSED); re-entry per #4. No cooldown / per-day cap / `reconciledFlat` gate. | Scott's after-hours risk actions don't kill the setup. | `grep -ni "cooldown\|tradedToday\|maxcycle" server/ambush/ambushCron.js` → expect NONE. |
+| 9 | **No entries in the blackout window** (9:25-9:35, 15:55-16:05 ET) — `inEntryBlackout` gates Phase B/D. | Don't fire orders the bridge will reject. | `grep -n "inEntryBlackout" server/ambush/ambushCron.js`. |
+
+**PASS:** all 9 hold. Run after any change to `ambushCron.js`, `ambushEngine.js`, or the bridge order/bar paths.
 
 ---
 
@@ -147,3 +168,4 @@ Only when all 6 are checked may an engine be turned on. Record the run (date, re
 | Date | Run by | Result | Notes |
 |---|---|---|---|
 | 2026-06-03 | incident response | FAIL → remediated | 45 violations (15 collisions, phantoms); MCE see-saw found. FIXED: auto-open guard `4e6b83c`; ai300 retired `949ec5a` (+Render env AI_AUTO_EXECUTE/IBKR_MCE_AUTO_EXECUTE=false); reconcile-before-act `a1e1560`. Cleaned: pnthr_portfolio empty for owner; collisions=0. REMAINING before re-enable: bridge restart (fresh sync) → reconcile Ambush book to IBKR → `crossEngineAudit.js` PASS → enable Ambush. |
+| 2026-06-03 (session 2) | live-trading fixes | FAIL → CLEAN | Live Ambush surfaced: misplaced 2-bar stops (forming-bar off-by-one), missed re-entries (2-bar wait → 1-bar live), SE double-stop, 13+ phantoms (optimistic ACTIVE before fill). ROOT FIXES: completed-bars-only feed `809e826`; 1-bar re-entry `02f3d7b`; one-stop sweep `cc3977c`; **FILLING fill-confirmed entry `3d3b2db`** (phantoms now impossible); engine verifies stop exists + audit avgCost-filter false-positive `0fcb10b`; re-entry == fresh-entry gates `4f3491b`. NEW: Section 5b invariants. Running the audit ALSO found 2 genuinely naked adopted positions (MKSI/TXN — stopped) + the audit's own false-positive bug (fixed). Cleaned 18 legacy phantoms → STALKING (still re-entry candidates). **Final `crossEngineAudit.js`: 0 violations, 0 warnings. Ambush 24 = IBKR 24.** Bridge changes need `git pull`+restart. |

@@ -19,6 +19,7 @@ import path from 'path';
 import { connectToDatabase } from '../database.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
+import { getSectorEmaPeriod } from '../sectorEmaConfig.js';
 import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { detectAllSignals, calculateEMA, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
 import { calcCommission, calcBorrowCost } from './costEngine.js';
@@ -76,7 +77,11 @@ for (const sec of SECTORS) {
   for (const h of sec.holdings) AI_TICKER_META[h.ticker] = { sectorId: sec.id, sector: sec.name };
 }
 
+// When running an alternate universe (e.g. S&P 500), SECTOR_OVERRIDE maps ticker->sector
+// so borrow costs + any sector lookups use the correct GICS sector. AI path: stays null.
+let SECTOR_OVERRIDE = null;
 function getSectorName(ticker) {
+  if (SECTOR_OVERRIDE) return SECTOR_OVERRIDE[ticker] || 'Technology';
   if (CARNIVORE_GICS[ticker]) return CARNIVORE_GICS[ticker];
   return AI_TICKER_META[ticker]?.sector || 'Technology';
 }
@@ -122,10 +127,25 @@ async function main() {
 
   // ── LOAD DATA ──────────────────────────────────────────────────────────────
   console.log('\n[1] Loading data...');
-  const dailyDocs = await db.collection('pnthr_ai_bt_candles').find({}, { projection: { ticker: 1, daily: 1 } }).toArray();
-  const weeklyDocs = await db.collection('pnthr_ai_bt_candles_weekly').find({}, { projection: { ticker: 1, weekly: 1 } }).toArray();
-  const hourlyDocs = await db.collection('pnthr_ai_hourly_candles').find({}, { projection: { ticker: 1, hourly: 1 } }).toArray();
-  const sectorRankDocs = await db.collection('pnthr_ai_sector_rank_daily').find({}).sort({ date: 1 }).toArray();
+  // S&P 500 large-cap universe: same engine, different inputs. Daily/weekly from the 679
+  // candle store, hourly from the dedicated backfill, sectors from the FMP-sourced map.
+  const SP500 = process.argv.includes('--sp500');
+  // Structural (ex-ante) sector exclusion — e.g. drop the weak low-momentum defensives.
+  const EXCLUDE_SECTORS = process.argv.includes('--no-defensives') ? new Set(['Utilities', 'Consumer Staples']) : new Set();
+  let sp500Sector = {};
+  if (SP500) {
+    const secDocs = await db.collection('pnthr_sp500_sectors').find({ sector: { $ne: null } }).toArray();
+    for (const d of secDocs) sp500Sector[d.ticker] = d.sector;
+    SECTOR_OVERRIDE = sp500Sector;
+    console.log(`  [S&P 500 MODE] ${Object.keys(sp500Sector).length} tickers with sectors`);
+  }
+  const C = SP500
+    ? { daily: 'pnthr_bt_candles', weekly: 'pnthr_bt_candles_weekly', hourly: 'pnthr_sp500_hourly_candles' }
+    : { daily: 'pnthr_ai_bt_candles', weekly: 'pnthr_ai_bt_candles_weekly', hourly: 'pnthr_ai_hourly_candles' };
+  const dailyDocs = await db.collection(C.daily).find({}, { projection: { ticker: 1, daily: 1 } }).toArray();
+  const weeklyDocs = await db.collection(C.weekly).find({}, { projection: { ticker: 1, weekly: 1 } }).toArray();
+  const hourlyDocs = await db.collection(C.hourly).find({}, { projection: { ticker: 1, hourly: 1 } }).toArray();
+  const sectorRankDocs = SP500 ? [] : await db.collection('pnthr_ai_sector_rank_daily').find({}).sort({ date: 1 }).toArray();
   const pai300Doc = await db.collection('pnthr_ai_index_candles_weekly').findOne({ ticker: 'PAI300' });
   const spyWeeklyDoc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: 'SPY' });
   const etfWeeklyDocs = {};
@@ -189,14 +209,17 @@ async function main() {
 
   // ── SIGNALS ────────────────────────────────────────────────────────────────
   console.log('\n[2] Computing signals...');
-  const allTickers = Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t] || CARNIVORE_MODE_TICKERS.has(t));
+  const allTickers = SP500
+    ? Object.keys(weeklyBarsByTicker).filter(t => sp500Sector[t] && !EXCLUDE_SECTORS.has(sp500Sector[t]))
+    : Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t] || CARNIVORE_MODE_TICKERS.has(t));
   const signalsByTicker = {};
   for (const ticker of allTickers) {
     const bars = weeklyBarsByTicker[ticker]; if (!bars || bars.length < 35) continue;
-    const isCarnivore = CARNIVORE_MODE_TICKERS.has(ticker);
+    const isCarnivore = !SP500 && CARNIVORE_MODE_TICKERS.has(ticker);
     const sectorId = AI_TICKER_META[ticker]?.sectorId;
-    const period = isCarnivore ? 21 : (SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30);
-    const gateOffset = isCarnivore ? 0.10 : 0.25;
+    const period = SP500 ? getSectorEmaPeriod(sp500Sector[ticker])
+                 : (isCarnivore ? 21 : (SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30));
+    const gateOffset = SP500 ? 0.10 : (isCarnivore ? 0.10 : 0.25); // 679/S&P 500 first-BL gate = 1.10x
     const result = detectAllSignals(bars, period, false, null, gateOffset);
     const activeBLPeriods = [], activeSSPeriods = [];
     let blStart = null, ssStart = null;
@@ -780,7 +803,9 @@ async function main() {
   // is the ideal working AUM; everything above it just adds idle cash.
   if (process.argv.includes('--sweep')) {
     const V74s = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };
-    const CAPS = [250_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000, 8_000_000, 12_000_000];
+    const CAPS = SP500
+      ? [1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 200_000_000]
+      : [250_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000, 8_000_000, 12_000_000];
     const YEARS = (new Date(hourlyTradingDates[hourlyTradingDates.length - 1] + 'T12:00:00') - new Date(hourlyTradingDates[0] + 'T12:00:00')) / (365.25 * 86400000);
     console.log(`\n[SWEEP] Capacity — working capital pinned at W, harvest excess (period ${YEARS.toFixed(2)}y)\n`);
     console.log('  W            TotalHarvested    Annual$Profit    Yield%/yr   AvgDeploy%   Trades');
@@ -813,6 +838,45 @@ async function main() {
       console.log(`  ${mode.padEnd(11)} ${p('$' + Math.round(r.equity).toLocaleString(), 13)}   ${p(r.cagr.toFixed(1) + '%', 7)}  ${p(r.maxDD.toFixed(2) + '%', 7)}  ${p(r.pf.toFixed(2), 5)}  ${p(r.wr.toFixed(0) + '%', 5)}  ${p(r.trades.toLocaleString(), 7)}  ${p((r.totalTrailingExits || 0).toLocaleString(), 9)}  ${p((r.totalExits1H || 0).toLocaleString(), 8)}`);
     }
     console.log('');
+    process.exit(0);
+  }
+
+  // ── STOCK + SECTOR RANK (analysis: node pai300HourlyV74.js [--sp500] --stockrank) ──
+  // Uncapped run (NAV huge so cash never constrains) → every signal taken at equal risk,
+  // so each ticker's / sector's true edge under the strategy is isolated. Ranks best→worst,
+  // quantifies the drag from net-negative names, writes a full CSV "winners list".
+  if (process.argv.includes('--stockrank')) {
+    const uni = SP500 ? 'S&P 500' : 'AI-300';
+    console.log(`\n[STOCK RANK] ${uni} — per-ticker + per-sector edge, uncapped (every signal taken)\n`);
+    NAV_INITIAL = 1e12;
+    const r = runSim({ gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1, useGraduated: false, withdrawals: false, label: 'STOCKRANK' });
+    const byT = {}, byS = {};
+    for (const e of (r.closedTrades || [])) {
+      if (e.pnl == null || e.type === 'OPEN_AT_END') continue;
+      const t = e.ticker, sec = getSectorName(t);
+      if (!byT[t]) byT[t] = { trades: 0, wins: 0, pnl: 0, sec };
+      if (!byS[sec]) byS[sec] = { trades: 0, wins: 0, pnl: 0 };
+      byT[t].trades++; byS[sec].trades++;
+      if (e.pnl > 0) { byT[t].wins++; byS[sec].wins++; }
+      byT[t].pnl += e.pnl; byS[sec].pnl += e.pnl;
+    }
+    const money = (v) => ('$' + Math.round(v).toLocaleString());
+    console.log('SECTORS (best → worst by total P&L):');
+    console.log('  sector                     trades   winRate     totalP&L        avg/trade');
+    for (const [s, v] of Object.entries(byS).sort((a, b) => b[1].pnl - a[1].pnl)) {
+      console.log(`  ${s.padEnd(24)} ${String(v.trades).padStart(7)}   ${((v.wins / v.trades) * 100).toFixed(0).padStart(5)}%   ${money(v.pnl).padStart(13)}   ${money(v.pnl / v.trades).padStart(9)}`);
+    }
+    const ranked = Object.entries(byT).sort((a, b) => b[1].pnl - a[1].pnl);
+    const row = ([t, v]) => `  ${t.padEnd(7)} ${v.sec.padEnd(22)} ${String(v.trades).padStart(5)}  ${((v.wins / v.trades) * 100).toFixed(0).padStart(4)}%  ${money(v.pnl).padStart(13)}`;
+    console.log('\nTOP 25 STOCKS:'); ranked.slice(0, 25).forEach(x => console.log(row(x)));
+    console.log('\nBOTTOM 25 STOCKS (cut candidates):'); ranked.slice(-25).forEach(x => console.log(row(x)));
+    const total = ranked.reduce((s, [, v]) => s + v.pnl, 0);
+    const losers = ranked.filter(([, v]) => v.pnl < 0);
+    const loserPnl = losers.reduce((s, [, v]) => s + v.pnl, 0);
+    console.log(`\nFILTER INSIGHT: ${ranked.length} stocks traded | ${losers.length} net-negative | cutting them adds back ${money(-loserPnl)} (+${((-loserPnl / total) * 100).toFixed(1)}% of gross P&L)`);
+    const dl = path.join(os.homedir(), 'Downloads');
+    const csv = ['ticker,sector,trades,winRatePct,totalPnl,avgPnlPerTrade', ...ranked.map(([t, v]) => `${t},${v.sec},${v.trades},${((v.wins / v.trades) * 100).toFixed(1)},${Math.round(v.pnl)},${Math.round(v.pnl / v.trades)}`)];
+    try { fs.writeFileSync(path.join(dl, `PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`), csv.join('\n')); console.log(`\nWrote ranking: ~/Downloads/PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`); } catch {}
     process.exit(0);
   }
 

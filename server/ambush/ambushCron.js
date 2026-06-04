@@ -1358,26 +1358,25 @@ async function _runAmbushTickInner() {
         }
         if (!getSectorOk(ctx, stalk.ticker, today)) continue;
 
-        // FROZEN-TRIGGER GATE (2026-06-03, Scott's rule): re-enter only while the current
-        // price still holds above BOTH frozen breakout levels (long) / below both (short):
-        //   • Weekly Trigger = the active weekly BL/SS breakout entry (e.g. 420.51)
-        //   • Daily Trigger  = the ORIGINAL 2-day breakout level that first fired this cycle
-        // These were frozen + persisted by the maintenance pass above. The check is stateless
-        // each tick, so if price dips below and later crosses back above both, the name is
-        // eligible again. Falls back to today's rolling 2-day level if a trigger isn't frozen
-        // yet (degrades to the prior gate, never re-enters blind). If price has sold off below
-        // either, it stays STALKING and waits — it does NOT chase.
+        // RE-ENTRY GATE — DAILY 2-day-high breakout only (2026-06-04 fix).
+        // "Weekly signal intact" is ALREADY enforced by the isActiveBL/isActiveSS check
+        // above (a name whose weekly BL/SS expired is deleted, never reaches here). The
+        // OLD weekly-PRICE gate ALSO required price ≥ the weekly breakout ENTRY — a second,
+        // stricter condition that was never the intent. It blocked every BL that fired
+        // recently and then pulled back (its entry sits ABOVE current price, e.g. WCC
+        // weekly 374 vs price 369.79), shutting the whole book on a market-pullback day —
+        // even though the weekly signal was perfectly intact. REMOVED. Re-entry now needs:
+        // (1) weekly signal active (checked above), (2) price back above the DAILY 2-day
+        // breakout, (3) the 1-bar live break below. That catches the move (Scott's rule)
+        // without chasing blind. The frozen weeklyTrigger is kept for DISPLAY only.
         {
           const rolling = rolling2Day(reEntryPriorData[stalk.ticker], isLong);
-          const dailyFloor  = (stalk.dailyTrigger != null) ? stalk.dailyTrigger : rolling;
-          const weeklyFloor = (stalk.weeklyTrigger != null) ? stalk.weeklyTrigger : null;
+          const dailyFloor = (stalk.dailyTrigger != null) ? stalk.dailyTrigger : rolling;
           if (dailyFloor == null) continue; // no breakout level known yet — don't re-enter blind
           if (isLong) {
-            if (price < dailyFloor) continue;                      // sold off below the daily breakout
-            if (weeklyFloor != null && price < weeklyFloor) continue; // below the weekly breakout
+            if (price < dailyFloor) continue;   // not back above the 2-day breakout yet
           } else {
             if (price > dailyFloor) continue;
-            if (weeklyFloor != null && price > weeklyFloor) continue;
           }
         }
 

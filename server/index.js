@@ -6401,27 +6401,27 @@ cron.schedule('15 16 * * 1-5', async () => {
         console.log('[AI300 Kill History] case studies + appearances updated');
       }
     } catch (e) { console.error('[CRON] AI300 Kill History failed:', e.message); }
-    // ⚡ The following order-generation crons are GATED by Ambush mode.
-    // Data pipeline (bars, sectors, kill scoring) above is NOT gated — it powers analytics.
-    // Only the ORDER PLACEMENT / STAGING sections are suppressed when Ambush is active.
-    const ambushActive = await isAmbushModeActive();
-    if (ambushActive) {
-      console.log('[AI Universe Daily] Order pipelines skipped — AMBUSH MODE active (data pipeline ran normally)');
-    } else {
-      // Run the 679 Orders pipeline to refresh Carnivore qualification (gates + rank).
-      // AI Orders consumes this — Carnivore tickers must pass full 679 gates.
-      try {
-        console.log('[Orders] refreshing 679 pipeline for Carnivore qualification...');
-        await runOrdersPipeline({ type: 'CONFIRMED' });
-      } catch (e) { console.error('[CRON] 679 Orders refresh failed:', e.message); }
-      // Regenerate the AI Orders sheet (consumes fresh sector tiers + sector rotation).
-      try {
-        console.log('[AI Orders] regenerating order sheet...');
-        const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
-        console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
-      } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
-      // Stage weekly orders on FRIDAY ONLY — creates STAGED positions from order sheet.
-      // Execution happens Monday 9:35 AM via separate cron (executeWeeklyOrders).
+    // ── SIGNAL GENERATION — READ-ONLY, ALWAYS RUNS (ungated 2026-06-04) ───────────
+    // The 679 carnivore refresh + the AI Orders sheet are READ-ONLY (verified: no
+    // enqueueOutbox / order placement anywhere in ordersPipeline.js or aiOrdersPipeline.js).
+    // They power the AI Orders display, which Scott/Brennan read manually. They MUST stay
+    // fresh every day regardless of Ambush — so they are NO LONGER gated by Ambush mode.
+    // (Previously the whole block was skipped when Ambush was active, which silently
+    //  froze the AI Orders sheet — it went stale from May 29.) The data pipeline above is
+    //  likewise ungated. Only ORDER STAGING/EXECUTION stays gated (and is permanently retired).
+    try {
+      console.log('[Orders] refreshing 679 pipeline for Carnivore qualification...');
+      await runOrdersPipeline({ type: 'CONFIRMED' });
+    } catch (e) { console.error('[CRON] 679 Orders refresh failed:', e.message); }
+    try {
+      console.log('[AI Orders] regenerating order sheet (read-only display)...');
+      const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
+      console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
+    } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
+    // ── ORDER STAGING (Friday) — GATED by Ambush AND permanently retired ─────────
+    // Defense-in-depth: stageWeeklyOrders returns DISABLED (retirement flag) regardless,
+    // and we still gate it on Ambush. It can never create positions under current config.
+    if (!(await isAmbushModeActive())) {
       const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
       if (today === 'Friday') {
         try {

@@ -1492,19 +1492,32 @@ def main():
                 app.executions_ready.wait(timeout=5)
 
                 payload = app.get_payload()
-                if payload['account']['netLiquidation'] > 0:
-                    push_to_pnthr(payload)
+                # ── DO NOT push an EMPTY-and-UNCONFIRMED snapshot (2026-06-04 root-cause) ──
+                # After a reconnect, positions_dict is cleared until reqPositions completes
+                # (positionEnd sets positions_ready). Pushing during that window writes 0
+                # positions, which the engine reads as "the whole book went flat" — it then
+                # drops stops, strands real positions unmanaged, and re-places duplicate
+                # stops (it sees 0 stop orders). Only push when we either HAVE positions, or
+                # reqPositions has CONFIRMED the account is genuinely flat (positions_ready
+                # set). Otherwise keep the server's last good snapshot and nudge a re-request.
+                if payload['account']['netLiquidation'] <= 0:
+                    print("[BRIDGE] ⚠ No account data yet — TWS may still be loading; not pushing")
+                elif not app.positions_dict and not app.positions_ready.is_set():
+                    print("[BRIDGE] ⚠ Positions not loaded yet (reqPositions pending) — NOT pushing EMPTY snapshot (preserving last good); re-requesting positions")
+                    app.reqPositions()
                 else:
-                    print("[BRIDGE] ⚠ No account data yet — TWS may still be loading")
+                    push_to_pnthr(payload)
             else:
                 print("[BRIDGE] Disconnected — attempting reconnect...")
                 try:
                     app.connect(TWS_HOST, TWS_PORT, TWS_CLIENT_ID)
                     time.sleep(2)
-                    app.positions_dict = {}  # clear stale positions before fresh subscription
+                    app.positions_dict = {}        # clear stale positions before fresh subscription
+                    app.positions_ready.clear()    # gate pushes until reqPositions repopulates (no empty-snapshot writes)
                     app.reqAccountUpdates(True, "")
                     app.reqPositions()
                     app.account_ready.wait(timeout=15)
+                    app.positions_ready.wait(timeout=15)  # wait for the real position list before resuming pushes
                 except Exception:
                     pass
 

@@ -152,7 +152,10 @@ export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride 
       if (blPhase1 && blDaylightOk) {
         const entryPrice = parseFloat((twoBarHigh + 0.01).toFixed(2));
         const initStop   = blInitStop(twoBarLow, current.close, atrArr[wi]);
-        events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high });
+        // entry = the prior 2-bar high + $0.01 = the breakout level that fired this signal
+        // (the "trigger"). Carried on the event so the Ambush engine can freeze it as the
+        // Weekly Trigger for the re-entry cross-check. Additive — other consumers ignore it.
+        events.push({ time: current.time, signal: 'BL', barLow: current.low, barHigh: current.high, entry: entryPrice });
         position          = { type: 'BL', entryWi: wi, entryPrice, pnthrStop: initStop };
         longTrendActive   = true;
         longTrendCapped   = false;
@@ -161,7 +164,8 @@ export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride 
       } else if (ssPhase1 && ssDaylightOk) {
         const entryPrice = parseFloat((twoBarLow - 0.01).toFixed(2));
         const initStop   = ssInitStop(twoBarHigh, current.close, atrArr[wi]);
-        events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high });
+        // entry = the prior 2-bar low − $0.01 = the breakdown level that fired this signal.
+        events.push({ time: current.time, signal: 'SS', barLow: current.low, barHigh: current.high, entry: entryPrice });
         position          = { type: 'SS', entryWi: wi, entryPrice, pnthrStop: initStop };
         shortTrendActive  = true;
         shortTrendCapped  = false;

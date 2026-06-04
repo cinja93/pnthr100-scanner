@@ -233,21 +233,23 @@ export async function loadSignalContext(db) {
     const result = detectAllSignals(bars, period, false, null, gateOffset);
 
     const activeBLPeriods = [], activeSSPeriods = [];
-    let blStart = null, ssStart = null;
+    let blStart = null, blEntry = null, ssStart = null, ssEntry = null;
     for (const evt of result.events) {
-      if (evt.signal === 'BL') blStart = evt.time;
+      // Capture the breakout entry level (the "trigger") that fired each signal, so the
+      // engine can freeze it as the Weekly Trigger for the re-entry cross-check.
+      if (evt.signal === 'BL') { blStart = evt.time; blEntry = evt.entry ?? null; }
       if ((evt.signal === 'BE' || evt.signal === 'SS') && blStart) {
-        activeBLPeriods.push({ from: blStart, to: evt.time });
-        blStart = null;
+        activeBLPeriods.push({ from: blStart, to: evt.time, entry: blEntry });
+        blStart = null; blEntry = null;
       }
-      if (evt.signal === 'SS') ssStart = evt.time;
+      if (evt.signal === 'SS') { ssStart = evt.time; ssEntry = evt.entry ?? null; }
       if ((evt.signal === 'SE' || evt.signal === 'BL') && ssStart) {
-        activeSSPeriods.push({ from: ssStart, to: evt.time });
-        ssStart = null;
+        activeSSPeriods.push({ from: ssStart, to: evt.time, entry: ssEntry });
+        ssStart = null; ssEntry = null;
       }
     }
-    if (blStart) activeBLPeriods.push({ from: blStart, to: '9999-12-31' });
-    if (ssStart) activeSSPeriods.push({ from: ssStart, to: '9999-12-31' });
+    if (blStart) activeBLPeriods.push({ from: blStart, to: '9999-12-31', entry: blEntry });
+    if (ssStart) activeSSPeriods.push({ from: ssStart, to: '9999-12-31', entry: ssEntry });
     signalsByTicker[ticker] = { activeBLPeriods, activeSSPeriods, isCarnivore };
   }
 
@@ -303,6 +305,25 @@ export function isActiveSS(ctx, ticker, dateStr) {
     if (weekOf >= p.from && weekOf <= p.to) return true;
   }
   return false;
+}
+
+// The WEEKLY TRIGGER for the currently-active signal = the breakout entry level that
+// fired it (prior 2-week high + $0.01 for a BL, prior 2-week low − $0.01 for an SS).
+// Frozen for the life of the signal cycle (the period's entry doesn't change); when a
+// NEW BL/SS fires, a new period starts with a new entry. `from` is the period's start
+// week, used to detect a new cycle (recapture the daily trigger). Returns
+// { level, from, dir } or null when no weekly signal is active.
+export function getWeeklyTrigger(ctx, ticker, dateStr) {
+  const sig = ctx.signalsByTicker[ticker];
+  if (!sig) return null;
+  const weekOf = getWeekOf(dateStr);
+  for (const p of sig.activeBLPeriods) {
+    if (weekOf >= p.from && weekOf <= p.to) return { level: p.entry ?? null, from: p.from, dir: 'LONG' };
+  }
+  for (const p of sig.activeSSPeriods) {
+    if (weekOf >= p.from && weekOf <= p.to) return { level: p.entry ?? null, from: p.from, dir: 'SHORT' };
+  }
+  return null;
 }
 
 // NOTE: getWeeklyStopLong / getWeeklyStopShort were removed in V7.3.

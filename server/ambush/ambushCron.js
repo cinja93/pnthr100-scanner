@@ -38,7 +38,7 @@ import {
   COMMISSION_PER_SHARE,
   entrySlip, exitSlip, extractTime, sizeLots,
   getSizingMultiplier, getSizingTierLabel,
-  loadSignalContext, getRegime, getSectorOk, isActiveBL, isActiveSS,
+  loadSignalContext, getRegime, getSectorOk, isActiveBL, isActiveSS, getWeeklyTrigger,
   getAiTickers, getSectorName,
 } from './ambushEngine.js';
 import { calcCommission, calcBorrowCost } from '../backtest/costEngine.js';
@@ -336,6 +336,51 @@ function updateFirstHourTracking(pos, price) {
   if (pos.todayFirstHourHigh === null || pos.todayFirstHourHigh === undefined || price > pos.todayFirstHourHigh) {
     pos.todayFirstHourHigh = +price.toFixed(4);
   }
+}
+
+// ── Weekly + Daily TRIGGER levels (2026-06-03, Scott's re-entry rule) ────────
+// The DAILY trigger = the higher of the last 2 completed daily bars' highs + $0.01
+// (long) / the lower of the last 2 lows − $0.01 (short) — the breakout level. The
+// WEEKLY trigger = the breakout entry of the active weekly BL/SS (from the signal).
+// Both are FROZEN for the life of the weekly signal cycle; a name is re-entry eligible
+// only while the current price holds above BOTH (long) / below BOTH (short).
+function rolling2Day(pd, isLong) {
+  if (!pd || !Array.isArray(pd.highs) || !pd.highs.length) return null;
+  return isLong
+    ? +(Math.max(...pd.highs) + 0.01).toFixed(2)
+    : +(Math.min(...pd.lows) - 0.01).toFixed(2);
+}
+
+// Freeze/refresh the triggers on a position (mutates pos). `rolling` = today's 2-day
+// breakout level; `price` = live price. New weekly cycle (the active signal's start
+// week changed) → recapture: clear the frozen daily trigger + reset the weekly trigger.
+// Freeze the daily trigger the FIRST time the breakout fires this cycle (the ORIGINAL
+// price that caused the trigger), then hold it. Returns true if any value changed.
+function applyTriggerMaintenance(pos, ctx, today, rolling, price) {
+  const isLong = pos.direction === 'LONG';
+  // Only use a weekly trigger whose SIGNAL DIRECTION matches the position. An adopted
+  // position can be SHORT while the weekly signal is BL (long) — that long trigger must
+  // NOT attach to a short (it would gate the wrong way). No matching-direction signal →
+  // no weekly trigger (such a name also fails the isActiveBL/SS re-entry check anyway).
+  const wtRaw = getWeeklyTrigger(ctx, pos.ticker, today);
+  const wt = (wtRaw && wtRaw.dir === pos.direction) ? wtRaw : null;
+  const wtFrom = wt?.from ?? null;
+  let changed = false;
+  if ((pos.weeklyTriggerFrom ?? null) !== wtFrom) {
+    // new weekly signal cycle (or the signal ended) → recapture this cycle's triggers
+    if (pos.dailyTrigger != null) { pos.dailyTrigger = null; changed = true; }
+    pos.weeklyTriggerFrom = wtFrom;
+    pos.weeklyTrigger = wt?.level ?? null;
+    changed = true;
+  } else if (pos.weeklyTrigger == null && wt?.level != null) {
+    pos.weeklyTrigger = wt.level; changed = true;
+  }
+  // Freeze the daily trigger the first time the breakout fires this cycle.
+  if (pos.dailyTrigger == null && rolling != null && typeof price === 'number' &&
+      (isLong ? price >= rolling : price <= rolling)) {
+    pos.dailyTrigger = rolling; changed = true;
+  }
+  return changed;
 }
 
 // ── Main Cron Tick ──────────────────────────────────────────────────────────
@@ -706,6 +751,31 @@ async function _runAmbushTickInner() {
     } catch (e) {
       console.warn(`[Ambush] IBKR bar seeding skipped (${e.message}) — using engine synthetic bars`);
     }
+  }
+
+  // ── MAINTAIN WEEKLY + DAILY TRIGGERS (2026-06-03, Scott's re-entry rule) ──────
+  // Freeze each tracked name's Weekly Trigger (the active signal's breakout entry) and
+  // Daily Trigger (the original 2-day breakout level), refresh on a new weekly cycle,
+  // and persist them so (a) the re-entry gate (Phase C) can require price to hold above
+  // both, and (b) the Live Positions UI can show both columns. Stops on a held position
+  // are unaffected — this only governs RE-ENTRY eligibility + the display.
+  try {
+    const trackedPriorData = await fetchPriorDayData(allPositions.map(p => p.ticker), today);
+    for (const pos of allPositions) {
+      if (pos.state === STATES.CLOSED) continue;
+      const isLong = pos.direction === 'LONG';
+      const rolling = rolling2Day(trackedPriorData[pos.ticker], isLong);
+      const changed = applyTriggerMaintenance(pos, ctx, today, rolling, livePrices[pos.ticker] ?? null);
+      if (changed) {
+        await upsertAmbushPosition(db, pos.ticker, {
+          weeklyTrigger: pos.weeklyTrigger ?? null,
+          weeklyTriggerFrom: pos.weeklyTriggerFrom ?? null,
+          dailyTrigger: pos.dailyTrigger ?? null,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn(`[Ambush] trigger maintenance skipped: ${e.message}`);
   }
 
   // ── RECONCILE PHANTOMS (2026-06-03) ──────────────────────────────────────────
@@ -1157,21 +1227,26 @@ async function _runAmbushTickInner() {
         }
         if (!getSectorOk(ctx, stalk.ticker, today)) continue;
 
-        // DAILY GATE (2026-06-03): the daily 2-day breakout must still be intact AT THE
-        // PRESENT PRICE — identical to the fresh-entry check in Phase D. A name only
-        // re-enters while price holds above the prior 2 days' high (long) / below the
-        // prior 2 days' low (short). If the daily breakout has reversed, it is NOT a
-        // candidate this tick (stay STALKING and re-check next tick — do NOT delete; the
-        // daily can re-intact). If we have no prior-day data yet, wait (don't re-enter blind).
+        // FROZEN-TRIGGER GATE (2026-06-03, Scott's rule): re-enter only while the current
+        // price still holds above BOTH frozen breakout levels (long) / below both (short):
+        //   • Weekly Trigger = the active weekly BL/SS breakout entry (e.g. 420.51)
+        //   • Daily Trigger  = the ORIGINAL 2-day breakout level that first fired this cycle
+        // These were frozen + persisted by the maintenance pass above. The check is stateless
+        // each tick, so if price dips below and later crosses back above both, the name is
+        // eligible again. Falls back to today's rolling 2-day level if a trigger isn't frozen
+        // yet (degrades to the prior gate, never re-enters blind). If price has sold off below
+        // either, it stays STALKING and waits — it does NOT chase.
         {
-          const pd = reEntryPriorData[stalk.ticker];
-          if (!pd || !pd.highs.length) continue;
+          const rolling = rolling2Day(reEntryPriorData[stalk.ticker], isLong);
+          const dailyFloor  = (stalk.dailyTrigger != null) ? stalk.dailyTrigger : rolling;
+          const weeklyFloor = (stalk.weeklyTrigger != null) ? stalk.weeklyTrigger : null;
+          if (dailyFloor == null) continue; // no breakout level known yet — don't re-enter blind
           if (isLong) {
-            const trigger = +(Math.max(...pd.highs) + 0.01).toFixed(2);
-            if (price < trigger) continue; // daily breakout not intact at present price
+            if (price < dailyFloor) continue;                      // sold off below the daily breakout
+            if (weeklyFloor != null && price < weeklyFloor) continue; // below the weekly breakout
           } else {
-            const trigger = +(Math.min(...pd.lows) - 0.01).toFixed(2);
-            if (price > trigger) continue;
+            if (price > dailyFloor) continue;
+            if (weeklyFloor != null && price > weeklyFloor) continue;
           }
         }
 

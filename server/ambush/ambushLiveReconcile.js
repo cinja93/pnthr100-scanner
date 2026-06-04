@@ -11,6 +11,8 @@ import { getUserProfile } from '../database.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const TOL = { AVG: 0.03, STOP: 0.03, LEVEL: 0.03 };
+const PCT_TOL = 0.003; // 0.3% of price — the real "matches" band so a $0.40 gap on a $130 stop isn't a discrepancy
+const within = (a, b, ref) => Math.abs(a - b) <= Math.max(0.05, (ref || 0) * PCT_TOL);
 const CAP_PCT = 0.10;      // 10% NAV max notional per ticker
 const RISK_PCT_CAP = 0.01; // 1% NAV max risk per position (at full 5 lots)
 const MAX_LOSS = 150;      // Scott's per-position max loss for current NAV — the binding cap is min($150, 1% NAV)
@@ -57,9 +59,9 @@ function checkShares(engSh, ibSh) {
 }
 function checkAvg(engAvg, ibAvg) {
   if (engAvg == null || ibAvg == null || !engAvg || !ibAvg) return { status: 'gray' };
+  if (within(engAvg, ibAvg, ibAvg)) return { status: 'green' };
   const d = Math.abs(engAvg - ibAvg);
-  if (d <= TOL.AVG) return { status: 'green' };
-  return { status: d < ibAvg * 0.0025 ? 'yellow' : 'red', reason: `avg engine ${engAvg.toFixed(2)} vs IBKR ${ibAvg.toFixed(2)} ($${d.toFixed(2)})` };
+  return { status: 'red', reason: `avg engine ${engAvg.toFixed(2)} vs IBKR ${ibAvg.toFixed(2)} ($${d.toFixed(2)})` };
 }
 function checkStopExists(held, isLong, ibStops) {
   if (!held) return { status: 'gray' };
@@ -74,13 +76,29 @@ function checkStopPrice(engStop, ibStops, isLong) {
   if (!mine.length) return { status: 'red', reason: 'no IBKR stop to compare' };
   if (mine.length > 1) return { status: 'red', reason: `${mine.length} duplicate stops in IBKR` };
   const ibPx = +mine[0].stopPrice;
-  const d = Math.abs(ibPx - engStop);
-  return d <= TOL.STOP ? { status: 'green' } : { status: 'red', reason: `IBKR stop ${ibPx.toFixed(2)} vs engine ${engStop.toFixed(2)} ($${d.toFixed(2)})` };
+  if (within(ibPx, engStop, ibPx)) return { status: 'green' };
+  // Tightest-stop-wins (locked rule): a TWS stop TIGHTER than the engine's 2-bar level
+  // (closer to price = less risk) is the trader's deliberate manual tighten — acceptable,
+  // not a discrepancy. Only a LOOSER TWS stop (further from price = MORE risk) is a real
+  // problem the engine must correct.
+  const ibTighter = isLong ? ibPx > engStop : ibPx < engStop;
+  if (ibTighter) return { status: 'green' };
+  // A looser TWS stop is a real gap but NOT a hands-on emergency: the engine ratchets the
+  // stop to the 2-bar level on the first live tick. Amber (engine fixes on go-live), not red.
+  return { status: 'yellow', reason: `TWS stop ${ibPx.toFixed(2)} looser than 2-bar ${engStop.toFixed(2)} ($${Math.abs(ibPx - engStop).toFixed(2)} more risk) — engine tightens on go-live` };
 }
-function checkStopLevel(engStop, correctTrail) {
+function checkStopLevel(engStop, correctTrail, isLong, px) {
   if (engStop == null || correctTrail == null) return { status: 'gray' };
+  // After-hours / bad FMP bars can produce an impossible level (e.g. a LONG 2-bar stop
+  // ABOVE the current price). A real protective stop is always on the safe side of price,
+  // so if the recomputed level is on the WRONG side, the bar data is unreliable — don't
+  // flag the engine on garbage. This check is only trustworthy with live intraday bars.
+  if (px > 0) { if (isLong && correctTrail >= px) return { status: 'gray' }; if (!isLong && correctTrail <= px) return { status: 'gray' }; }
+  if (within(engStop, correctTrail, correctTrail)) return { status: 'green' };
   const d = Math.abs(engStop - correctTrail);
-  return d <= TOL.LEVEL ? { status: 'green' } : { status: 'red', reason: `stop ${engStop.toFixed(2)} vs correct 2-bar ${correctTrail.toFixed(2)} ($${d.toFixed(2)})` };
+  // Engine intent vs the live 2-bar recompute. A gap is worth showing but the engine
+  // re-levels itself each tick — amber (informational), not a hands-on red.
+  return { status: 'yellow', reason: `stop ${engStop.toFixed(2)} vs correct 2-bar ${correctTrail.toFixed(2)} ($${d.toFixed(2)})` };
 }
 function checkStopQty(ibStops, ibSh, isLong) {
   const want = isLong ? 'SELL' : 'BUY';
@@ -125,8 +143,17 @@ export async function getAmbushLiveReconcile(db) {
   const nowMin = +p.hour * 60 + +p.minute;
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
+  // pre-fetch FMP 30-min bars for all tickers in parallel batches (fast with a full book)
+  const tlist = [...tickers].sort();
+  const fmpRaw = {};
+  const BATCH = 8;
+  for (let i = 0; i < tlist.length; i += BATCH) {
+    const batch = tlist.slice(i, i + BATCH);
+    await Promise.all(batch.map(async t => { fmpRaw[t] = await fmp30(t); }));
+  }
+
   const rows = [];
-  for (const t of [...tickers].sort()) {
+  for (const t of tlist) {
     const pos = held.find(x => x.ticker.toUpperCase() === t) || null;
     const ibP = ib[t] || null;
     const stops = ibStops[t] || [];
@@ -136,7 +163,7 @@ export async function getAmbushLiveReconcile(db) {
     const held_ = (ibP && ibP.sh !== 0) || engSh !== 0;
 
     // correct current 2-bar level (independent recompute)
-    const hrs = clockHours(await fmp30(t), today, nowMin);
+    const hrs = clockHours(fmpRaw[t] || [], today, nowMin);
     let correctTrail = null;
     if (hrs.length >= 2) { const A = hrs[hrs.length - 1], B = hrs[hrs.length - 2]; correctTrail = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2); }
 
@@ -159,7 +186,7 @@ export async function getAmbushLiveReconcile(db) {
       avgCost:   checkAvg(pos?.avgCost ?? null, ibP?.avg ?? null),
       stopExists: checkStopExists(held_, isLong, stops),
       stopPrice: checkStopPrice(engStop, stops, isLong),
-      stopLevel: checkStopLevel(engStop, correctTrail),
+      stopLevel: checkStopLevel(engStop, correctTrail, isLong, px),
       stopQty:   checkStopQty(stops, ibP?.sh, isLong),
       cap:       checkCap(notional, nav),
       risk:      checkRisk(riskAtFull, nav),

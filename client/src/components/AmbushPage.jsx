@@ -1093,6 +1093,35 @@ export default function AmbushPage() {
           </div>
         )}
 
+        {/* ═══ ISSUES summary — every discrepancy at a glance, no need to open rows ═══ */}
+        {reconcile && (() => {
+          const problems = (reconcile.rows || [])
+            .filter(r => r.rollup === 'red' || r.rollup === 'yellow')
+            .sort((a, b) => (a.rollup === 'red' ? 0 : 1) - (b.rollup === 'red' ? 0 : 1));
+          if (!(reconcile.rows || []).length) return null;
+          if (!problems.length) return (
+            <div style={{ margin: '0 0 12px', padding: '8px 12px', background: '#0f1a12', border: '1px solid #1f3a24', borderRadius: 6, fontSize: 12, color: PILL.green, fontWeight: 700 }}>
+              ✓ All {reconcile.rows.length} positions verified against IBKR — no discrepancies.
+            </div>
+          );
+          return (
+            <div style={{ margin: '0 0 12px', padding: '8px 12px', background: '#1c1214', border: '1px solid #4a2230', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ fontWeight: 800, color: PILL.red, marginBottom: 6, letterSpacing: 0.4 }}>⚠ {problems.length} NEED ATTENTION</div>
+              {problems.map(r => {
+                const reasons = (r.reasons || []).map(x => x.replace(/^[a-zA-Z]+:\s*/, ''));
+                return (
+                  <div key={r.ticker} style={{ display: 'flex', gap: 8, padding: '3px 0', borderTop: '1px solid #2a1a1e', alignItems: 'baseline' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[r.rollup], display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
+                    <span style={{ fontWeight: 700, color: '#fff', minWidth: 52 }}>{r.ticker}</span>
+                    <span style={{ color: '#9a9aa6', minWidth: 78, flexShrink: 0 }}>{r.direction} {Math.abs(r.ibkrShares ?? r.engineShares ?? 0)}</span>
+                    <span style={{ color: r.rollup === 'red' ? '#ffb4b4' : '#f0d090' }}>{reasons.join('  ·  ') || 'see row'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {byState.ACTIVE.length === 0 ? (
           <div className={styles.emptyState}>No positions in DEVOUR</div>
         ) : (
@@ -1130,13 +1159,13 @@ export default function AmbushPage() {
                   const risk = computeRisk(pos);
                   const rps = computeRps(pos);
                   const exitLevel = pos.direction === 'LONG' ? pos.todayFirstHourLow : pos.todayFirstHourHigh;
-                  const isExpanded = expanded[pos.ticker];
+                  const isExpanded = expanded[pos.ticker] === undefined ? true : expanded[pos.ticker]; // DEVOUR rows expanded by default
 
                   return (
                     <tbody key={pos.ticker} className={styles.positionGroup}>
                       <tr
                         className={styles.positionRow}
-                        onClick={() => toggleExpand(pos.ticker)}
+                        onClick={() => setExpanded(prev => ({ ...prev, [pos.ticker]: !isExpanded }))}
                         style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}
                       >
                         <td><StateBadge state={pos.state} /></td>
@@ -1198,18 +1227,28 @@ export default function AmbushPage() {
                             {(() => {
                               const rec = recByTicker[pos.ticker];
                               if (!rec) return null;
-                              const CHECK_LABELS = { dir: 'Direction', shares: 'Shares', avg: 'Avg cost', stopExists: 'Stop in IBKR', stopPrice: 'Stop (dup check)', stopLevel: 'Stop level (2-bar)', stopQty: 'Stop covers full pos', cap: '10% NAV cap', risk: 'Risk ≤ $150 / 1% NAV' };
+                              const CHECK_LABELS = { direction: 'Direction', shares: 'Shares', avgCost: 'Avg cost', stopExists: 'Stop in IBKR', stopPrice: 'Stop price', stopLevel: 'Stop level (2-bar)', stopQty: 'Stop covers full pos', cap: '10% NAV cap', risk: 'Risk ≤ $150 / 1% NAV' };
+                              const entries = Object.entries(rec.checks || {});
+                              const fails = entries.filter(([, c]) => c.status === 'red' || c.status === 'yellow');
+                              const passes = entries.filter(([, c]) => c.status === 'green');
                               return (
                                 <div style={{ padding: '10px 14px', borderTop: '1px solid #2a2a33', background: '#121217' }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', marginBottom: 6, letterSpacing: 0.4 }}>IBKR-TRUTH VERIFICATION</div>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 10 }}>
-                                    {Object.entries(rec.checks || {}).map(([k, c]) => (
-                                      <span key={k} style={{ fontSize: 11, color: '#c4c4cc', display: 'inline-flex', alignItems: 'center', gap: 5 }} title={c.reason || 'OK'}>
-                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block' }} />
-                                        {CHECK_LABELS[k] || k}{c.reason ? `: ${c.reason}` : ''}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  {fails.length === 0 ? (
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: PILL.green, marginBottom: 8 }}>✓ Verified against IBKR — no issues</div>
+                                  ) : (
+                                    <div style={{ marginBottom: 8 }}>
+                                      {fails.map(([k, c]) => (
+                                        <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '2px 0' }}>
+                                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
+                                          <span style={{ fontWeight: 700, color: '#fff', minWidth: 150 }}>{CHECK_LABELS[k] || k}</span>
+                                          <span style={{ color: c.status === 'red' ? '#ffb4b4' : '#f0d090' }}>{c.reason}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {passes.length > 0 && (
+                                    <div style={{ fontSize: 10, color: '#5a6a5e', marginBottom: 10 }}>✓ {passes.map(([k]) => CHECK_LABELS[k] || k).join('  ·  ')}</div>
+                                  )}
                                   <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', marginBottom: 4, letterSpacing: 0.4 }}>RISK PER LOT LEVEL (% of NAV at stop)</div>
                                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                     {(rec.lotLadder || []).map(l => {

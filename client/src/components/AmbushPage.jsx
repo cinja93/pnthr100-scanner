@@ -288,6 +288,124 @@ function ActionItem({ action }) {
 }
 
 // ── State Badge ────────────────────────────────────────────────────────────
+// ── DEVOUR ladder card: lays a position out like the real-world price ladder ──
+// Entry is the anchor in the middle. LONG: lots stack ABOVE entry (price rises to add),
+// stop + triggers BELOW. SHORT: mirror image (stop above, lots below). Green chips = live
+// fields that move as lots fill. Header carries the pill + all 9 IBKR-truth checks + DIAG.
+function LadderCard({ pos, rec, allTickers, onChart, onRemove, isAdmin, PILL }) {
+  const isLong = pos.direction === 'LONG';
+  const total = totalPlannedShares(pos);
+  const risk = computeRisk(pos);
+  const rps = computeRps(pos);
+  const exitLevel = isLong ? pos.todayFirstHourLow : pos.todayFirstHourHigh;
+  const rollupColor = rec ? (PILL[rec.rollup] || PILL.gray) : PILL.gray;
+  const navPctByLot = {}; (rec?.lotLadder || []).forEach(l => { navPctByLot[l.lot] = l.navPct; });
+  const STATUS_COLORS = { FILLED: '#22c55e', WAITING: '#f59e0b', LOCKED: '#555' };
+  const GREEN = '#9ae6b4';
+  const mono = { fontFamily: 'monospace' };
+
+  const lotRows = (pos.lotPlan || []).map((shares, i) => {
+    const status = getLotStatus(i, pos.nextLot);
+    const trigger = getLotTrigger(pos.originalEntry, i, pos.direction);
+    const fill = pos.lotFills?.find(f => f.lot === i);
+    const fillTime = fill?.at ? new Date(fill.at).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return { i, label: `L${i + 1}`, trigger, shares, status, fillTime, navPct: navPctByLot[i + 1] };
+  });
+  // LONG: show L5 (top, furthest) down to L1 (just above entry). SHORT: L1 (just below entry) down to L5.
+  const orderedLots = isLong ? [...lotRows].reverse() : lotRows;
+
+  const lotsBlock = (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0 }}>
+        {orderedLots.map(l => (
+          <div key={l.i} style={{ display: 'grid', gridTemplateColumns: '54px 82px 64px 72px 1fr 86px', gap: 8, alignItems: 'center', padding: '3px 0', fontSize: 12, fontWeight: l.status === 'FILLED' ? 700 : 400, opacity: l.status === 'LOCKED' ? 0.5 : 1 }}>
+            <span style={{ color: STATUS_COLORS[l.status] }}>{l.status === 'LOCKED' ? '○' : '●'} {l.label}</span>
+            <span style={mono}>{fmtUsd(l.trigger)}</span>
+            <span style={mono}>{l.shares} sh</span>
+            <span style={{ color: STATUS_COLORS[l.status], fontSize: 11 }}>{l.status}</span>
+            <span style={{ ...mono, color: '#888', fontSize: 11 }}>{l.fillTime}</span>
+            <span style={{ ...mono, color: GREEN, textAlign: 'right' }}>{l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ flexShrink: 0, textAlign: 'right', borderLeft: '1px solid #2a2a33', paddingLeft: 12, minWidth: 110 }}>
+        <div style={{ fontSize: 9, color: '#888', letterSpacing: 0.4 }}>TOTAL AT L5</div>
+        <div style={{ ...mono, fontSize: 13, fontWeight: 700 }}>{total} sh</div>
+        <div style={{ ...mono, fontSize: 11, color: '#aaa' }}>{fmtUsd(total * (pos.originalEntry || 0))}</div>
+      </div>
+    </div>
+  );
+
+  const chip = (v) => <span style={{ background: 'rgba(34,197,94,0.14)', color: GREEN, padding: '1px 7px', borderRadius: 4, ...mono, fontWeight: 700 }}>{v}</span>;
+  const entryRow = (
+    <div style={{ display: 'flex', gap: 22, alignItems: 'center', padding: '8px 10px', margin: '8px 0', background: '#16161c', border: '1px solid #2a3a2e', borderRadius: 6, flexWrap: 'wrap' }}>
+      <span style={{ fontWeight: 800, color: '#ccc', letterSpacing: 0.6 }}>ENTRY</span>
+      <span style={{ fontSize: 12, color: '#999' }}>Price {chip(fmtUsd(pos.entryPrice))}</span>
+      <span style={{ fontSize: 12, color: '#999' }}>Shares {chip(`${pos.totalShares || 0} / ${total}`)}</span>
+      <span style={{ fontSize: 12, color: '#999' }}>Avg Cost {chip(fmtUsd(pos.avgCost))}</span>
+    </div>
+  );
+
+  const stopBlock = (
+    <div style={{ fontSize: 12 }}>
+      <div style={{ display: 'flex', gap: 22, alignItems: 'center', padding: '3px 0', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: '#ef4444', minWidth: 84 }}>2 Bar Stop</span>
+        {chip(fmtUsd(pos.stop))}
+        <span style={{ color: '#999' }}>Risk <span style={{ ...mono, color: risk > 200 ? '#ef4444' : '#ddd', fontWeight: 700 }}>{risk != null ? fmtUsd(risk) : '--'}</span></span>
+        <span style={{ color: '#999' }}>Risk/Share <span style={{ ...mono, color: '#ddd' }}>{rps != null ? fmtUsd(rps) : '--'}</span></span>
+        <span style={{ color: '#999' }}>1 Bar Reentry <span style={{ ...mono, color: '#666' }}>--</span></span>
+      </div>
+      <div style={{ display: 'flex', gap: 18, padding: '4px 0 0', fontSize: 11, flexWrap: 'wrap', color: '#888' }}>
+        <span>Original Stop <span style={{ ...mono, color: '#f59e0b' }}>{exitLevel ? fmtUsd(exitLevel) : '--'}</span></span>
+        <span>Day Trigger <span style={{ ...mono, color: '#60a5fa' }}>{pos.dailyTrigger != null ? fmtUsd(pos.dailyTrigger) : '--'}</span></span>
+        <span>Weekly Trigger <span style={{ ...mono, color: '#a78bfa' }}>{pos.weeklyTrigger != null ? fmtUsd(pos.weeklyTrigger) : '--'}</span></span>
+      </div>
+    </div>
+  );
+
+  const CHECK_LABELS = { direction: 'Dir', shares: 'Shares', avgCost: 'Avg', stopExists: 'Stop in IBKR', stopPrice: 'Stop price', stopLevel: 'Stop lvl', stopQty: 'Stop qty', cap: '10% cap', risk: 'Risk' };
+  const diagText = rec ? `${pos.ticker} ${pos.direction} ${Math.abs(rec.ibkrShares ?? rec.engineShares ?? 0)}sh — ${rec.reasons?.length ? rec.reasons.join(' | ') : 'all green'}` : '';
+
+  return (
+    <div style={{ border: `1px solid ${rollupColor === PILL.gray ? '#2a2a33' : rollupColor}`, borderLeft: `4px solid ${rollupColor}`, borderRadius: 8, background: '#0e0e13', padding: '12px 14px' }}>
+      {/* HEADER: pill + ticker + dir + lots + peak/trail/cycle + remove */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={{ width: 11, height: 11, borderRadius: '50%', background: rollupColor, flexShrink: 0, boxShadow: rec?.rollup === 'red' ? `0 0 6px ${rollupColor}` : 'none' }} />
+        <span onClick={() => onChart(pos.ticker, allTickers)} style={{ fontWeight: 800, fontSize: 16, cursor: 'pointer', color: '#fff' }} title="click for charts">{pos.ticker}</span>
+        <DirBadge direction={pos.direction} />
+        <span style={{ fontSize: 12, color: '#aaa' }}>{lotsLabel(pos)}</span>
+        <span style={{ fontSize: 12, color: '#888' }}>Peak P&amp;L <span style={{ color: (pos.peak || 0) >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{fmtPnl(pos.peak)}</span></span>
+        {pos.atBE && <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }} title="2-bar trailing exit active">TRAIL ✓</span>}
+        {pos.cycleNum > 0 && <span style={{ fontSize: 11, color: '#888' }}>Cycle #{pos.cycleNum + 1}</span>}
+        <span style={{ fontSize: 11, color: '#666' }}>{pos.entryDate || ''}</span>
+        <span style={{ flex: 1 }} />
+        {isAdmin && <button onClick={() => onRemove(pos.ticker)} style={{ background: 'transparent', border: '1px solid #3a3a44', color: '#888', borderRadius: 4, padding: '2px 9px', cursor: 'pointer', fontSize: 13 }} title="Remove position">×</button>}
+      </div>
+
+      {/* IBKR-TRUTH VERIFICATION: all 9 checks + DIAG */}
+      <div style={{ border: '1px solid #2a2a33', borderRadius: 6, padding: '8px 10px', marginBottom: 10, background: '#121217' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#9a9aa6', letterSpacing: 0.6 }}>IBKR-TRUTH VERIFICATION</span>
+          {rec && <button onClick={() => navigator.clipboard?.writeText(diagText)} style={{ background: '#2a2a33', color: '#d4d4dc', border: '1px solid #3a3a44', borderRadius: 4, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }} title="Copy this position's diagnostic">DIAG</button>}
+        </div>
+        {!rec ? <span style={{ fontSize: 11, color: '#666' }}>No verification data yet.</span> : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+            {Object.entries(rec.checks || {}).map(([k, c]) => (
+              <span key={k} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'baseline', gap: 5, color: c.status === 'red' ? '#ffb4b4' : c.status === 'yellow' ? '#f0d090' : '#8a8a96' }} title={c.reason || 'OK'}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: PILL[c.status] || PILL.gray, flexShrink: 0, alignSelf: 'center' }} />
+                {CHECK_LABELS[k] || k}{(c.status === 'red' || c.status === 'yellow') && c.reason ? `: ${c.reason}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* LADDER: LONG = lots above / stop below; SHORT = mirror */}
+      {isLong ? (<>{lotsBlock}{entryRow}{stopBlock}</>) : (<>{stopBlock}{entryRow}{lotsBlock}</>)}
+    </div>
+  );
+}
+
 function StateBadge({ state }) {
   return (
     <span className={styles.stateBadge} style={{ background: STATE_COLORS[state] + '22', color: STATE_COLORS[state], borderColor: STATE_COLORS[state] + '44' }}>
@@ -1125,170 +1243,19 @@ export default function AmbushPage() {
         {byState.ACTIVE.length === 0 ? (
           <div className={styles.emptyState}>No positions in DEVOUR</div>
         ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>State</th>
-                  <th>Ticker</th>
-                  <th>Dir</th>
-                  <th style={{ textAlign: 'right' }}>Entry <InfoPopup text="L1 fill price with 5bps slippage applied." /></th>
-                  <th style={{ textAlign: 'right' }}>Avg Cost</th>
-                  <th style={{ textAlign: 'right' }}>Shares <InfoPopup text="Current filled shares / total planned at L5. Shares increase as lots fill." /></th>
-                  <th style={{ textAlign: 'right' }}>Stop <InfoPopup text="Current stop price. Initial = 1H low - $0.005 for LONG. Moves to avg cost + fees at Break Even. Ratchets up with daily 1H low during trailing." /></th>
-                  <th style={{ textAlign: 'right' }}>1H Exit <InfoPopup text="Today's first-hour low (LONG) or high (SHORT). If price breaks this level pre-trailing, position exits immediately." /></th>
-                  <th style={{ textAlign: 'right' }}>Wk Trig <InfoPopup text="Weekly Trigger: the weekly BL/SS breakout entry (prior 2-week high + $0.01 for a long, 2-week low - $0.01 for a short). Frozen for the weekly cycle. Re-entry requires the current price to hold ABOVE this (long) / BELOW (short)." wide /></th>
-                  <th style={{ textAlign: 'right' }}>Dy Trig <InfoPopup text="Daily Trigger: the ORIGINAL 2-day breakout level that first fired this cycle (higher of the last 2 daily highs + $0.01 long / lower of the 2 lows - $0.01 short). Frozen. Re-entry requires price to hold above it (long) / below (short)." wide /></th>
-                  <th style={{ textAlign: 'right' }}>Risk $ <InfoPopup text="Maximum loss if stopped out now: (avg cost - stop) x shares for LONG." /></th>
-                  <th style={{ textAlign: 'right' }}>RPS <InfoPopup text="Risk Per Share = avg cost minus stop. Used for position sizing." /></th>
-                  <th>Lots <InfoPopup text="5-lot pyramid: L1 at entry (35%), L2 +3% (25%), L3 +6% (20%), L4 +10% (12%), L5 +14% (8%)." /></th>
-                  <th style={{ textAlign: 'right' }}>
-                    Peak P&L <InfoPopup text="Per row: highest unrealized P&L each position reached (Break Even triggers at $75). The bold number here is the LIVE total — current unrealized P&L across all open positions, refreshed every 60s with the cron." wide />
-                    <div style={{ fontSize: 13, fontWeight: 700, color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444', marginTop: 2 }}>
-                      {totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)}
-                    </div>
-                    <div style={{ fontSize: 9, color: '#666', fontWeight: 400 }}>open total</div>
-                  </th>
-                  <th>Cycle</th>
-                  <th>Date</th>
-                  <th></th>
-                </tr>
-              </thead>
-              {byState.ACTIVE.map(pos => {
-                  const total = totalPlannedShares(pos);
-                  const risk = computeRisk(pos);
-                  const rps = computeRps(pos);
-                  const exitLevel = pos.direction === 'LONG' ? pos.todayFirstHourLow : pos.todayFirstHourHigh;
-                  const isExpanded = expanded[pos.ticker] === undefined ? true : expanded[pos.ticker]; // DEVOUR rows expanded by default
-
-                  return (
-                    <tbody key={pos.ticker} className={styles.positionGroup}>
-                      <tr
-                        className={styles.positionRow}
-                        onClick={() => setExpanded(prev => ({ ...prev, [pos.ticker]: !isExpanded }))}
-                        style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}
-                      >
-                        <td><StateBadge state={pos.state} /></td>
-                        <td className={styles.tickerCell}>
-                          {(() => {
-                            const rec = recByTicker[pos.ticker];
-                            const color = rec ? PILL[rec.rollup] : PILL.gray;
-                            const tip = rec
-                              ? (rec.reasons?.length ? 'CHECK: ' + rec.reasons.join('  •  ') : 'CHECK: all green — IBKR-verified (dir, shares, avg, stop level+side+qty, cap, risk)')
-                              : 'CHECK: no verification data yet';
-                            return (<span title={tip} style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: color, marginRight: 6, verticalAlign: 'middle', boxShadow: rec?.rollup === 'red' ? `0 0 5px ${color}` : 'none' }} />);
-                          })()}
-                          {pos.ticker}
-                        </td>
-                        <td><DirBadge direction={pos.direction} /></td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.entryPrice)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.avgCost)}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <span style={{ fontWeight: 600 }}>{pos.totalShares || 0}</span>
-                          <span style={{ color: '#555' }}> / {total}</span>
-                        </td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{fmtUsd(pos.stop)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: exitLevel ? '#f59e0b' : '#444' }}>{fmtUsd(exitLevel)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.weeklyTrigger != null ? '#a78bfa' : '#444' }}>{pos.weeklyTrigger != null ? fmtUsd(pos.weeklyTrigger) : '--'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.dailyTrigger != null ? '#60a5fa' : '#444' }}>{pos.dailyTrigger != null ? fmtUsd(pos.dailyTrigger) : '--'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: risk > 200 ? '#ef4444' : '#ccc' }}>
-                          {risk != null ? fmtUsd(risk) : '--'}
-                        </td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>
-                          {rps != null ? fmtUsd(rps) : '--'}
-                        </td>
-                        <td>
-                          <span className={styles.lotsBadge}>{lotsLabel(pos)}</span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {pos.atBE
-                            ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }} title="2-bar trailing exit active from entry (stop still at the first-hour low, below entry — NOT breakeven)">TRAIL {'✓'}</span>
-                            : fmtPnl(pos.peak)
-                          }
-                        </td>
-                        <td style={{ color: '#888', fontSize: 11 }}>
-                          {pos.cycleNum > 0 ? `#${pos.cycleNum + 1}` : '--'}
-                        </td>
-                        <td style={{ color: '#666', fontSize: 11 }}>{pos.entryDate || '--'}</td>
-                        <td>
-                          {isAdmin && (
-                            <button
-                              className={styles.removeBtn}
-                              onClick={(e) => { e.stopPropagation(); handleRemove(pos.ticker); }}
-                              title="Remove position"
-                            >x</button>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr className={styles.detailRow}>
-                          <td colSpan={15} style={{ padding: '10px 14px' }}>
-                            {(() => {
-                              const rec = recByTicker[pos.ticker];
-                              const CHECK_LABELS = { direction: 'Direction', shares: 'Shares', avgCost: 'Avg cost', stopExists: 'Stop in IBKR', stopPrice: 'Stop price', stopLevel: 'Stop level (2-bar)', stopQty: 'Stop covers full pos', cap: '10% NAV cap', risk: 'Risk ≤ $150 / 1% NAV' };
-                              const entries = Object.entries(rec?.checks || {});
-                              const fails = entries.filter(([, c]) => c.status === 'red' || c.status === 'yellow');
-                              const passes = entries.filter(([, c]) => c.status === 'green');
-                              const boxStyle = { flex: '1 1 0', minWidth: 0, border: '1px solid #2a2a33', borderRadius: 8, padding: '10px 14px', background: '#121217' };
-                              const titleStyle = { fontSize: 11, fontWeight: 800, color: '#9a9aa6', marginBottom: 8, letterSpacing: 0.6 };
-                              return (
-                                <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-                                  {/* ── LEFT: STOPS ── */}
-                                  <div style={boxStyle}>
-                                    <div style={titleStyle}>STOPS — IBKR-TRUTH VERIFICATION</div>
-                                    {!rec ? (
-                                      <div style={{ fontSize: 11, color: '#666' }}>No verification data yet.</div>
-                                    ) : (
-                                      <>
-                                        {fails.length === 0 ? (
-                                          <div style={{ fontSize: 12, fontWeight: 700, color: PILL.green, marginBottom: 8 }}>✓ Verified against IBKR — no issues</div>
-                                        ) : (
-                                          <div style={{ marginBottom: 8 }}>
-                                            {fails.map(([k, c]) => (
-                                              <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '2px 0' }}>
-                                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
-                                                <span style={{ fontWeight: 700, color: '#fff', minWidth: 130 }}>{CHECK_LABELS[k] || k}</span>
-                                                <span style={{ color: c.status === 'red' ? '#ffb4b4' : '#f0d090' }}>{c.reason}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                        {passes.length > 0 && (
-                                          <div style={{ fontSize: 10, color: '#5a6a5e' }}>✓ {passes.map(([k]) => CHECK_LABELS[k] || k).join('  ·  ')}</div>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                  {/* ── RIGHT: LOT PLAN + ratchets ── */}
-                                  <div style={boxStyle}>
-                                    <LotDetail pos={pos} />
-                                    {rec && (
-                                      <>
-                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', margin: '12px 0 4px', letterSpacing: 0.4 }}>RISK PER LOT LEVEL (% of NAV at stop)</div>
-                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                          {(rec.lotLadder || []).map(l => {
-                                            const over = l.navPct != null && l.navPct > 1.0;
-                                            return (
-                                              <span key={l.lot} style={{ fontSize: 11, fontFamily: 'monospace', padding: '3px 8px', borderRadius: 4, background: over ? '#3a1d1d' : '#1a2a1d', color: over ? '#ff9a9a' : '#9ae6b4', border: `1px solid ${over ? '#5a2a2a' : '#2a4a2e'}` }}>
-                                                L{l.lot}: {l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV
-                                              </span>
-                                            );
-                                          })}
-                                        </div>
-                                        <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>At full 5-lot size this must stay ≤ 1.00% of NAV (≤ $150 max loss). Red = over.</div>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  );
-                })}
-            </table>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {byState.ACTIVE.map(pos => (
+              <LadderCard
+                key={pos.ticker}
+                pos={pos}
+                rec={recByTicker[pos.ticker]}
+                allTickers={byState.ACTIVE.map(p => p.ticker)}
+                onChart={openChart}
+                onRemove={handleRemove}
+                isAdmin={isAdmin}
+                PILL={PILL}
+              />
+            ))}
           </div>
         )}
       </div>

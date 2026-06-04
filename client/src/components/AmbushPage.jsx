@@ -850,6 +850,8 @@ export default function AmbushPage() {
                   <th style={{ textAlign: 'right' }}>Shares <InfoPopup text="Current filled shares / total planned at L5. Shares increase as lots fill." /></th>
                   <th style={{ textAlign: 'right' }}>Stop <InfoPopup text="Current stop price. Initial = 1H low - $0.005 for LONG. Moves to avg cost + fees at Break Even. Ratchets up with daily 1H low during trailing." /></th>
                   <th style={{ textAlign: 'right' }}>1H Exit <InfoPopup text="Today's first-hour low (LONG) or high (SHORT). If price breaks this level pre-trailing, position exits immediately." /></th>
+                  <th style={{ textAlign: 'right' }}>Wk Trig <InfoPopup text="Weekly Trigger: the weekly BL/SS breakout entry (prior 2-week high + $0.01 for a long, 2-week low - $0.01 for a short). Frozen for the weekly cycle. Re-entry requires the current price to hold ABOVE this (long) / BELOW (short)." wide /></th>
+                  <th style={{ textAlign: 'right' }}>Dy Trig <InfoPopup text="Daily Trigger: the ORIGINAL 2-day breakout level that first fired this cycle (higher of the last 2 daily highs + $0.01 long / lower of the 2 lows - $0.01 short). Frozen. Re-entry requires price to hold above it (long) / below (short)." wide /></th>
                   <th style={{ textAlign: 'right' }}>Risk $ <InfoPopup text="Maximum loss if stopped out now: (avg cost - stop) x shares for LONG." /></th>
                   <th style={{ textAlign: 'right' }}>RPS <InfoPopup text="Risk Per Share = avg cost minus stop. Used for position sizing." /></th>
                   <th>Lots <InfoPopup text="5-lot pyramid: L1 at entry (35%), L2 +3% (25%), L3 +6% (20%), L4 +10% (12%), L5 +14% (8%)." /></th>
@@ -890,6 +892,8 @@ export default function AmbushPage() {
                         </td>
                         <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{fmtUsd(pos.stop)}</td>
                         <td style={{ textAlign: 'right', fontFamily: 'monospace', color: exitLevel ? '#f59e0b' : '#444' }}>{fmtUsd(exitLevel)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.weeklyTrigger != null ? '#a78bfa' : '#444' }}>{pos.weeklyTrigger != null ? fmtUsd(pos.weeklyTrigger) : '--'}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.dailyTrigger != null ? '#60a5fa' : '#444' }}>{pos.dailyTrigger != null ? fmtUsd(pos.dailyTrigger) : '--'}</td>
                         <td style={{ textAlign: 'right', fontFamily: 'monospace', color: risk > 200 ? '#ef4444' : '#ccc' }}>
                           {risk != null ? fmtUsd(risk) : '--'}
                         </td>
@@ -957,6 +961,8 @@ export default function AmbushPage() {
                   <th style={{ textAlign: 'right' }}>Running Low <InfoPopup text="Lowest low since last exit (LONG). Becomes the re-entry stop at running low - $0.01." /></th>
                   <th style={{ textAlign: 'right' }}>Running High <InfoPopup text="Highest high since last exit (SHORT). Becomes the re-entry stop at running high + $0.01." /></th>
                   <th style={{ textAlign: 'right' }}>Est. Re-entry Stop <InfoPopup text="What the stop will be on re-entry. Running low - $0.01 for LONG, running high + $0.01 for SHORT." /></th>
+                  <th style={{ textAlign: 'right' }}>Wk Trig <InfoPopup text="Weekly Trigger (frozen breakout entry). Green = current price is on the eligible side; red = sold off past it. Re-entry needs price ABOVE this (long) / BELOW (short)." wide /></th>
+                  <th style={{ textAlign: 'right' }}>Dy Trig <InfoPopup text="Daily Trigger (frozen original 2-day breakout). Green = eligible side; red = sold off past it. Re-entry needs price ABOVE this (long) / BELOW (short). Re-entry requires BOTH green + the 1-bar break." wide /></th>
                   <th>Last Bar</th>
                   <th></th>
                 </tr>
@@ -966,6 +972,10 @@ export default function AmbushPage() {
                   const estStop = pos.direction === 'LONG'
                     ? pos.runningLow ? +(pos.runningLow - 0.01).toFixed(2) : null
                     : pos.runningHigh ? +(pos.runningHigh + 0.01).toFixed(2) : null;
+                  // Re-entry eligibility per trigger: green = price on the eligible side.
+                  const lp = pos.livePrice;
+                  const wkOk = pos.weeklyTrigger == null || lp == null || (pos.direction === 'LONG' ? lp >= pos.weeklyTrigger : lp <= pos.weeklyTrigger);
+                  const dyOk = pos.dailyTrigger == null || lp == null || (pos.direction === 'LONG' ? lp >= pos.dailyTrigger : lp <= pos.dailyTrigger);
                   return (
                     <tr key={pos.ticker} style={{ borderLeftColor: STATE_COLORS.STALKING }}>
                       <td className={styles.tickerCell}>{pos.ticker}</td>
@@ -974,6 +984,8 @@ export default function AmbushPage() {
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{pos.direction === 'LONG' ? fmtUsd(pos.runningLow) : <span style={{ color: '#444' }}>--</span>}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{pos.direction === 'SHORT' ? fmtUsd(pos.runningHigh) : <span style={{ color: '#444' }}>--</span>}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{estStop ? fmtUsd(estStop) : '--'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.weeklyTrigger == null ? '#444' : wkOk ? '#22c55e' : '#ef4444' }}>{pos.weeklyTrigger != null ? fmtUsd(pos.weeklyTrigger) : '--'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.dailyTrigger == null ? '#444' : dyOk ? '#22c55e' : '#ef4444' }}>{pos.dailyTrigger != null ? fmtUsd(pos.dailyTrigger) : '--'}</td>
                       <td style={{ color: '#555', fontSize: 11 }}>{pos.lastBarDate || '--'}</td>
                       <td>
                         {isAdmin && <button className={styles.removeBtn} onClick={() => handleRemove(pos.ticker)} title="Remove">x</button>}

@@ -303,27 +303,27 @@ function DirBadge({ direction }) {
 }
 
 // ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
-function WatchCol({ title, color, items, huntingSet }) {
-  const hs = huntingSet || new Set();
-  const readyCount = items.filter(i => i.ready && !hs.has(i.ticker)).length;
-  const movedCount = items.filter(i => hs.has(i.ticker)).length;
+function WatchCol({ title, color, items }) {
+  // WEEKLY stage: the weekly signal has FIRED for every name here (that's why it's in
+  // the pool), so eligible names are GREEN. Dim only if it can't proceed — sector on
+  // AVOID, or already in a position (•). Daily progress is shown in the DAILY box below,
+  // NOT by dimming here (these stay in the weekly pool the whole week).
+  const readyCount = items.filter(i => i.ready).length;
   return (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{ color, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
-        {title} <span style={{ color: '#555' }}>· {readyCount} stalking / {items.length} total{movedCount ? ` · ${movedCount} → HUNTING` : ''}</span>
+        {title} <span style={{ color: '#555' }}>· {readyCount} eligible / {items.length} total</span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {items.length === 0 ? <span style={{ color: '#555', fontSize: 12 }}>none today</span> : items.map(it => {
-          const inHunting = hs.has(it.ticker);
-          const reason = inHunting ? 'cleared the daily → now HUNTING' : it.tracked ? 'already in a position' : !it.sectorOk ? 'sector AVOID' : 'stalking';
-          // Moved to HUNTING → dim/gray it out (it has graduated to the HUNTING box).
-          const dim = inHunting || !it.ready || it.tracked;
+          const reason = it.tracked ? 'already in a position' : !it.sectorOk ? 'sector AVOID' : 'weekly fired — eligible';
+          const dim = !it.ready || it.tracked;
           return (
             <span key={it.ticker} title={`${it.sector} — ${reason}`} style={{
               fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace',
-              color: inHunting ? '#555' : (it.ready ? '#000' : '#888'),
-              background: inHunting ? '#141414' : (it.ready ? color : '#161616'),
-              border: `1px solid ${inHunting ? '#3a3a3a' : (it.ready ? color : '#2a2a2a')}`,
+              color: it.ready ? '#000' : '#888',
+              background: it.ready ? color : '#161616',
+              border: `1px solid ${it.ready ? color : '#2a2a2a'}`,
               opacity: dim ? 0.55 : 1,
             }}>{it.ticker}{it.tracked ? ' •' : ''}</span>
           );
@@ -626,6 +626,95 @@ export default function AmbushPage() {
   const sizingTier = lastResult.sizingTier || getSizingTier(nav);
   const sizingMult = lastResult.sizingMultiplier || (nav >= GRAD_TIER_2 ? 1.0 : nav >= GRAD_TIER_1 ? 0.75 : 0.50);
 
+  // Reusable live-positions table — renders the SAME detailed table for both the
+  // DEVOUR (ACTIVE) and PROTECT boxes so they're identical. boxPnl = this box's own
+  // open-P&L subtotal (shown in the header).
+  const renderPositionsTable = (posList, label, color, infoText) => {
+    const boxPnl = posList.reduce((s, p) => {
+      if (!p.avgCost || !p.livePrice || !p.totalShares) return s;
+      const gross = p.direction === 'LONG'
+        ? (p.livePrice - p.avgCost) * p.totalShares
+        : (p.avgCost - p.livePrice) * p.totalShares;
+      return s + gross - Math.max(1, p.totalShares * 0.005);
+    }, 0);
+    return (
+      <div className={styles.section} style={{ borderLeftColor: color }}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionTitle}>
+            {label}
+            <InfoPopup text={infoText} wide />
+          </span>
+          <div className={styles.sectionBadges}>
+            <span style={{ color }}>{label} {posList.length}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: boxPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+              {boxPnl >= 0 ? '+' : ''}{fmtUsd(boxPnl)} open
+            </span>
+          </div>
+        </div>
+        {posList.length === 0 ? (
+          <div className={styles.emptyState}>No {label.toLowerCase()} positions</div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>Ticker</th>
+                  <th>Dir</th>
+                  <th style={{ textAlign: 'right' }}>Entry <InfoPopup text="L1 fill price with 5bps slippage applied." /></th>
+                  <th style={{ textAlign: 'right' }}>Avg Cost</th>
+                  <th style={{ textAlign: 'right' }}>Shares <InfoPopup text="Current filled shares / total planned at L5." /></th>
+                  <th style={{ textAlign: 'right' }}>Stop <InfoPopup text="Current 2-bar trailing stop (lowest low of the last 2 completed hourly bars - $0.01 for LONG)." wide /></th>
+                  <th style={{ textAlign: 'right' }}>1H Exit <InfoPopup text="First-hour low (LONG) / high (SHORT) — the disaster floor." /></th>
+                  <th style={{ textAlign: 'right' }}>Wk Trig <InfoPopup text="Weekly Trigger: the frozen weekly BL/SS breakout entry level." wide /></th>
+                  <th style={{ textAlign: 'right' }}>Dy Trig <InfoPopup text="Daily Trigger: the frozen original 2-day breakout level." wide /></th>
+                  <th style={{ textAlign: 'right' }}>Risk $ <InfoPopup text="Max loss if stopped now: (avg cost - stop) x shares." /></th>
+                  <th style={{ textAlign: 'right' }}>RPS</th>
+                  <th>Lots</th>
+                  <th style={{ textAlign: 'right' }}>Peak P&L</th>
+                  <th>Cycle</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              {posList.map(pos => {
+                const total = totalPlannedShares(pos);
+                const risk = computeRisk(pos);
+                const rps = computeRps(pos);
+                const exitLevel = pos.direction === 'LONG' ? pos.todayFirstHourLow : pos.todayFirstHourHigh;
+                const isExpanded = expanded[pos.ticker];
+                return (
+                  <tbody key={pos.ticker} className={styles.positionGroup}>
+                    <tr className={styles.positionRow} onClick={() => toggleExpand(pos.ticker)} style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}>
+                      <td><StateBadge state={pos.state} /></td>
+                      <td className={styles.tickerCell}>{pos.ticker}</td>
+                      <td><DirBadge direction={pos.direction} /></td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.entryPrice)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.avgCost)}</td>
+                      <td style={{ textAlign: 'right' }}><span style={{ fontWeight: 600 }}>{pos.totalShares || 0}</span><span style={{ color: '#555' }}> / {total}</span></td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{fmtUsd(pos.stop)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: exitLevel ? '#f59e0b' : '#444' }}>{fmtUsd(exitLevel)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.weeklyTrigger != null ? '#a78bfa' : '#444' }}>{pos.weeklyTrigger != null ? fmtUsd(pos.weeklyTrigger) : '--'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: pos.dailyTrigger != null ? '#60a5fa' : '#444' }}>{pos.dailyTrigger != null ? fmtUsd(pos.dailyTrigger) : '--'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: risk > 200 ? '#ef4444' : '#ccc' }}>{risk != null ? fmtUsd(risk) : '--'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#888' }}>{rps != null ? fmtUsd(rps) : '--'}</td>
+                      <td><span className={styles.lotsBadge}>{lotsLabel(pos)}</span></td>
+                      <td style={{ textAlign: 'right' }}>{pos.atBE ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }} title="2-bar trailing exit active from entry">TRAIL ✓</span> : fmtPnl(pos.peak)}</td>
+                      <td style={{ color: '#888', fontSize: 11 }}>{pos.cycleNum > 0 ? `#${pos.cycleNum + 1}` : '--'}</td>
+                      <td style={{ color: '#666', fontSize: 11 }}>{pos.entryDate || '--'}</td>
+                      <td>{isAdmin && (<button className={styles.removeBtn} onClick={(e) => { e.stopPropagation(); handleRemove(pos.ticker); }} title="Remove position">x</button>)}</td>
+                    </tr>
+                    {isExpanded && (<tr className={styles.detailRow}><td colSpan={15} style={{ padding: 0 }}><LotDetail pos={pos} /></td></tr>)}
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Render ──
   return (
     <div className={styles.page}>
@@ -766,8 +855,8 @@ export default function AmbushPage() {
       <div className={styles.section}>
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
           <span className={styles.sectionTitle}>
-            STALKING — today's candidates
-            <InfoPopup text="Every name with an active weekly BL+1 (long) or SS+1 (short) signal. V7.4 takes longs AND shorts in any market regime, so a bright chip just needs to pass the sector gate and is ready to enter the moment its breakout confirms after 10:30. A dimmed chip has the signal but its sector is on AVOID, or it's already in a position (•). The engine recomputes this every 60s." wide />
+            ① WEEKLY — BL+1 / SS+1 candidates
+            <InfoPopup text="Top of the funnel: every AI-300 name with an active weekly BL+1 (long) or SS+1 (short) signal — the prey pool. A bright/green chip is eligible (passed the sector gate); a dimmed chip has the signal but its sector is on AVOID or it's already in a position (•). These names flow down to the DAILY box. The engine recomputes every 60s." wide />
           </span>
           <div className={styles.sectionBadges}>
             <span style={{ color: '#22c55e' }}>BL+1 {watching.longs.length}</span>
@@ -787,34 +876,45 @@ export default function AmbushPage() {
         )}
       </div>
 
-      {/* ═══ HUNTING — cleared the daily trigger, watching the hourly ═══ */}
+      {/* ═══ ② DAILY — daily trigger fired (green) / waiting (grey) ═══ */}
       {(() => {
-        const hLongs = hunting.filter(h => h.direction === 'LONG');
-        const hShorts = hunting.filter(h => h.direction === 'SHORT');
-        const chip = (t) => <span key={t} style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fbbf24', borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700 }}>{t}</span>;
+        const longs = watching.longs, shorts = watching.shorts;
+        const fired = (it) => huntingSet.has(it.ticker);
+        const dailyChip = (it) => {
+          const g = fired(it);
+          return (
+            <span key={it.ticker} style={{
+              background: g ? 'rgba(34,197,94,0.15)' : 'rgba(120,120,120,0.08)',
+              border: `1px solid ${g ? '#22c55e' : '#444'}`,
+              color: g ? '#4ade80' : '#777',
+              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700,
+            }}>{it.ticker}</span>
+          );
+        };
+        const lFired = longs.filter(fired).length, sFired = shorts.filter(fired).length;
         return (
           <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
-                HUNTING — cleared the daily, watching the hourly
-                <InfoPopup text="Candidates that have broken their prior 2-day high TODAY (the daily qualification). The engine is now watching these for a confirmed green hourly breakout after 10:30 — when one fires it pounces (ATTACK) and enters. Middle of the funnel: STALKING (signal pool) → HUNTING (daily cleared) → entry. Names that ran yesterday and sit below their 2-day high won't appear here — only fresh breakouts qualify." wide />
+                ② DAILY — cleared the daily trigger
+                <InfoPopup text="The same weekly names, now checked against the daily 2-day-high breakout. GREEN = the daily trigger has fired (price cleared the prior 2-day high today) — armed, waiting only for the hourly break. GREY = still waiting for the daily to fire. As each fires it turns green; when it then breaks the hourly it drops to the HOURLY box. Only fresh daily breakouts go green." wide />
               </span>
               <div className={styles.sectionBadges}>
-                <span style={{ color: '#22c55e' }}>LONG {hLongs.length}</span>
-                <span style={{ color: '#ef4444' }}>SHORT {hShorts.length}</span>
+                <span style={{ color: '#22c55e' }}>FIRED {lFired + sFired}</span>
+                <span style={{ color: '#888' }}>WAITING {longs.length + shorts.length - lFired - sFired}</span>
               </div>
             </div>
-            {hunting.length === 0 ? (
-              <div className={styles.emptyState}>No candidates have cleared their 2-day-high trigger yet today. (Only fresh daily breakouts qualify — names that ran yesterday won't re-fire. Populates after 10:30 ET.)</div>
+            {(longs.length === 0 && shorts.length === 0) ? (
+              <div className={styles.emptyState}>No weekly candidates yet — appears once the engine ticks.</div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, padding: '10px 14px' }}>
                 <div style={{ minWidth: 220 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONG · {hLongs.length} cleared daily</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{hLongs.length ? hLongs.map(h => chip(h.ticker)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONGS · {lFired}/{longs.length} fired daily</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{longs.length ? longs.map(dailyChip) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
                 <div style={{ minWidth: 220 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORT · {hShorts.length} cleared daily</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{hShorts.length ? hShorts.map(h => chip(h.ticker)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORTS · {sFired}/{shorts.length} fired daily</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{shorts.length ? shorts.map(dailyChip) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
               </div>
             )}
@@ -822,21 +922,59 @@ export default function AmbushPage() {
         );
       })()}
 
-      {/* ═══ LIVE POSITIONS (ACTIVE + PROTECT) ═══ */}
+      {/* ═══ ③ HOURLY — broke the hourly bar (green) / waiting (grey) ═══ */}
+      {(() => {
+        const attackSet = new Set(byState.ATTACK.map(p => p.ticker));
+        const hourlyChip = (it) => {
+          const g = attackSet.has(it.ticker);
+          return (
+            <span key={it.ticker} style={{
+              background: g ? 'rgba(34,197,94,0.18)' : 'rgba(120,120,120,0.08)',
+              border: `1px solid ${g ? '#22c55e' : '#444'}`,
+              color: g ? '#4ade80' : '#777',
+              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700,
+            }}>{it.ticker}{g ? ' ⚡' : ''}</span>
+          );
+        };
+        const armed = hunting; // daily-green names, now watching the hourly
+        return (
+          <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ATTACK }}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>
+                ③ HOURLY — the breakout / entering
+                <InfoPopup text="The daily-green names, now watched every 60s for the 1-bar hourly break. GREY = armed, waiting for the break. GREEN ⚡ = it just broke the prior hourly bar and the entry fires this tick — a brief flash before it becomes a live position (DEVOUR). This is the pounce." wide />
+              </span>
+              <div className={styles.sectionBadges}>
+                <span style={{ color: '#22c55e' }}>FIRING {byState.ATTACK.length}</span>
+                <span style={{ color: '#888' }}>ARMED {armed.length}</span>
+              </div>
+            </div>
+            {armed.length === 0 ? (
+              <div className={styles.emptyState}>No names armed for the hourly break yet (a name appears here once its daily trigger fires).</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px' }}>
+                {armed.map(hourlyChip)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ═══ DEVOUR — live positions (the kill, stop still below entry) ═══ */}
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ACTIVE }}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
-            LIVE POSITIONS
-            <InfoPopup text="All open Ambush positions. DEVOUR = live and working, stop still at the first-hour disaster low (below entry). PROTECT = a lot has ratcheted the stop to breakeven-or-better — the kill is secured. Click a row to see the lot plan and trailing status." wide />
+            ④ DEVOUR — live positions
+            <InfoPopup text="The kill — live positions the engine is in. Stop is the 2-bar trailing level (still below entry). When the stop ratchets to breakeven-or-better, the position graduates to the PROTECT box below. Click a row for the lot plan and trailing detail." wide />
           </span>
           <div className={styles.sectionBadges}>
             <span style={{ color: STATE_COLORS.ACTIVE }}>DEVOUR {byState.ACTIVE.length}</span>
-            <span style={{ color: STATE_COLORS.PROTECT }}>PROTECT {byState.PROTECT.length}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444' }}>{totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)} open (all)</span>
           </div>
         </div>
 
-        {livePositions.length === 0 ? (
-          <div className={styles.emptyState}>No live positions</div>
+        {byState.ACTIVE.length === 0 ? (
+          <div className={styles.emptyState}>No positions in DEVOUR</div>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -867,7 +1005,7 @@ export default function AmbushPage() {
                   <th></th>
                 </tr>
               </thead>
-              {livePositions.map(pos => {
+              {byState.ACTIVE.map(pos => {
                   const total = totalPlannedShares(pos);
                   const risk = computeRisk(pos);
                   const rps = computeRps(pos);
@@ -942,8 +1080,8 @@ export default function AmbushPage() {
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.STALKING }}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
-            STALKING
-            <InfoPopup text="After being stopped out, watches for a confirmed breakout to re-enter. If the weekly BL/SS signal expires, position is removed entirely. Re-entry gets a tighter stop (running low - $0.01) for smaller risk per share." wide />
+            ⑤ STILL HUNGRY — re-entry watch
+            <InfoPopup text="The panther's still hungry: names that were exited or manually closed and are hunting another bite of the SAME stock. Re-entry needs price to hold above BOTH the Weekly Trigger and the Daily Trigger (green) plus a fresh 1-bar break — the columns below show those levels (green = eligible side, red = sold off past it). No cooldown: if the setup re-lines-up, it re-enters." wide />
           </span>
           <span className={styles.badge} style={{ background: STATE_COLORS.STALKING }}>{byState.STALKING.length}</span>
         </div>
@@ -999,52 +1137,12 @@ export default function AmbushPage() {
         )}
       </div>
 
-      {/* ═══ ATTACK — Entry Queued ═══ */}
-      {byState.ATTACK.length > 0 && (
-        <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ATTACK }}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>
-              ATTACK
-              <InfoPopup text="Breakout confirmed, entry executes on the next 60-second tick with 5bps slippage. This state typically lasts only one tick." />
-            </span>
-            <span className={styles.badge} style={{ background: STATE_COLORS.ATTACK }}>{byState.ATTACK.length}</span>
-          </div>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Ticker</th>
-                  <th>Dir</th>
-                  <th>Cycle</th>
-                  <th style={{ textAlign: 'right' }}>Est. Stop <InfoPopup text="Running low - $0.01 for LONG re-entries. Used for sizing calculation." /></th>
-                  <th>Status</th>
-                  <th>Last Bar</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {byState.ATTACK.map(pos => {
-                  const estStop = pos.direction === 'LONG'
-                    ? pos.runningLow ? +(pos.runningLow - 0.01).toFixed(2) : null
-                    : pos.runningHigh ? +(pos.runningHigh + 0.01).toFixed(2) : null;
-                  return (
-                    <tr key={pos.ticker} style={{ borderLeftColor: STATE_COLORS.ATTACK }}>
-                      <td className={styles.tickerCell}>{pos.ticker}</td>
-                      <td><DirBadge direction={pos.direction} /></td>
-                      <td style={{ color: '#f59e0b' }}>#{(pos.cycleNum || 0) + 1}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{estStop ? fmtUsd(estStop) : '--'}</td>
-                      <td><span style={{ color: '#f59e0b', fontWeight: 600, fontSize: 11 }}>ENTRY QUEUED</span></td>
-                      <td style={{ color: '#555', fontSize: 11 }}>{pos.lastBarDate || '--'}</td>
-                      <td>
-                        {isAdmin && <button className={styles.removeBtn} onClick={() => handleRemove(pos.ticker)} title="Remove">x</button>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {/* ═══ ⑥ PROTECT — break-even-or-better (the kill secured) ═══ */}
+      {renderPositionsTable(
+        byState.PROTECT,
+        '⑥ PROTECT — break-even or better',
+        STATE_COLORS.PROTECT,
+        "The kill is secured: the 2-bar trailing stop has ratcheted to break-even-or-better, so these positions can no longer turn into a loss. Same detail as DEVOUR — click a row for the lot plan and trailing status."
       )}
 
       {/* ═══ RECENT TRADES ═══ */}

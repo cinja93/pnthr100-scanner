@@ -598,6 +598,27 @@ async function _runAmbushTickInner() {
     console.warn(`[Ambush] reconcile guard: could not load IBKR snapshot (${e.message}) — exits will use engine share count`);
   }
 
+  // ── EMPTY-SNAPSHOT SAFETY GUARD (2026-06-04, root-cause fix) ──────────────────
+  // A fresh-but-EMPTY snapshot (bridge connected but reqPositions returned nothing — e.g.
+  // right after a TWS reconnect/reboot) reports ZERO positions and ZERO stops. Without this
+  // guard the engine reads that as "the whole book went flat" and CATASTROPHICALLY mismanages
+  // it: phantom-clears every ACTIVE position to STALKING (dropping its stop), reverts FILLING
+  // entries while IBKR actually holds them unmanaged (INTU short 8 with no engine stop), and
+  // — because it sees 0 stop orders — re-PLACES a protective stop on every name that already
+  // has one (the DUPLICATE stops). 50 positions do not all close in one tick, so an empty
+  // snapshot while the engine holds ANY position can ONLY be a failed sync. Mark it stale so
+  // every "snapshot fresh (<=10m)" guard below short-circuits: NO phantom-clear, NO FILLING
+  // revert, NO exit, NO adopt, NO duplicate-stop placement. The book is PRESERVED exactly as
+  // is (existing IBKR stops untouched) until a real snapshot returns.
+  {
+    const snapPosCount = Object.keys(ibkrSharesByTicker).length;
+    const engineHeld = allPositions.filter(p => (+p.totalShares || 0) !== 0).length;
+    if (snapPosCount === 0 && engineHeld > 0) {
+      console.error(`[Ambush] ⛔ EMPTY-SNAPSHOT GUARD: IBKR snapshot has 0 positions but the engine holds ${engineHeld} — failed sync (bridge reconnect?). Treating snapshot as STALE this tick: no reconcile/exit/adopt/stop-placement; existing IBKR stops preserved. Bridge position feed needs to recover.`);
+      ibkrSnapAgeMin = Infinity;
+    }
+  }
+
   // ── 2b. CONFIRM FILLING ENTRIES (2026-06-03 root-cause fix) ──────────────────
   // An entry is FILLING until IBKR confirms the fill. This is the ROOT-CAUSE fix for
   // phantoms: the engine NEVER marks a position ACTIVE on its own optimism — only when

@@ -439,6 +439,62 @@ function AumTableModal({ view, projection, onClose }) {
   );
 }
 
+// Forward projection: today's real AUM ridden forward at the backtest growth,
+// with the live $2M -> bank $1M withdrawal rule. Shows working balance + banked.
+function ForwardProjection({ forward }) {
+  if (!forward?.horizons?.length) return null;
+  const rule = forward.withdrawalRule || {};
+  return (
+    <div style={{ marginTop: 14, background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: '12px 14px' }}>
+      <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
+        PROJECTED FORWARD <span style={{ color: '#555', fontWeight: 400 }}>· riding today's real AUM forward at the backtest</span>
+      </div>
+      <div style={{ color: '#666', fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>
+        Live withdrawal rule applied: once the working balance reaches {fmtAum(rule.threshold)}, bank {fmtAum(rule.amount)} and trade off the rest. Banked profit is locked in and yours.
+        {forward.cagrPct ? ` Growth = backtest path, then ${forward.cagrPct}% CAGR beyond ~3.5 yrs.` : ''}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 10, minWidth: 560 }}>
+          <thead>
+            <tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px' }}>Horizon</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px' }}>Working Balance</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px' }}>Profit Banked</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#22c55e' }}>Your Total</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#3b82f6' }}>Baseline Total</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px' }}>Edge</th>
+            </tr>
+          </thead>
+          <tbody>
+            {forward.horizons.map((h, i) => {
+              const a = h.actual, p = h.projected;
+              if (!a) return null;
+              const edge = (p && p.total > 0) ? ((a.total / p.total - 1) * 100) : 0;
+              return (
+                <tr key={i} style={{ borderTop: '1px solid #1a1a1a', fontFamily: 'monospace' }}>
+                  <td style={{ textAlign: 'left', padding: '7px 8px', fontFamily: 'system-ui, sans-serif', color: '#e6e6e6', fontWeight: 700 }}>
+                    {h.label}
+                    {h.extrapolated && (
+                      <span title="Beyond the ~3.5-yr backtest — extended at the backtest CAGR" style={{ color: '#8a8', fontSize: 9, fontWeight: 400, marginLeft: 6 }}>
+                        extrapolated
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: '#ccc' }}>{fmtAum(a.balance)}</td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: a.banked > 0 ? '#fbbf24' : '#555' }}>{a.banked > 0 ? fmtAum(a.banked) : '--'}</td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: '#22c55e', fontWeight: 700 }}>{fmtAum(a.total)}</td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: '#3b82f6' }}>{p ? fmtAum(p.total) : '--'}</td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: edge >= 0 ? '#22c55e' : '#ef4444' }}>{edge >= 0 ? '+' : ''}{edge.toFixed(1)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function AumTracker({ projection }) {
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
@@ -507,6 +563,8 @@ function AumTracker({ projection }) {
           ))}
         </div>
       )}
+
+      <ForwardProjection forward={projection.forward} />
 
       {showChart && (
         <>

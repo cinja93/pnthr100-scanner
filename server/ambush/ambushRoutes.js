@@ -55,6 +55,52 @@ function weekdaysBetween(startISO, endISO) {
   return n;
 }
 
+// ── Forward projection ("ride today's edge forward") ────────────────────────
+// Replays the V7.4 live withdrawal rule: each trading day, if the working
+// balance is at/above $2M, bank $1M and keep trading off the remainder. Growth
+// uses the real backtest daily ratios while inside the ~3.5yr backtest window,
+// then flat CAGR-per-day beyond it (flagged as extrapolated).
+const FWD_WD_THRESHOLD = 2_000_000;
+const FWD_WD_AMOUNT    = 1_000_000;
+const FWD_HORIZONS = [
+  { label: '6 mo',  years: 0.5, days: 126 },
+  { label: '1 yr',  years: 1,   days: 252 },
+  { label: '18 mo', years: 1.5, days: 378 },
+  { label: '2 yr',  years: 2,   days: 504 },
+  { label: '3 yr',  years: 3,   days: 756 },
+  { label: '5 yr',  years: 5,   days: 1260 },
+  { label: '10 yr', years: 10,  days: 2520 },
+];
+function simulateForward(startBalance, factors, elapsed, dailyCagrRate, horizons) {
+  const N = factors.length;
+  const maxDays = horizons[horizons.length - 1].days;
+  const byDay = new Map(horizons.map(h => [h.days, h]));
+  let balance = startBalance;
+  let banked = 0;
+  const snaps = {};
+  for (let k = 1; k <= maxDays; k++) {
+    // start-of-day withdrawal check (matches backtest order: bank, then trade)
+    if (balance >= FWD_WD_THRESHOLD) { balance -= FWD_WD_AMOUNT; banked += FWD_WD_AMOUNT; }
+    const srcIdx = elapsed + k;
+    let ratio;
+    if (srcIdx < N && factors[srcIdx - 1]?.factor > 0) {
+      ratio = factors[srcIdx].factor / factors[srcIdx - 1].factor; // real backtest day
+    } else {
+      ratio = dailyCagrRate;                                        // beyond backtest
+    }
+    if (ratio > 0 && isFinite(ratio)) balance *= ratio;
+    if (byDay.has(k)) {
+      snaps[k] = {
+        balance: Math.round(balance),
+        banked,
+        total: Math.round(balance + banked),
+        extrapolated: (elapsed + k) >= N,
+      };
+    }
+  }
+  return snaps;
+}
+
 export function createAmbushRouter(authenticateJWT, requireAdmin) {
   const router = Router();
 
@@ -221,11 +267,29 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       const projectedToday = +(projectionStartAum * (factors[elapsed]?.factor || 1)).toFixed(0);
       const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
 
+      // Forward projection: ride today's projected baseline AND today's real AUM
+      // forward, applying the $2M -> bank $1M withdrawal rule, at 6mo .. 10yr.
+      const cagrPct = proj.metrics?.cagrPct || 0;
+      const dailyCagr = cagrPct > 0 ? Math.pow(1 + cagrPct / 100, 1 / 252) : 1;
+      const projFwd = N ? simulateForward(projectedToday, factors, elapsed, dailyCagr, FWD_HORIZONS) : {};
+      const actFwd  = N ? simulateForward(actualNav,      factors, elapsed, dailyCagr, FWD_HORIZONS) : {};
+      const forward = {
+        cagrPct,
+        withdrawalRule: { threshold: FWD_WD_THRESHOLD, amount: FWD_WD_AMOUNT },
+        horizons: FWD_HORIZONS.map(h => ({
+          label: h.label, years: h.years, days: h.days,
+          projected: projFwd[h.days] || null,
+          actual: actFwd[h.days] || null,
+          extrapolated: (actFwd[h.days]?.extrapolated) || false,
+        })),
+      };
+
       res.json({
         anchor: { startDate: projectionStartDate, startAum: +projectionStartAum.toFixed(0) },
         current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+actualNav).toFixed(0), onTrackPct },
         projected,
         actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+        forward,
         metrics: proj.metrics || null,
         meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
       });

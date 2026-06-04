@@ -855,7 +855,7 @@ export default function AmbushPage() {
       <div className={styles.section}>
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
           <span className={styles.sectionTitle}>
-            ① WEEKLY — BL+1 / SS+1 candidates
+            ① STALKING: Weekly BL+1 / SS+1 Candidates
             <InfoPopup text="Top of the funnel: every AI-300 name with an active weekly BL+1 (long) or SS+1 (short) signal — the prey pool. A bright/green chip is eligible (passed the sector gate); a dimmed chip has the signal but its sector is on AVOID or it's already in a position (•). These names flow down to the DAILY box. The engine recomputes every 60s." wide />
           </span>
           <div className={styles.sectionBadges}>
@@ -896,7 +896,7 @@ export default function AmbushPage() {
           <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
-                ② DAILY — cleared the daily trigger
+                ② HUNTING: Cleared the Daily Trigger
                 <InfoPopup text="The same weekly names, now checked against the daily 2-day-high breakout. GREEN = the daily trigger has fired (price cleared the prior 2-day high today) — armed, waiting only for the hourly break. GREY = still waiting for the daily to fire. As each fires it turns green; when it then breaks the hourly it drops to the HOURLY box. Only fresh daily breakouts go green." wide />
               </span>
               <div className={styles.sectionBadges}>
@@ -941,7 +941,7 @@ export default function AmbushPage() {
           <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ATTACK }}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
-                ③ HOURLY — the breakout / entering
+                ③ ATTACK: The Hourly Breakout / Entering
                 <InfoPopup text="The daily-green names, now watched every 60s for the 1-bar hourly break. GREY = armed, waiting for the break. GREEN ⚡ = it just broke the prior hourly bar and the entry fires this tick — a brief flash before it becomes a live position (DEVOUR). This is the pounce." wide />
               </span>
               <div className={styles.sectionBadges}>
@@ -964,7 +964,7 @@ export default function AmbushPage() {
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ACTIVE }}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
-            ④ DEVOUR — live positions
+            ④ DEVOUR: Live Positions
             <InfoPopup text="The kill — live positions the engine is in. Stop is the 2-bar trailing level (still below entry). When the stop ratchets to breakeven-or-better, the position graduates to the PROTECT box below. Click a row for the lot plan and trailing detail." wide />
           </span>
           <div className={styles.sectionBadges}>
@@ -1080,7 +1080,7 @@ export default function AmbushPage() {
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.STALKING }}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
-            ⑤ STILL HUNGRY — re-entry watch
+            ⑤ STILL HUNGRY: Re-Entry Watch
             <InfoPopup text="The panther's still hungry: names that were exited or manually closed and are hunting another bite of the SAME stock. Re-entry needs price to hold above BOTH the Weekly Trigger and the Daily Trigger (green) plus a fresh 1-bar break — the columns below show those levels (green = eligible side, red = sold off past it). No cooldown: if the setup re-lines-up, it re-enters." wide />
           </span>
           <span className={styles.badge} style={{ background: STATE_COLORS.STALKING }}>{byState.STALKING.length}</span>
@@ -1140,7 +1140,7 @@ export default function AmbushPage() {
       {/* ═══ ⑥ PROTECT — break-even-or-better (the kill secured) ═══ */}
       {renderPositionsTable(
         byState.PROTECT,
-        '⑥ PROTECT — break-even or better',
+        '⑥ PROTECT: Break-Even or Better',
         STATE_COLORS.PROTECT,
         "The kill is secured: the 2-bar trailing stop has ratcheted to break-even-or-better, so these positions can no longer turn into a loss. Same detail as DEVOUR — click a row for the lot plan and trailing status."
       )}

@@ -431,16 +431,20 @@ function applyTriggerMaintenance(pos, ctx, today, rolling, price) {
   } else if (pos.weeklyTrigger == null && wt?.level != null) {
     pos.weeklyTrigger = wt.level; changed = true;
   }
-  // Freeze the daily trigger. A HELD position has ALREADY broken out, so record the
-  // breakout level now regardless of where price sits (a pulled-back winner must still
-  // show its trigger). A FLAT/STALKING name freezes it only when the breakout actually
-  // fires (price on the breakout side) — that's the re-entry trigger forming. For a
-  // brand-new entry this captures the entry-day 2-day high (= the original trigger); for
-  // a position already open before this feature, it's a best-effort current 2-day high.
-  if (pos.dailyTrigger == null && rolling != null) {
-    const held = (+pos.totalShares || 0) !== 0;
-    const breakingOut = typeof price === 'number' && (isLong ? price >= rolling : price <= rolling);
-    if (held || breakingOut) { pos.dailyTrigger = rolling; changed = true; }
+  // Daily trigger:
+  //   • HELD position → FREEZE at the entry-day 2-day high (the original breakout this
+  //     position entered on) — for the Live Positions display. Set once, then hold.
+  //   • STALKING re-entry candidate → ROLL with the CURRENT 2-day high every tick
+  //     (Scott 2026-06-04). Re-entry must fire on a break of the *current* daily breakout,
+  //     not a stale frozen level — WCC sat at 369.91 (the 5/29 high) for days while the
+  //     real 2-day high had climbed to 377.91, so it could never re-enter at the right
+  //     level. The gate (Phase C) reads pos.dailyTrigger, so rolling it here fixes both
+  //     the gate and the displayed DY TRIG.
+  const held = (+pos.totalShares || 0) !== 0;
+  if (held) {
+    if (pos.dailyTrigger == null && rolling != null) { pos.dailyTrigger = rolling; changed = true; }
+  } else if (rolling != null && pos.dailyTrigger !== rolling) {
+    pos.dailyTrigger = rolling; changed = true;
   }
   return changed;
 }

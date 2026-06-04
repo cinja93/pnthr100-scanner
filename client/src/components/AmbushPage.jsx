@@ -445,7 +445,11 @@ function ForwardProjection({ forward }) {
   if (!forward?.horizons?.length) return null;
   const rule = forward.withdrawalRule || {};
   return (
-    <div style={{ marginTop: 14, background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: '12px 14px' }}>
+    <div style={{ marginTop: 14, background: '#0d0d0d', border: '1px solid #2e7d46', borderRadius: 10, padding: '14px 16px', boxShadow: '0 0 0 1px rgba(34,197,94,0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #1d3a28' }}>
+        <span style={{ color: '#22c55e', fontWeight: 800, fontSize: 17, letterSpacing: '0.03em' }}>🎯 PNTHR GOALS</span>
+        <span style={{ color: '#666', fontSize: 11 }}>where today's real AUM goes from here</span>
+      </div>
       <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
         PROJECTED FORWARD <span style={{ color: '#555', fontWeight: 400 }}>· riding today's real AUM forward at the backtest</span>
       </div>

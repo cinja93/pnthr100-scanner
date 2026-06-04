@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection } from '../services/api';
 import PageHeader from './PageHeader';
+import AiTickerChartModal from './AiTickerChartModal';
 import styles from './AmbushPage.module.css';
 
 // ── Constants (mirror server/ambush/ambushEngine.js) ───────────────────────
@@ -16,6 +17,7 @@ const GRAD_TIER_2  = 166_000;
 
 const STATE_COLORS = {
   STALKING: '#a78bfa', HUNTING: '#f59e0b', ATTACK: '#f97316', ACTIVE: '#22c55e', DEVOUR: '#22c55e', PROTECT: '#3b82f6',
+  'STILL HUNGRY': '#e879f9',
 };
 // Display the engine's ACTIVE state as "DEVOUR" (panther hunt cycle). Engine value stays ACTIVE.
 const STATE_DISPLAY = { STALKING: 'STALKING', ATTACK: 'ATTACK', ACTIVE: 'DEVOUR', PROTECT: 'PROTECT' };
@@ -29,6 +31,7 @@ const PHASE_INFO = {
   DEVOUR: 'DEVOUR (green): a live position, in the kill — stop is still the first-hour disaster stop (below entry). Shown in the LIVE POSITIONS box with a green DEVOUR badge.',
   ACTIVE: 'DEVOUR (green): a live position, in the kill — stop is still the first-hour disaster stop (below entry). Shown in the LIVE POSITIONS box with a green DEVOUR badge.',
   PROTECT: 'PROTECT (blue): the kill is secured — a lot has ratcheted the stop to breakeven-or-better, so it can no longer turn into a loss. The panther guards its kill. Shown in the LIVE POSITIONS box with a blue PROTECT badge.',
+  'STILL HUNGRY': 'STILL HUNGRY (pink): names that were exited or manually closed and are hunting another bite of the same stock. Re-entry needs price above BOTH the Weekly and Daily triggers plus a fresh 1-bar break (the loop back through the funnel). Shown in the STILL HUNGRY box.',
 };
 
 const ACTION_CONFIG = {
@@ -303,7 +306,7 @@ function DirBadge({ direction }) {
 }
 
 // ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
-function WatchCol({ title, color, items }) {
+function WatchCol({ title, color, items, onTicker }) {
   // WEEKLY stage: the weekly signal has FIRED for every name here (that's why it's in
   // the pool), so eligible names are GREEN. Dim only if it can't proceed — sector on
   // AVOID, or already in a position (•). Daily progress is shown in the DAILY box below,
@@ -319,12 +322,12 @@ function WatchCol({ title, color, items }) {
           const reason = it.tracked ? 'already in a position' : !it.sectorOk ? 'sector AVOID' : 'weekly fired — eligible';
           const dim = !it.ready || it.tracked;
           return (
-            <span key={it.ticker} title={`${it.sector} — ${reason}`} style={{
+            <span key={it.ticker} onClick={() => onTicker?.(it.ticker)} title={`${it.sector} — ${reason} · click for charts`} style={{
               fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace',
               color: it.ready ? '#000' : '#888',
               background: it.ready ? color : '#161616',
               border: `1px solid ${it.ready ? color : '#2a2a2a'}`,
-              opacity: dim ? 0.55 : 1,
+              opacity: dim ? 0.55 : 1, cursor: 'pointer',
             }}>{it.ticker}{it.tracked ? ' •' : ''}</span>
           );
         })}
@@ -532,6 +535,14 @@ export default function AmbushPage() {
   const [error, setError] = useState(null);
   const [tickRunning, setTickRunning] = useState(false);
   const [expanded, setExpanded] = useState({});
+  // Click any ticker → open the weekly + daily chart modal (prev/next navigates the box's list).
+  const [chartTickers, setChartTickers] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
+  const openChart = useCallback((ticker, list) => {
+    const arr = (list && list.length) ? [...new Set(list)] : [ticker];
+    setChartTickers(arr);
+    setChartIndex(Math.max(0, arr.indexOf(ticker)));
+  }, []);
   const [showOutbox, setShowOutbox] = useState(false);
   const [showActions, setShowActions] = useState(true);
   const [showWatching, setShowWatching] = useState(true);
@@ -687,7 +698,7 @@ export default function AmbushPage() {
                   <tbody key={pos.ticker} className={styles.positionGroup}>
                     <tr className={styles.positionRow} onClick={() => toggleExpand(pos.ticker)} style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}>
                       <td><StateBadge state={pos.state} /></td>
-                      <td className={styles.tickerCell}>{pos.ticker}</td>
+                      <td className={styles.tickerCell} onClick={(e) => { e.stopPropagation(); openChart(pos.ticker, posList.map(p => p.ticker)); }} title="click for charts" style={{ cursor: 'pointer' }}>{pos.ticker}</td>
                       <td><DirBadge direction={pos.direction} /></td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.entryPrice)}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.avgCost)}</td>
@@ -819,6 +830,7 @@ export default function AmbushPage() {
           { key: 'HUNTING',  count: hunting.length },
           { key: 'ATTACK',   count: byState.ATTACK.length },
           { key: 'DEVOUR',   count: byState.ACTIVE.length },
+          { key: 'STILL HUNGRY', count: byState.STALKING.length },
           { key: 'PROTECT',  count: byState.PROTECT.length },
         ].map((s, i) => (
           <div key={s.key} className={styles.flowItem}>
@@ -869,8 +881,8 @@ export default function AmbushPage() {
             <div className={styles.emptyState}>No active signals loaded yet — appears once the engine ticks.</div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '6px 2px' }}>
-              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} huntingSet={huntingSet} />
-              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} huntingSet={huntingSet} />
+              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
+              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
             </div>
           )
         )}
@@ -883,11 +895,11 @@ export default function AmbushPage() {
         const dailyChip = (it) => {
           const g = fired(it);
           return (
-            <span key={it.ticker} style={{
+            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title="click for charts" style={{
               background: g ? 'rgba(34,197,94,0.15)' : 'rgba(120,120,120,0.08)',
               border: `1px solid ${g ? '#22c55e' : '#444'}`,
               color: g ? '#4ade80' : '#777',
-              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700,
+              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
             }}>{it.ticker}</span>
           );
         };
@@ -928,11 +940,11 @@ export default function AmbushPage() {
         const hourlyChip = (it) => {
           const g = attackSet.has(it.ticker);
           return (
-            <span key={it.ticker} style={{
+            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title="click for charts" style={{
               background: g ? 'rgba(34,197,94,0.18)' : 'rgba(120,120,120,0.08)',
               border: `1px solid ${g ? '#22c55e' : '#444'}`,
               color: g ? '#4ade80' : '#777',
-              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700,
+              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
             }}>{it.ticker}{g ? ' ⚡' : ''}</span>
           );
         };
@@ -1116,7 +1128,7 @@ export default function AmbushPage() {
                   const dyOk = pos.dailyTrigger == null || lp == null || (pos.direction === 'LONG' ? lp >= pos.dailyTrigger : lp <= pos.dailyTrigger);
                   return (
                     <tr key={pos.ticker} style={{ borderLeftColor: STATE_COLORS.STALKING }}>
-                      <td className={styles.tickerCell}>{pos.ticker}</td>
+                      <td className={styles.tickerCell} onClick={() => openChart(pos.ticker, byState.STALKING.map(p => p.ticker))} title="click for charts" style={{ cursor: 'pointer' }}>{pos.ticker}</td>
                       <td><DirBadge direction={pos.direction} /></td>
                       <td style={{ color: '#a78bfa' }}>#{(pos.cycleNum || 0) + 1}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{pos.direction === 'LONG' ? fmtUsd(pos.runningLow) : <span style={{ color: '#444' }}>--</span>}</td>
@@ -1250,6 +1262,14 @@ export default function AmbushPage() {
           </div>
         )}
       </div>
+
+      {chartTickers.length > 0 && (
+        <AiTickerChartModal
+          tickers={chartTickers}
+          initialIndex={chartIndex}
+          onClose={() => setChartTickers([])}
+        />
+      )}
     </div>
   );
 }

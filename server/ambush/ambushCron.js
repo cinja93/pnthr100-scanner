@@ -281,6 +281,62 @@ async function fetchFmpHourlyBars(tickers) {
   return barMap;
 }
 
+// Fetch FMP 30-MINUTE bars (used to rebuild :00 clock-hour bars that match the trader's
+// TWS chart). Same shape/batching as fetchFmpHourlyBars. Timestamps are ET.
+async function fetchFmp30MinBars(tickers) {
+  const barMap = {};
+  if (!tickers.length || !FMP_API_KEY) return barMap;
+  const batchSize = 5;
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const batch = tickers.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const url = `https://financialmodelingprep.com/api/v3/historical-chart/30min/${ticker}?apikey=${FMP_API_KEY}`;
+          const resp = await fetch(url);
+          if (!resp.ok) return { ticker, bars: [] };
+          const data = await resp.json();
+          const bars = (Array.isArray(data) ? data : []).map(b => ({
+            date: b.date, open: +b.open, high: +b.high, low: +b.low, close: +b.close,
+          }));
+          return { ticker, bars };
+        } catch {
+          return { ticker, bars: [] };
+        }
+      })
+    );
+    for (const r of results) if (r.status === 'fulfilled' && r.value) barMap[r.value.ticker] = r.value.bars;
+  }
+  return barMap;
+}
+
+// Aggregate FMP 30-minute bars into :00 CLOCK-HOUR bars — the exact bars the trader's TWS
+// chart shows (IBKR clock bars: 10:00-11:00, 11:00-12:00, ...). FMP 1h bars are 9:30-aligned
+// (:30), which puts intra-hour lows in the wrong bucket and mis-sizes the 2-bar stop (NXPI
+// :30 low 319.97 vs the correct :00 low 322.62). Returns COMPLETED clock-hour bars only —
+// a clock hour is complete once its end (hr+1:00) has passed (the forming hour is dropped).
+function clockHourBars(min30, today, nowTotalMin) {
+  const byHour = {};
+  for (const b of (min30 || [])) {
+    if (!b.date.startsWith(today)) continue;
+    const hr = parseInt(extractTime(b.date).slice(0, 2), 10); // ET start hour
+    (byHour[hr] = byHour[hr] || []).push(b);
+  }
+  const out = [];
+  for (const hr of Object.keys(byHour).map(Number).sort((a, b) => a - b)) {
+    if ((hr + 1) * 60 > nowTotalMin) continue; // hour not finished yet — drop the forming bar
+    const bs = byHour[hr].sort((a, b) => a.date.localeCompare(b.date));
+    out.push({
+      hourKey: `${today} ${String(hr).padStart(2, '0')}:00:00`,
+      open: +bs[0].open,
+      high: Math.max(...bs.map(x => +x.high)),
+      low: Math.min(...bs.map(x => +x.low)),
+      close: +bs[bs.length - 1].close,
+    });
+  }
+  return out; // chronological, completed clock-hour bars
+}
+
 // ── Synthetic Bar Functions ────────────────────────────────────────────────
 // Builds hourly OHLC bars from 60-second price ticks.
 // Stored on the position document: syntheticBar (current), prevSyntheticBar.
@@ -708,41 +764,38 @@ async function _runAmbushTickInner() {
     }
   }
 
-  // 5a. ── Seed last-2-completed bars from FRESH FMP hourly bars (2026-06-04 fix) ──
-  // PRIMARY source for the 2-bar TRAILING STOP on held positions. The per-ticker IBKR
-  // feed (pnthr_ambush_hourly_bars, seeded in 5b below) lags badly — several names were
-  // 40–62 min stale today, so the 2-bar level froze on stale bars and the stop sat far
-  // too loose (EH stop 9.39 vs the true 9.25). FMP 1h bars are fetched fresh + uniform
-  // for ALL held names every tick, so the protective stop ALWAYS trails off the CURRENT
-  // two completed hourly bars and never freezes. Scott 2026-06-04: any two completed
-  // hourly bars — alignment doesn't matter, freshness does (prevent major losses). The
-  // forming bar is dropped by bar-end-time; need ≥2 completed or we leave it to 5b.
+  // 5a. ── Seed last-2-completed bars from FRESH FMP :00 CLOCK-HOUR bars (2026-06-04) ──
+  // PRIMARY source for the 2-bar TRAILING STOP on held positions. Two problems this fixes:
+  //   (1) STALENESS — the per-ticker IBKR feed (pnthr_ambush_hourly_bars, 5b) lags badly
+  //       (40-62 min on several names today), so the 2-bar level froze and the stop sat
+  //       far too loose (EH 9.39 vs the true 9.25).
+  //   (2) ALIGNMENT — FMP 1h bars are 9:30-aligned (:30), but the trader's TWS chart (and
+  //       the IBKR feed) are :00 CLOCK bars. The :30 boundary puts an intra-hour low in the
+  //       wrong bucket, mis-sizing the stop (NXPI :30 low 319.97 vs the correct :00 low
+  //       322.62 the chart shows).
+  // Fix: fetch FMP 30-min bars (fresh + uniform for ALL held names) and aggregate them into
+  // :00 clock-hour bars that match the chart, then trail off the last two COMPLETED ones.
+  // The stop ALWAYS adjusts to the current 2-bar low/high, never freezes, and matches TWS.
   const fmpSeeded = new Set();
   try {
     const heldForBars = allPositions.filter(p => (+p.totalShares || 0) !== 0);
     if (heldForBars.length) {
-      const fmpBars = await fetchFmpHourlyBars(heldForBars.map(p => p.ticker));
+      const min30 = await fetchFmp30MinBars(heldForBars.map(p => p.ticker));
       for (const pos of heldForBars) {
         const t = (pos.ticker || '').toUpperCase();
-        const completed = (fmpBars[t] || [])
-          .filter(b => b.date.startsWith(today))
-          .filter(b => {
-            const tm = extractTime(b.date);
-            return (parseInt(tm.slice(0, 2), 10) * 60 + parseInt(tm.slice(3, 5), 10) + 60) <= et.totalMinutes;
-          })
-          .sort((a, b) => a.date.localeCompare(b.date));
-        if (completed.length < 2) continue; // not enough fresh bars — let the IBKR feed (5b) try
-        const A = completed[completed.length - 1], B = completed[completed.length - 2];
-        pos.prevSyntheticBar = { hourKey: String(A.date), open: +A.open, high: +A.high, low: +A.low, close: +A.close };
-        pos.prevBarLow  = +B.low;
-        pos.prevBarHigh = +B.high;
+        const hourBars = clockHourBars(min30[t], today, et.totalMinutes);
+        if (hourBars.length < 2) continue; // not enough completed clock-hours — let the IBKR feed (5b) try
+        const A = hourBars[hourBars.length - 1], B = hourBars[hourBars.length - 2];
+        pos.prevSyntheticBar = { hourKey: A.hourKey, open: A.open, high: A.high, low: A.low, close: A.close };
+        pos.prevBarLow  = B.low;
+        pos.prevBarHigh = B.high;
         pos.atBE = true; // held position → 2-bar exit active so Check B maintains the stop
         fmpSeeded.add(t);
       }
-      if (fmpSeeded.size) console.log(`[Ambush] seeded 2-bar levels from FRESH FMP bars for ${fmpSeeded.size} held positions`);
+      if (fmpSeeded.size) console.log(`[Ambush] seeded :00 clock-hour 2-bar levels (FMP 30m agg, matches TWS) for ${fmpSeeded.size} held positions`);
     }
   } catch (e) {
-    console.warn(`[Ambush] FMP 2-bar seeding skipped (${e.message}) — falling back to IBKR feed`);
+    console.warn(`[Ambush] FMP :00 2-bar seeding skipped (${e.message}) — falling back to IBKR feed`);
   }
 
   // 5b. ── Seed last-2-completed bars + exit level from the VERIFIED IBKR feed ──

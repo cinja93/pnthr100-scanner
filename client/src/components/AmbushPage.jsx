@@ -1222,45 +1222,63 @@ export default function AmbushPage() {
                       </tr>
                       {isExpanded && (
                         <tr className={styles.detailRow}>
-                          <td colSpan={15} style={{ padding: 0 }}>
-                            <LotDetail pos={pos} />
+                          <td colSpan={15} style={{ padding: '10px 14px' }}>
                             {(() => {
                               const rec = recByTicker[pos.ticker];
-                              if (!rec) return null;
                               const CHECK_LABELS = { direction: 'Direction', shares: 'Shares', avgCost: 'Avg cost', stopExists: 'Stop in IBKR', stopPrice: 'Stop price', stopLevel: 'Stop level (2-bar)', stopQty: 'Stop covers full pos', cap: '10% NAV cap', risk: 'Risk ≤ $150 / 1% NAV' };
-                              const entries = Object.entries(rec.checks || {});
+                              const entries = Object.entries(rec?.checks || {});
                               const fails = entries.filter(([, c]) => c.status === 'red' || c.status === 'yellow');
                               const passes = entries.filter(([, c]) => c.status === 'green');
+                              const boxStyle = { flex: '1 1 0', minWidth: 0, border: '1px solid #2a2a33', borderRadius: 8, padding: '10px 14px', background: '#121217' };
+                              const titleStyle = { fontSize: 11, fontWeight: 800, color: '#9a9aa6', marginBottom: 8, letterSpacing: 0.6 };
                               return (
-                                <div style={{ padding: '10px 14px', borderTop: '1px solid #2a2a33', background: '#121217' }}>
-                                  {fails.length === 0 ? (
-                                    <div style={{ fontSize: 12, fontWeight: 700, color: PILL.green, marginBottom: 8 }}>✓ Verified against IBKR — no issues</div>
-                                  ) : (
-                                    <div style={{ marginBottom: 8 }}>
-                                      {fails.map(([k, c]) => (
-                                        <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '2px 0' }}>
-                                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
-                                          <span style={{ fontWeight: 700, color: '#fff', minWidth: 150 }}>{CHECK_LABELS[k] || k}</span>
-                                          <span style={{ color: c.status === 'red' ? '#ffb4b4' : '#f0d090' }}>{c.reason}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {passes.length > 0 && (
-                                    <div style={{ fontSize: 10, color: '#5a6a5e', marginBottom: 10 }}>✓ {passes.map(([k]) => CHECK_LABELS[k] || k).join('  ·  ')}</div>
-                                  )}
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', marginBottom: 4, letterSpacing: 0.4 }}>RISK PER LOT LEVEL (% of NAV at stop)</div>
-                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                    {(rec.lotLadder || []).map(l => {
-                                      const over = l.navPct != null && l.navPct > 1.0;
-                                      return (
-                                        <span key={l.lot} style={{ fontSize: 11, fontFamily: 'monospace', padding: '3px 8px', borderRadius: 4, background: over ? '#3a1d1d' : '#1a2a1d', color: over ? '#ff9a9a' : '#9ae6b4', border: `1px solid ${over ? '#5a2a2a' : '#2a4a2e'}` }}>
-                                          L{l.lot}: {l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV
-                                        </span>
-                                      );
-                                    })}
+                                <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+                                  {/* ── LEFT: STOPS ── */}
+                                  <div style={boxStyle}>
+                                    <div style={titleStyle}>STOPS — IBKR-TRUTH VERIFICATION</div>
+                                    {!rec ? (
+                                      <div style={{ fontSize: 11, color: '#666' }}>No verification data yet.</div>
+                                    ) : (
+                                      <>
+                                        {fails.length === 0 ? (
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: PILL.green, marginBottom: 8 }}>✓ Verified against IBKR — no issues</div>
+                                        ) : (
+                                          <div style={{ marginBottom: 8 }}>
+                                            {fails.map(([k, c]) => (
+                                              <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '2px 0' }}>
+                                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block', flexShrink: 0, marginTop: 4 }} />
+                                                <span style={{ fontWeight: 700, color: '#fff', minWidth: 130 }}>{CHECK_LABELS[k] || k}</span>
+                                                <span style={{ color: c.status === 'red' ? '#ffb4b4' : '#f0d090' }}>{c.reason}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {passes.length > 0 && (
+                                          <div style={{ fontSize: 10, color: '#5a6a5e' }}>✓ {passes.map(([k]) => CHECK_LABELS[k] || k).join('  ·  ')}</div>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
-                                  <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>At full 5-lot size this must stay ≤ 1.00% of NAV (≤ $150 max loss). Red = over.</div>
+                                  {/* ── RIGHT: LOT PLAN + ratchets ── */}
+                                  <div style={boxStyle}>
+                                    <LotDetail pos={pos} />
+                                    {rec && (
+                                      <>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', margin: '12px 0 4px', letterSpacing: 0.4 }}>RISK PER LOT LEVEL (% of NAV at stop)</div>
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                          {(rec.lotLadder || []).map(l => {
+                                            const over = l.navPct != null && l.navPct > 1.0;
+                                            return (
+                                              <span key={l.lot} style={{ fontSize: 11, fontFamily: 'monospace', padding: '3px 8px', borderRadius: 4, background: over ? '#3a1d1d' : '#1a2a1d', color: over ? '#ff9a9a' : '#9ae6b4', border: `1px solid ${over ? '#5a2a2a' : '#2a4a2e'}` }}>
+                                                L{l.lot}: {l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>At full 5-lot size this must stay ≤ 1.00% of NAV (≤ $150 max loss). Red = over.</div>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })()}

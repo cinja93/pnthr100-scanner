@@ -318,13 +318,13 @@ function LadderCard({ pos, rec, allTickers, onChart, onRemove, isAdmin, PILL }) 
     <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
       <div style={{ flex: '1 1 0', minWidth: 0 }}>
         {orderedLots.map(l => (
-          <div key={l.i} style={{ display: 'grid', gridTemplateColumns: '54px 82px 64px 72px 1fr 86px', gap: 8, alignItems: 'center', padding: '3px 0', fontSize: 12, fontWeight: l.status === 'FILLED' ? 700 : 400, opacity: l.status === 'LOCKED' ? 0.5 : 1 }}>
+          <div key={l.i} style={{ display: 'grid', gridTemplateColumns: '54px 82px 64px 72px 92px 1fr', gap: 8, alignItems: 'center', padding: '3px 0', fontSize: 12, fontWeight: l.status === 'FILLED' ? 700 : 400, opacity: l.status === 'LOCKED' ? 0.5 : 1 }}>
             <span style={{ color: STATUS_COLORS[l.status] }}>{l.status === 'LOCKED' ? '○' : '●'} {l.label}</span>
             <span style={mono}>{fmtUsd(l.trigger)}</span>
             <span style={mono}>{l.shares} sh</span>
             <span style={{ color: STATUS_COLORS[l.status], fontSize: 11 }}>{l.status}</span>
+            <span style={{ ...mono, color: GREEN }}>{l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV</span>
             <span style={{ ...mono, color: '#888', fontSize: 11 }}>{l.fillTime}</span>
-            <span style={{ ...mono, color: GREEN, textAlign: 'right' }}>{l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV</span>
           </div>
         ))}
       </div>
@@ -349,11 +349,14 @@ function LadderCard({ pos, rec, allTickers, onChart, onRemove, isAdmin, PILL }) 
   const stopBlock = (
     <div style={{ fontSize: 12 }}>
       <div style={{ display: 'flex', gap: 22, alignItems: 'center', padding: '3px 0', flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, color: '#ef4444', minWidth: 84 }}>2 Bar Stop</span>
+        <span style={{ fontWeight: 700, color: '#ef4444', minWidth: 110 }}>2 Bar Stop</span>
         {chip(fmtUsd(pos.stop))}
         <span style={{ color: '#999' }}>Risk <span style={{ ...mono, color: risk > 200 ? '#ef4444' : '#ddd', fontWeight: 700 }}>{risk != null ? fmtUsd(risk) : '--'}</span></span>
         <span style={{ color: '#999' }}>Risk/Share <span style={{ ...mono, color: '#ddd' }}>{rps != null ? fmtUsd(rps) : '--'}</span></span>
-        <span style={{ color: '#999' }}>1 Bar Reentry <span style={{ ...mono, color: '#666' }}>--</span></span>
+      </div>
+      <div style={{ display: 'flex', gap: 22, alignItems: 'center', padding: '3px 0' }} title="When this position is open the 2-bar stop above is the live exit. If it sells off, this becomes the 1-bar re-entry trigger (provided the day + weekly triggers aren't violated). One or the other carries the live number.">
+        <span style={{ fontWeight: 700, color: '#a78bfa', minWidth: 110 }}>1 Bar Reentry</span>
+        <span style={{ ...mono, color: '#666' }}>{'--'}</span>
       </div>
       <div style={{ display: 'flex', gap: 18, padding: '4px 0 0', fontSize: 11, flexWrap: 'wrap', color: '#888' }}>
         <span>Original Stop <span style={{ ...mono, color: '#f59e0b' }}>{exitLevel ? fmtUsd(exitLevel) : '--'}</span></span>

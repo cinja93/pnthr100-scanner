@@ -375,10 +375,16 @@ function applyTriggerMaintenance(pos, ctx, today, rolling, price) {
   } else if (pos.weeklyTrigger == null && wt?.level != null) {
     pos.weeklyTrigger = wt.level; changed = true;
   }
-  // Freeze the daily trigger the first time the breakout fires this cycle.
-  if (pos.dailyTrigger == null && rolling != null && typeof price === 'number' &&
-      (isLong ? price >= rolling : price <= rolling)) {
-    pos.dailyTrigger = rolling; changed = true;
+  // Freeze the daily trigger. A HELD position has ALREADY broken out, so record the
+  // breakout level now regardless of where price sits (a pulled-back winner must still
+  // show its trigger). A FLAT/STALKING name freezes it only when the breakout actually
+  // fires (price on the breakout side) — that's the re-entry trigger forming. For a
+  // brand-new entry this captures the entry-day 2-day high (= the original trigger); for
+  // a position already open before this feature, it's a best-effort current 2-day high.
+  if (pos.dailyTrigger == null && rolling != null) {
+    const held = (+pos.totalShares || 0) !== 0;
+    const breakingOut = typeof price === 'number' && (isLong ? price >= rolling : price <= rolling);
+    if (held || breakingOut) { pos.dailyTrigger = rolling; changed = true; }
   }
   return changed;
 }

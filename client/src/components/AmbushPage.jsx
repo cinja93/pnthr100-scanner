@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection } from '../services/api';
+import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection, fetchAmbushReconcile } from '../services/api';
 import PageHeader from './PageHeader';
 import AiTickerChartModal from './AiTickerChartModal';
 import styles from './AmbushPage.module.css';
@@ -611,6 +611,7 @@ export default function AmbushPage() {
   const [showActions, setShowActions] = useState(true);
   const [showWatching, setShowWatching] = useState(true);
   const [projection, setProjection] = useState(null);
+  const [reconcile, setReconcile] = useState(null); // IBKR-truth verification harness (pills + diag)
   const refreshRef = useRef(null);
 
   const loadData = useCallback(async () => {
@@ -624,7 +625,20 @@ export default function AmbushPage() {
       setLoading(false);
     }
     fetchAmbushProjection().then(setProjection).catch(() => {});
+    fetchAmbushReconcile().then(setReconcile).catch(() => {});
   }, []);
+
+  // lookup of reconcile rows by ticker for the per-row pills
+  const recByTicker = {};
+  (reconcile?.rows || []).forEach(r => { recByTicker[r.ticker] = r; });
+  const PILL = { green: '#22c55e', yellow: '#f59e0b', red: '#ef4444', gray: '#555' };
+  const copyDiag = () => {
+    if (!reconcile?.diag) return;
+    navigator.clipboard?.writeText(reconcile.diag).then(
+      () => { try { window.__ambushDiagCopied = true; } catch {} },
+      () => {}
+    );
+  };
 
   useEffect(() => {
     loadData();
@@ -762,7 +776,17 @@ export default function AmbushPage() {
                   <tbody key={pos.ticker} className={styles.positionGroup}>
                     <tr className={styles.positionRow} onClick={() => toggleExpand(pos.ticker)} style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}>
                       <td><StateBadge state={pos.state} /></td>
-                      <td className={styles.tickerCell} onClick={(e) => { e.stopPropagation(); openChart(pos.ticker, posList.map(p => p.ticker)); }} title="click for charts" style={{ cursor: 'pointer' }}>{pos.ticker}</td>
+                      <td className={styles.tickerCell} onClick={(e) => { e.stopPropagation(); openChart(pos.ticker, posList.map(p => p.ticker)); }} title="click for charts" style={{ cursor: 'pointer' }}>
+                        {(() => {
+                          const rec = recByTicker[pos.ticker];
+                          const color = rec ? PILL[rec.rollup] : PILL.gray;
+                          const tip = rec
+                            ? (rec.reasons?.length ? 'CHECK: ' + rec.reasons.join('  •  ') : 'CHECK: all green — IBKR-verified (dir, shares, avg, stop level+side+qty, cap, risk)')
+                            : 'CHECK: no verification data yet';
+                          return (<span title={tip} style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: color, marginRight: 6, verticalAlign: 'middle', boxShadow: rec?.rollup === 'red' ? `0 0 5px ${color}` : 'none' }} />);
+                        })()}
+                        {pos.ticker}
+                      </td>
                       <td><DirBadge direction={pos.direction} /></td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.entryPrice)}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.avgCost)}</td>
@@ -1049,6 +1073,26 @@ export default function AmbushPage() {
           </div>
         </div>
 
+        {/* ═══ IBKR-truth verification bar: snapshot health + pill summary + Copy-Diag ═══ */}
+        {reconcile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 10px', padding: '6px 10px', background: '#16161c', border: '1px solid #2a2a33', borderRadius: 6, fontSize: 12 }}>
+            <span title={reconcile.snapHealth?.reason || 'IBKR snapshot is fresh and non-empty'} style={{ color: PILL[reconcile.snapHealth?.status] || PILL.gray, fontWeight: 700 }}>
+              ● IBKR snapshot: {reconcile.snapHealth?.status === 'green' ? 'healthy' : (reconcile.snapHealth?.reason || reconcile.snapHealth?.status || 'unknown')}
+              {reconcile.snapAgeMin != null ? ` (${reconcile.snapAgeMin}m)` : ''}
+            </span>
+            <span style={{ color: '#888' }}>|</span>
+            <span style={{ color: PILL.green, fontWeight: 700 }}>{reconcile.summary?.green || 0} green</span>
+            <span style={{ color: PILL.yellow, fontWeight: 700 }}>{reconcile.summary?.yellow || 0} amber</span>
+            <span style={{ color: PILL.red, fontWeight: 700 }}>{reconcile.summary?.red || 0} red</span>
+            <span style={{ flex: 1 }} />
+            <button
+              onClick={copyDiag}
+              style={{ background: '#2a2a33', color: '#d4d4dc', border: '1px solid #3a3a44', borderRadius: 5, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              title="Copy the full IBKR-truth diagnostic (every red/amber position + reason) to paste to Claude"
+            >Copy Diag</button>
+          </div>
+        )}
+
         {byState.ACTIVE.length === 0 ? (
           <div className={styles.emptyState}>No positions in DEVOUR</div>
         ) : (
@@ -1096,7 +1140,17 @@ export default function AmbushPage() {
                         style={{ cursor: 'pointer', borderLeftColor: STATE_COLORS[pos.state] }}
                       >
                         <td><StateBadge state={pos.state} /></td>
-                        <td className={styles.tickerCell}>{pos.ticker}</td>
+                        <td className={styles.tickerCell}>
+                          {(() => {
+                            const rec = recByTicker[pos.ticker];
+                            const color = rec ? PILL[rec.rollup] : PILL.gray;
+                            const tip = rec
+                              ? (rec.reasons?.length ? 'CHECK: ' + rec.reasons.join('  •  ') : 'CHECK: all green — IBKR-verified (dir, shares, avg, stop level+side+qty, cap, risk)')
+                              : 'CHECK: no verification data yet';
+                            return (<span title={tip} style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: color, marginRight: 6, verticalAlign: 'middle', boxShadow: rec?.rollup === 'red' ? `0 0 5px ${color}` : 'none' }} />);
+                          })()}
+                          {pos.ticker}
+                        </td>
                         <td><DirBadge direction={pos.direction} /></td>
                         <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.entryPrice)}</td>
                         <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmtUsd(pos.avgCost)}</td>
@@ -1141,6 +1195,36 @@ export default function AmbushPage() {
                         <tr className={styles.detailRow}>
                           <td colSpan={15} style={{ padding: 0 }}>
                             <LotDetail pos={pos} />
+                            {(() => {
+                              const rec = recByTicker[pos.ticker];
+                              if (!rec) return null;
+                              const CHECK_LABELS = { dir: 'Direction', shares: 'Shares', avg: 'Avg cost', stopExists: 'Stop in IBKR', stopPrice: 'Stop (dup check)', stopLevel: 'Stop level (2-bar)', stopQty: 'Stop covers full pos', cap: '10% NAV cap', risk: 'Risk ≤ $150 / 1% NAV' };
+                              return (
+                                <div style={{ padding: '10px 14px', borderTop: '1px solid #2a2a33', background: '#121217' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', marginBottom: 6, letterSpacing: 0.4 }}>IBKR-TRUTH VERIFICATION</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 10 }}>
+                                    {Object.entries(rec.checks || {}).map(([k, c]) => (
+                                      <span key={k} style={{ fontSize: 11, color: '#c4c4cc', display: 'inline-flex', alignItems: 'center', gap: 5 }} title={c.reason || 'OK'}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: PILL[c.status] || PILL.gray, display: 'inline-block' }} />
+                                        {CHECK_LABELS[k] || k}{c.reason ? `: ${c.reason}` : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9a9aa6', marginBottom: 4, letterSpacing: 0.4 }}>RISK PER LOT LEVEL (% of NAV at stop)</div>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {(rec.lotLadder || []).map(l => {
+                                      const over = l.navPct != null && l.navPct > 1.0;
+                                      return (
+                                        <span key={l.lot} style={{ fontSize: 11, fontFamily: 'monospace', padding: '3px 8px', borderRadius: 4, background: over ? '#3a1d1d' : '#1a2a1d', color: over ? '#ff9a9a' : '#9ae6b4', border: `1px solid ${over ? '#5a2a2a' : '#2a4a2e'}` }}>
+                                          L{l.lot}: {l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>At full 5-lot size this must stay ≤ 1.00% of NAV (≤ $150 max loss). Red = over.</div>
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       )}

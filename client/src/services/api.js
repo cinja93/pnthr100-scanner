@@ -1337,6 +1337,12 @@ export async function fetchAmbushProjection() {
   return res.json();
 }
 
+export async function fetchAmbushReconcile() {
+  const res = await apiFetch(`${API_BASE}/api/ambush/live-reconcile`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function updateAmbushConfig(updates) {
   const res = await apiFetch(`${API_BASE}/api/ambush/config`, {
     method: 'POST',

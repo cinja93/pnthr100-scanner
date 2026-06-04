@@ -33,7 +33,7 @@
 
 import { connectToDatabase, getUserProfile } from '../database.js';
 import {
-  STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS,
+  STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS, TICKER_CAP_PCT,
   FIRST_HOUR_END, WITHDRAWAL_THRESHOLD, WITHDRAWAL_AMOUNT,
   COMMISSION_PER_SHARE,
   entrySlip, exitSlip, extractTime, sizeLots,
@@ -803,10 +803,19 @@ async function _runAmbushTickInner() {
   // The stop ALWAYS adjusts to the current 2-bar low/high, never freezes, and matches TWS.
   const fmpSeeded = new Set();
   try {
-    const heldForBars = allPositions.filter(p => (+p.totalShares || 0) !== 0);
-    if (heldForBars.length) {
-      const min30 = await fetchFmp30MinBars(heldForBars.map(p => p.ticker));
-      for (const pos of heldForBars) {
+    // Seed the most-recent-completed bars for HELD positions (the 2-bar TRAILING STOP)
+    // AND STALKING re-entry candidates (the 1-bar RE-ENTRY reference). Both need a FRESH
+    // bar that matches TWS. ROOT CAUSE this fixes for re-entry (2026-06-04): every exit
+    // nulls prevSyntheticBar, and Phase C bails when it's null — but the old filter only
+    // seeded held names, so a STALKING name had NO completed-bar reference until a live
+    // synthetic bar rebuilt (up to a FULL HOUR). That blocked the 1-bar re-entry the
+    // moment price reclaimed the prior bar (WCC/MTSI/HUBS/MPWR/TRGP today). Seeding
+    // STALKING here gives every re-entry candidate a fresh prior bar every 60s tick.
+    const barsForSeeding = allPositions.filter(p => (+p.totalShares || 0) !== 0 || p.state === STATES.STALKING);
+    if (barsForSeeding.length) {
+      const min30 = await fetchFmp30MinBars(barsForSeeding.map(p => p.ticker));
+      let heldSeeded = 0, stalkSeeded = 0;
+      for (const pos of barsForSeeding) {
         const t = (pos.ticker || '').toUpperCase();
         const hourBars = clockHourBars(min30[t], today, et.totalMinutes);
         if (hourBars.length < 2) continue; // not enough completed clock-hours — let the IBKR feed (5b) try
@@ -814,10 +823,11 @@ async function _runAmbushTickInner() {
         pos.prevSyntheticBar = { hourKey: A.hourKey, open: A.open, high: A.high, low: A.low, close: A.close };
         pos.prevBarLow  = B.low;
         pos.prevBarHigh = B.high;
-        pos.atBE = true; // held position → 2-bar exit active so Check B maintains the stop
+        if ((+pos.totalShares || 0) !== 0) { pos.atBE = true; heldSeeded++; } // held → 2-bar exit active so Check B maintains the stop; STALKING holds nothing, leave atBE untouched
+        else stalkSeeded++;
         fmpSeeded.add(t);
       }
-      if (fmpSeeded.size) console.log(`[Ambush] seeded :00 clock-hour 2-bar levels (FMP 30m agg, matches TWS) for ${fmpSeeded.size} held positions`);
+      if (fmpSeeded.size) console.log(`[Ambush] seeded :00 clock-hour bars (FMP 30m agg, matches TWS): ${heldSeeded} held (trailing stop) + ${stalkSeeded} stalking (1-bar re-entry)`);
     }
   } catch (e) {
     console.warn(`[Ambush] FMP :00 2-bar seeding skipped (${e.message}) — falling back to IBKR feed`);
@@ -1002,6 +1012,29 @@ async function _runAmbushTickInner() {
         }
       }
 
+      // ══ IBKR IS THE SOURCE OF TRUTH FOR SHARE COUNT (2026-06-04, permanent) ═══
+      // Mirror of the avgCost sync above — the bug that caused this week's wrong-quantity
+      // stops and mis-sized positions. The lot-add path (Check A) bumps totalShares
+      // OPTIMISTICALLY (pos.totalShares += lotShares) off MODELED ladder triggers, and the
+      // auto-adopt path takes the snapshot count ONCE at adoption. But NOTHING pulled
+      // totalShares back to IBKR on later ticks. A partial fill, a manual TWS add/trim, a
+      // modeled add that never actually filled, or a double-fill all left the engine's share
+      // count diverged from the broker. Two real harms on 2026-06-04: (1) the displayed
+      // shares were wrong (GH eng 11 vs IBKR 40); (2) MODIFY_STOP (Check B) sends
+      // `shares: pos.totalShares`, so the protective stop covered the MODELED count and left
+      // the difference NAKED. Same locked rule as avgCost: when a FRESH (<=10m) snapshot
+      // holds this ticker on our side, stored totalShares MUST equal the IBKR position size.
+      {
+        const ibkrSh = ibkrSharesByTicker[pos.ticker];
+        if (ibkrSnapAgeMin <= 10 && typeof ibkrSh === 'number' && Math.abs(ibkrSh) > 0) {
+          const ibkrAbs = Math.abs(ibkrSh);
+          if (ibkrAbs !== (+pos.totalShares || 0)) {
+            console.log(`[Ambush] SHARES-SYNC ${pos.ticker} ${pos.direction}: eng ${+pos.totalShares || 0} -> IBKR ${ibkrAbs}sh (stop qty + display now match the broker)`);
+            pos.totalShares = ibkrAbs;
+          }
+        }
+      }
+
       // ── During first hour: only collect data, skip price checks ──
       if (isFirstHour) {
         await upsertAmbushPosition(db, pos.ticker, {
@@ -1096,7 +1129,21 @@ async function _runAmbushTickInner() {
           ? +(pos.originalEntry * (1 + offset)).toFixed(2)
           : +(pos.originalEntry * (1 - offset)).toFixed(2);
         const triggered = isLong ? price >= lotTrigger : price <= lotTrigger;
-        if (triggered) {
+        // ── 10% NAV HARD CAP ON ADDS (2026-06-04) ──────────────────────────────
+        // sizeLots() caps the position at 10% NAV / entry AT ENTRY, but nothing re-checked
+        // the cap as lots pyramid on. Combined with the missing shares-sync above, modeled
+        // adds let positions drift toward ~20% NAV this week (LI, INTU, GH). Mirror the 679
+        // book's HARD GATE (feedback_concentration_cap, 2026-05-05): once the live notional
+        // is at/over 10% of NAV, place NO further lot. We size off the IBKR-synced
+        // avgCost + totalShares and the next lot's shares, so the check is on real exposure.
+        const liveNotional = (+pos.avgCost || price) * (+pos.totalShares || 0);
+        const nextLotNotional = (+pos.lotPlan[pos.nextLot] || 0) * lotTrigger;
+        const capDollars = nav * TICKER_CAP_PCT;
+        const overCap = (liveNotional + nextLotNotional) > capDollars;
+        if (triggered && overCap) {
+          console.warn(`[Ambush] CAP-BLOCK ${pos.ticker} ${pos.direction}: L${pos.nextLot + 1} add skipped — live $${Math.round(liveNotional)} + next $${Math.round(nextLotNotional)} > 10% NAV $${Math.round(capDollars)}. No pyramid past the cap.`);
+        }
+        if (triggered && !overCap) {
           const lotShares = pos.lotPlan[pos.nextLot];
           const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
           const oldCost = pos.avgCost * pos.totalShares;

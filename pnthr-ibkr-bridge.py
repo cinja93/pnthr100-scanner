@@ -1311,6 +1311,7 @@ HOURLY_BARS_POLL_SEC = int(os.getenv('HOURLY_BARS_POLL_SEC', '180'))   # per-tic
 HOURLY_BARS_SPACING  = float(os.getenv('HOURLY_BARS_SPACING', '11'))   # sec between requests (IBKR 60-req/10-min pacing)
 BAR_DISCOVERY_SEC    = int(os.getenv('BAR_DISCOVERY_SEC', '20'))       # how often we re-poll the monitored list for NEW tickers
 HOURLY_BARS_BATCH    = int(os.getenv('HOURLY_BARS_BATCH', '6'))        # max stale refreshes per cycle (new tickers always fetched first)
+HOURLY_BARS_FAIL_RETRY_SEC = int(os.getenv('HOURLY_BARS_FAIL_RETRY_SEC', '30'))  # retry a FAILED fetch this soon (not a full POLL_SEC) — fixes silent-staleness
 
 def hourly_bars_loop(app, stop_event):
     # Per-ticker last-fetch epoch. NEW tickers (a manual entry, an adopted position, a
@@ -1349,10 +1350,17 @@ def hourly_bars_loop(app, stop_event):
                     if stop_event.is_set():
                         break
                     bars = app.fetch_hourly_bars(t)
-                    last_fetched[t] = time.time()
                     if bars and _ambush_post('/api/admin/ambush/hourly-bars',
                                              {'ticker': t, 'bars': bars, 'source': 'IBKR'}):
+                        last_fetched[t] = time.time()                 # mark fresh ONLY on success
                         posted += 1
+                    else:
+                        # BUG FIX (2026-06-04): a failed/timed-out fetch (IBKR market-data
+                        # farm hiccup, Error 2103) must NOT be marked fresh — that silently
+                        # froze the feed for 80+ min (FLEX/IESC/ON). Schedule a fast retry
+                        # instead of waiting a full HOURLY_BARS_POLL_SEC.
+                        last_fetched[t] = time.time() - (HOURLY_BARS_POLL_SEC - HOURLY_BARS_FAIL_RETRY_SEC)
+                        print(f"[BARS] {t}: fetch/post FAILED — fast-retry in ~{HOURLY_BARS_FAIL_RETRY_SEC}s (feed not marked fresh)")
                     stop_event.wait(HOURLY_BARS_SPACING)  # IBKR pacing
                 if work:
                     print(f"[BARS] posted {posted}/{len(work)} ({len(new_t)} new, {len(refresh)} refresh)")

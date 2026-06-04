@@ -462,10 +462,10 @@ function ForwardProjection({ forward }) {
           <thead>
             <tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>Horizon</th>
+              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#3b82f6' }}>Projected AUM</th>
               <th style={{ textAlign: 'right', padding: '6px 8px' }}>Working Balance</th>
               <th style={{ textAlign: 'right', padding: '6px 8px' }}>Profit Banked</th>
               <th style={{ textAlign: 'right', padding: '6px 8px', color: '#22c55e' }}>Your Total</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', color: '#3b82f6' }}>Baseline Total</th>
               <th style={{ textAlign: 'right', padding: '6px 8px' }}>Edge</th>
             </tr>
           </thead>
@@ -484,10 +484,10 @@ function ForwardProjection({ forward }) {
                       </span>
                     )}
                   </td>
+                  <td style={{ textAlign: 'right', padding: '7px 8px', color: '#3b82f6' }}>{p ? fmtAum(p.total) : '--'}</td>
                   <td style={{ textAlign: 'right', padding: '7px 8px', color: '#ccc' }}>{fmtAum(a.balance)}</td>
                   <td style={{ textAlign: 'right', padding: '7px 8px', color: a.banked > 0 ? '#fbbf24' : '#555' }}>{a.banked > 0 ? fmtAum(a.banked) : '--'}</td>
                   <td style={{ textAlign: 'right', padding: '7px 8px', color: '#22c55e', fontWeight: 700 }}>{fmtAum(a.total)}</td>
-                  <td style={{ textAlign: 'right', padding: '7px 8px', color: '#3b82f6' }}>{p ? fmtAum(p.total) : '--'}</td>
                   <td style={{ textAlign: 'right', padding: '7px 8px', color: edge >= 0 ? '#22c55e' : '#ef4444' }}>{edge >= 0 ? '+' : ''}{edge.toFixed(1)}%</td>
                 </tr>
               );

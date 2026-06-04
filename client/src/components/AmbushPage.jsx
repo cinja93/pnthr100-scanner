@@ -318,13 +318,14 @@ function LadderCard({ pos, rec, allTickers, onChart, onRemove, isAdmin, PILL }) 
     <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
       <div style={{ flex: '1 1 0', minWidth: 0 }}>
         {orderedLots.map(l => (
-          <div key={l.i} style={{ display: 'grid', gridTemplateColumns: '54px 82px 64px 72px 92px 1fr', gap: 8, alignItems: 'center', padding: '3px 0', fontSize: 12, fontWeight: l.status === 'FILLED' ? 700 : 400, opacity: l.status === 'LOCKED' ? 0.5 : 1 }}>
+          <div key={l.i} style={{ display: 'grid', gridTemplateColumns: '54px 82px 64px 72px 124px 92px 1fr', gap: 8, alignItems: 'center', padding: '3px 0', fontSize: 12, fontWeight: l.status === 'FILLED' ? 700 : 400, opacity: l.status === 'LOCKED' ? 0.5 : 1 }}>
             <span style={{ color: STATUS_COLORS[l.status] }}>{l.status === 'LOCKED' ? '○' : '●'} {l.label}</span>
             <span style={mono}>{fmtUsd(l.trigger)}</span>
             <span style={mono}>{l.shares} sh</span>
             <span style={{ color: STATUS_COLORS[l.status], fontSize: 11 }}>{l.status}</span>
+            <span style={{ ...mono, color: '#888', fontSize: 11 }}>{l.fillTime || (l.status === 'FILLED' ? '--' : '')}</span>
             <span style={{ ...mono, color: GREEN }}>{l.navPct != null ? l.navPct.toFixed(2) : '--'}% NAV</span>
-            <span style={{ ...mono, color: '#888', fontSize: 11 }}>{l.fillTime}</span>
+            <span />
           </div>
         ))}
       </div>

@@ -514,7 +514,8 @@ function AumTracker({ projection }) {
     </div>
   );
   return (
-    <div style={{ position: 'relative', background: '#0d0d0d', border: '1px solid #222', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+    <div style={{ position: 'relative', marginBottom: 12 }}>
+      <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 10, padding: '14px 16px', boxShadow: '0 0 0 1px rgba(59,130,246,0.08)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <div style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
@@ -567,6 +568,7 @@ function AumTracker({ projection }) {
           ))}
         </div>
       )}
+      </div>
 
       <ForwardProjection forward={projection.forward} />
 

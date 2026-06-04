@@ -786,13 +786,15 @@ def is_market_hours():
 
 
 def is_in_blackout_window():
-    """Mirror of server/ibkrOutbox.isInBlackoutWindow — pause writes during
-    market open (9:25-9:35) and close (15:55-16:05) chaos."""
+    """Pause writes during market-open chaos (9:25-9:35). For the CLOSE, block ONLY
+    AFTER the 4:00 bell (16:00-16:05): new entries are allowed right up to the close
+    (orders placed before 16:00 fill), but a market order after the bell won't fill in
+    RTH. Mirror of server/ibkrOutbox.isInBlackoutWindow (2026-06-04)."""
     now = datetime.now(_ET)
     minute_of_day = now.hour * 60 + now.minute
     if 565 <= minute_of_day <= 575:
         return 'OPEN_BLACKOUT'
-    if 955 <= minute_of_day <= 965:
+    if 960 <= minute_of_day <= 965:
         return 'CLOSE_BLACKOUT'
     return None
 

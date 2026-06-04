@@ -451,15 +451,16 @@ async function _runAmbushTickInner() {
   const hourKey = et.hourKey;
   const isFirstHour = et.totalMinutes < 630; // before 10:30 ET
   const maxPositions = config.maxPositions || 999;
-  // Mirror the bridge's open/close blackout (server/ibkrOutbox + bridge
-  // is_in_blackout_window): the bridge REJECTS any order during 9:25-9:35 and
-  // 15:55-16:05 ET. The engine must not ATTEMPT a NEW entry then — it would write an
-  // ACTIVE record whose BUY/SHORT_ENTRY is rejected (BLACKOUT:CLOSE_BLACKOUT) and
-  // left as a phantom (2026-06-03: 13 entries fired at 16:05 → all phantoms). Existing
-  // positions are still managed (exits/stops) right through the close; only NEW entries
-  // (Phase B re-entries + Phase D new entries) are paused in the window.
+  // Entry windows (Scott 2026-06-04): take NEW entries right up to the 4:00 close bell —
+  // late-day institutional momentum often carries overnight, and the V7.4 backtest has NO
+  // close cutoff, so live must match it. Block entries ONLY:
+  //   • OPEN blackout 9:25-9:35 (inside the first hour anyway), and
+  //   • AFTER the bell, 16:00-16:05 — a regular market order then can't fill in RTH (it
+  //     would just FILLING-revert), so there's no point firing it.
+  // A late entry that doesn't fill is handled cleanly by the FILLING flow (reverts, no
+  // phantom). Existing positions are managed (stops/exits) right through the close regardless.
   const inEntryBlackout = (et.totalMinutes >= 565 && et.totalMinutes <= 575)
-                       || (et.totalMinutes >= 955 && et.totalMinutes <= 965);
+                       || (et.totalMinutes >= 960 && et.totalMinutes <= 965);
 
   // ── Live NAV: read IBKR-synced accountSize from user profile ──────────
   let nav = config.nav || 83000;
@@ -1085,8 +1086,9 @@ async function _runAmbushTickInner() {
   }
 
   // ═══ PHASE B: Process ATTACK positions (execute pending re-entries) ═══
-  // During first hour, skip re-entries (need first-hour data first). During the
-  // open/close blackout, skip too — the bridge would reject the entry and leave a phantom.
+  // During first hour, skip re-entries (need first-hour data first). Skip the open
+  // blackout and the post-bell window (inEntryBlackout) — but re-entries fire right up
+  // to the 4:00 close, same as new entries.
   if (!isFirstHour && !inEntryBlackout) {
     const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
 

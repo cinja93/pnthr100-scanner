@@ -81,8 +81,10 @@ export function isInBlackoutWindow(now = new Date()) {
   const minutesIntoDay = h * 60 + m;
   // 9:25-9:35
   if (minutesIntoDay >= 565 && minutesIntoDay <= 575) return 'OPEN_BLACKOUT';
-  // 15:55-16:05
-  if (minutesIntoDay >= 955 && minutesIntoDay <= 965) return 'CLOSE_BLACKOUT';
+  // CLOSE: only AFTER the 4:00 bell (16:00-16:05). Entries are allowed right up to the
+  // close — orders before 16:00 fill; a market order after the bell can't fill in RTH
+  // (2026-06-04, Scott: take late-day momentum that carries overnight).
+  if (minutesIntoDay >= 960 && minutesIntoDay <= 965) return 'CLOSE_BLACKOUT';
   return null;
 }
 

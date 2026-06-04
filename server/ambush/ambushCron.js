@@ -708,6 +708,43 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // 5a. ── Seed last-2-completed bars from FRESH FMP hourly bars (2026-06-04 fix) ──
+  // PRIMARY source for the 2-bar TRAILING STOP on held positions. The per-ticker IBKR
+  // feed (pnthr_ambush_hourly_bars, seeded in 5b below) lags badly — several names were
+  // 40–62 min stale today, so the 2-bar level froze on stale bars and the stop sat far
+  // too loose (EH stop 9.39 vs the true 9.25). FMP 1h bars are fetched fresh + uniform
+  // for ALL held names every tick, so the protective stop ALWAYS trails off the CURRENT
+  // two completed hourly bars and never freezes. Scott 2026-06-04: any two completed
+  // hourly bars — alignment doesn't matter, freshness does (prevent major losses). The
+  // forming bar is dropped by bar-end-time; need ≥2 completed or we leave it to 5b.
+  const fmpSeeded = new Set();
+  try {
+    const heldForBars = allPositions.filter(p => (+p.totalShares || 0) !== 0);
+    if (heldForBars.length) {
+      const fmpBars = await fetchFmpHourlyBars(heldForBars.map(p => p.ticker));
+      for (const pos of heldForBars) {
+        const t = (pos.ticker || '').toUpperCase();
+        const completed = (fmpBars[t] || [])
+          .filter(b => b.date.startsWith(today))
+          .filter(b => {
+            const tm = extractTime(b.date);
+            return (parseInt(tm.slice(0, 2), 10) * 60 + parseInt(tm.slice(3, 5), 10) + 60) <= et.totalMinutes;
+          })
+          .sort((a, b) => a.date.localeCompare(b.date));
+        if (completed.length < 2) continue; // not enough fresh bars — let the IBKR feed (5b) try
+        const A = completed[completed.length - 1], B = completed[completed.length - 2];
+        pos.prevSyntheticBar = { hourKey: String(A.date), open: +A.open, high: +A.high, low: +A.low, close: +A.close };
+        pos.prevBarLow  = +B.low;
+        pos.prevBarHigh = +B.high;
+        pos.atBE = true; // held position → 2-bar exit active so Check B maintains the stop
+        fmpSeeded.add(t);
+      }
+      if (fmpSeeded.size) console.log(`[Ambush] seeded 2-bar levels from FRESH FMP bars for ${fmpSeeded.size} held positions`);
+    }
+  } catch (e) {
+    console.warn(`[Ambush] FMP 2-bar seeding skipped (${e.message}) — falling back to IBKR feed`);
+  }
+
   // 5b. ── Seed last-2-completed bars + exit level from the VERIFIED IBKR feed ──
   // (2026-06-03) The 2-bar-low exit (Check C, via Check B's level) and breakout
   // re-entry (Phase C) must use TRUE IBKR hourly bars — matching the trader's TWS
@@ -729,6 +766,7 @@ async function _runAmbushTickInner() {
       for (const d of barDocs) barMap[(d.ticker || '').toUpperCase()] = d;
       let seeded = 0;
       for (const pos of allPositions) {
+        if (fmpSeeded.has((pos.ticker || '').toUpperCase())) continue; // already seeded from FRESH FMP bars (5a) — don't overwrite with the laggy IBKR feed
         const d = barMap[(pos.ticker || '').toUpperCase()];
         if (!d || !Array.isArray(d.bars) || d.bars.length < 3) continue;
         const ageMin = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;

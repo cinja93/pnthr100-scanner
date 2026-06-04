@@ -858,6 +858,34 @@ async function _runAmbushTickInner() {
         }
       }
 
+      // ══ IBKR IS THE SOURCE OF TRUTH FOR COST BASIS (2026-06-04, permanent) ═══
+      // The reconcile-guard above just CONFIRMED a fresh (<=10m) IBKR snapshot holds
+      // this ticker on our side, so IBKR's avgCost is authoritative — adopt it HERE,
+      // before lot-add (Check A), exit-P&L, peak, and the PROTECT check below all
+      // read pos.avgCost.
+      //
+      // ROOT CAUSE this fixes: the lot-add path (Check A) recomputes avgCost from
+      // MODELED ladder prices (originalEntry*(1+offset)). Real fills land elsewhere
+      // (slippage, commissions, partials), and NOTHING ever pulled avgCost back to
+      // IBKR — so every multi-lot position understated cost (e.g. STRL eng $936.05 vs
+      // IBKR $963.66), inflating open P&L and intermittently mis-flagging PROTECT
+      // (the stop reads "above cost" against a fake-low basis). This makes the Ambush
+      // book honor the SAME locked rule the 679 book already enforces in
+      // assistantLiveReconcile.js (feedback_avg_cost_correctness, 2026-05-06): when
+      // IBKR holds a position, stored avgCost MUST equal IBKR's avgCost. The modeled
+      // lot value is now only a sub-60s placeholder, always reconciled to truth on the
+      // next tick. Persisted by the first-hour upsert and the main save below.
+      {
+        const ibkrAvg = ibkrAvgByTicker[pos.ticker];
+        if (ibkrAvg > 0) {
+          const corr = ibkrAvg - (+pos.avgCost || 0); // +ve => engine was UNDERstating cost
+          if (Math.abs(corr) >= 0.10) {
+            console.log(`[Ambush] AVGCOST-SYNC ${pos.ticker} ${pos.direction}: eng ${(+pos.avgCost || 0).toFixed(4)} -> IBKR ${ibkrAvg.toFixed(4)} | basis ${corr > 0 ? '+' : ''}${corr.toFixed(2)}/sh x ${pos.totalShares}sh = ${corr > 0 ? '+' : ''}$${(corr * (+pos.totalShares || 0)).toFixed(2)}`);
+          }
+          pos.avgCost = +(+ibkrAvg).toFixed(4);
+        }
+      }
+
       // ── During first hour: only collect data, skip price checks ──
       if (isFirstHour) {
         await upsertAmbushPosition(db, pos.ticker, {
@@ -866,6 +894,7 @@ async function _runAmbushTickInner() {
           todayFirstHourLow: pos.todayFirstHourLow,
           todayFirstHourHigh: pos.todayFirstHourHigh,
           todayDate: pos.todayDate,
+          avgCost: pos.avgCost,          // persist the IBKR-synced cost basis even during first hour
           livePrice: price,
           livePriceAt: now,
         });
@@ -956,6 +985,9 @@ async function _runAmbushTickInner() {
           const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
           const oldCost = pos.avgCost * pos.totalShares;
           pos.totalShares += lotShares;
+          // NOTE: this modeled avgCost is a sub-60s PLACEHOLDER only. The IBKR-truth
+          // sync at the top of this loop overwrites avgCost with the broker's real
+          // average on the very next tick. Do NOT treat this line as the cost basis.
           pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
           pos.nextLot++;
           // Timestamp this lot fill for the Lot Plan panel (lot index = pos.nextLot - 1).

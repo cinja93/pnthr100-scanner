@@ -23,6 +23,7 @@ import {
   recordAmbushAum, getAmbushAumSeries,
 } from './ambushStateManager.js';
 import { runAmbushTick } from './ambushCron.js';
+import { getAmbushLiveReconcile } from './ambushLiveReconcile.js';
 
 // ── Projection helpers (Projected vs Actual AUM tracker) ────────────────────
 const _projPath = new URL('../data/ambushProjectionBaseline.json', import.meta.url).pathname;
@@ -115,6 +116,21 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       res.json(summary);
     } catch (err) {
       console.error('[Ambush API] summary error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/ambush/live-reconcile — IBKR-truth verification harness (pills + diag).
+  // Per-position green/amber/red checks: direction, shares, avg cost, stop side, stop price,
+  // correct 2-bar level, full-position stop quantity, 10% cap, 1%-NAV/$150 risk. Drives the
+  // Devour-row pills + the Copy-Diag dump. Independent recompute, so it catches engine errors.
+  router.get('/live-reconcile', async (req, res) => {
+    try {
+      const db = await connectToDatabase();
+      const result = await getAmbushLiveReconcile(db);
+      res.json(result);
+    } catch (err) {
+      console.error('[Ambush API] live-reconcile error:', err.message);
       res.status(500).json({ error: err.message });
     }
   });

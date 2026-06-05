@@ -1127,7 +1127,7 @@ export default function AmbushPage() {
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
           <span className={styles.sectionTitle}>
             ① STALKING: Weekly BL+1 / SS+1 Candidates
-            <InfoPopup text="Top of the funnel: every AI-300 name with an active weekly BL+1 (long) or SS+1 (short) signal — the prey pool. A bright/green chip is eligible (passed the sector gate); a dimmed chip has the signal but its sector is on AVOID or it's already in a position (•). These names flow down to the DAILY box. The engine recomputes every 60s." wide />
+            <InfoPopup text="Top of the funnel: every AI-300 name with an active weekly BL+1 (long) or SS+1 (short) signal — the prey pool, so all chips carry a LIGHT direction tint (green long / red short). SOLID + • = a live position. These names flow down to the DAILY box. The engine recomputes every 60s." wide />
           </span>
           <div className={styles.sectionBadges}>
             <span style={{ color: '#22c55e' }}>BL+1 {watching.longs.length}</span>
@@ -1150,7 +1150,13 @@ export default function AmbushPage() {
       {/* ═══ ② DAILY — daily trigger fired (green) / waiting (grey) ═══ */}
       {(() => {
         const longs = watching.longs, shorts = watching.shorts;
-        const fired = (it) => huntingSet.has(it.ticker);
+        // "Fired daily" = the daily trigger cleared TODAY — currently armed-at-daily
+        // (huntingSet) OR already progressed (held / entered today). Matches the lit
+        // chips so the badge can't read 0 while names are clearly in play.
+        const fired = (it) => {
+          const p = posByTicker[(it.ticker || '').toUpperCase()];
+          return huntingSet.has(it.ticker) || !!(p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0 || p.entryDate === todayET));
+        };
         const dailyChip = (it, isLong) => {
           const e = funnelStyle(it.ticker, isLong, 'daily');
           return (
@@ -1165,7 +1171,7 @@ export default function AmbushPage() {
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
                 ② HUNTING: Cleared the Daily Trigger
-                <InfoPopup text="The same weekly names, now checked against the daily 2-day-high breakout. GREEN = the daily trigger has fired (price cleared the prior 2-day high today) — armed, waiting only for the hourly break. GREY = still waiting for the daily to fire. As each fires it turns green; when it then breaks the hourly it drops to the HOURLY box. Only fresh daily breakouts go green." wide />
+                <InfoPopup text="The same weekly names, now checked against the daily 2-day-high breakout. LIGHT green/red = the daily trigger cleared today (price took out the prior 2-day high). FAINT = still waiting on the daily. SOLID + • = a live position (already through every gate). Direction sets the color: green long, red short." wide />
               </span>
               <div className={styles.sectionBadges}>
                 <span style={{ color: '#22c55e' }}>FIRED {lFired + sFired}</span>
@@ -1213,7 +1219,7 @@ export default function AmbushPage() {
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
                 ③ ATTACK: The Hourly Breakout / Entering
-                <InfoPopup text="The daily-green names, now watched every 60s for the 1-bar hourly break. GREY = armed, waiting for the break. GREEN ⚡ = it just broke the prior hourly bar and the entry fires this tick — a brief flash before it becomes a live position (DEVOUR). This is the pounce." wide />
+                <InfoPopup text="The daily-cleared names, watched every 60s for the 1-bar hourly break. AMBER = armed, waiting for the break. BRIGHT green/red = the hourly fired today (the pounce) — it entered and stays here all day so you can see what triggered. SOLID + • = still a live position. Direction sets the color: green long, red short." wide />
               </span>
               <div className={styles.sectionBadges}>
                 <span style={{ color: '#22c55e' }}>FIRED {firedCount}</span>

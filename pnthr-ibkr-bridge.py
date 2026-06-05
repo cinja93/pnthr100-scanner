@@ -1253,6 +1253,20 @@ def _execute_ambush_command(app, rate_limiter, cmd):
         return result.get('ok', False), result, (
             None if result.get('ok') else 'CANCEL_LOT_FAILED')
 
+    # ── CANCEL_ORDER ─────────────────────────────────────────────────────
+    # Cancel one specific order by permId. Used by the duplicate/orphan
+    # protective-stop trim to remove a stop the orderRef sweep can't reach
+    # (e.g. a prior-session stop returned untagged after a bridge restart).
+    # cancel_order_by_perm_id is idempotent (ALREADY_GONE = success), so a
+    # repeat while the 60s snapshot catches up is harmless.
+    if command == 'CANCEL_ORDER':
+        perm_id = request.get('permId') or request.get('oldPermId')
+        if not perm_id:
+            return False, None, 'MISSING_PERMID'
+        result = app.cancel_order_by_perm_id(perm_id)
+        return result.get('ok', False), result, (
+            None if result.get('ok') else (result.get('error') or result.get('status') or 'CANCEL_FAILED'))
+
     return False, None, f'UNKNOWN_AMBUSH_COMMAND:{command}'
 
 

@@ -571,6 +571,7 @@ async function _runAmbushTickInner() {
   const ibkrAvgByTicker = {};
   const ibkrStopSidesByTicker = {}; // ticker -> Set of protective stop actions present in IBKR ('SELL'/'BUY')
   const ibkrStopSharesByTicker = {}; // ticker -> { action -> total shares resting on that side }
+  const ibkrStopListByTicker = {};   // ticker -> [{ permId, action, price, shares, ref }] (every resting stop)
   let ibkrSnapAgeMin = Infinity;
   try {
     const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
@@ -590,6 +591,14 @@ async function _runAmbushTickInner() {
         // that exists but UNDER-COVERS the position (qty lag after lots fill).
         const bag = (ibkrStopSharesByTicker[t] = ibkrStopSharesByTicker[t] || {});
         bag[s.action] = (bag[s.action] || 0) + (+s.shares || 0);
+        // Full per-stop list (permId + ref) so Check B can enforce "exactly ONE
+        // protective stop = the tightest" and cancel duplicates/orphans by permId —
+        // including untagged stops the orderRef-based sweep can't reach (the
+        // restart-orphan that lost its PNTHR tag, BABA/WRD 2026-06-05).
+        (ibkrStopListByTicker[t] = ibkrStopListByTicker[t] || []).push({
+          permId: s.permId, action: s.action, price: +(s.stopPrice ?? s.auxPrice),
+          shares: +s.shares || 0, ref: (s.orderRef || '').trim(),
+        });
       }
     }
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
@@ -1260,24 +1269,58 @@ async function _runAmbushTickInner() {
         // the exit side. The bridge's MODIFY_STOP sweeps+places exactly one, so a repeat
         // place while the 60s snapshot catches up is idempotent (never a duplicate).
         const wantAction = isLong ? 'SELL' : 'BUY';
-        const stopMissingInIbkr = ibkrSnapAgeMin <= 10 && !(ibkrStopSidesByTicker[pos.ticker]?.has(wantAction));
-        // VERIFY the stop QUANTITY covers the whole position — not just that a stop
-        // exists at the right price. When pyramid lots fill, totalShares grows but
-        // the protective stop keeps its old (smaller) qty; if the 2-bar level happens
-        // to equal pos.stop, the price check above sees "no change" and skips, leaving
-        // the added shares NAKED (HUBS 2026-06-05: stop covered 4 of 10). Fire a
-        // MODIFY_STOP whenever a FRESH snapshot shows the exit-side coverage is less
-        // than the position. The bridge sweeps+places exactly one, so it's idempotent.
-        const ibkrStopShares = ibkrStopSharesByTicker[pos.ticker]?.[wantAction];
-        const stopQtyShort = ibkrSnapAgeMin <= 10 && typeof ibkrStopShares === 'number' && ibkrStopShares < (+pos.totalShares || 0);
-        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr || stopQtyShort) {
-          pos.stop = trail;
-          await enqueueAmbushOrder(db, 'MODIFY_STOP', {
-            ticker: pos.ticker, direction: pos.direction,
-            newStopPrice: pos.stop, shares: pos.totalShares,
-            reason: stopMissingInIbkr ? '2BAR_TRACK_REPLACE_NAKED' : (stopQtyShort ? '2BAR_TRACK_QTY_COVER' : '2BAR_TRACK'),
-          });
-          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, naked: stopMissingInIbkr || undefined, qtyShort: stopQtyShort || undefined });
+
+        // ── DUPLICATE / ORPHAN PROTECTIVE-STOP TRIM (V7.6, 2026-06-05) ──────────
+        // INVARIANT: an Ambush ticker carries EXACTLY ONE protective stop = the
+        // TIGHTEST. The orderRef-based sweep in MODIFY_STOP only cancels PNTHR-tagged
+        // stops, so a stop that lost its tag (TWS hands prior-session stops back
+        // UNTAGGED with orderId=0 after a BRIDGE RESTART — BABA 126.61 / WRD 7.36 on
+        // 2026-06-05) survives ALONGSIDE the fresh stop → over-coverage that can fire
+        // on a flat book and FLIP the position (the AVGO class). Enforce the invariant
+        // by permId every tick: keep the tightest protective stop, cancel the rest.
+        // Cancel-by-permId reaches untagged orphans the tag-sweep can't, while
+        // RESPECTING tightest-wins — a genuine manual tighter stop is the one kept.
+        let manualFloor = null; // a tighter UNTAGGED stop to adopt (don't place looser on top)
+        const protList = (ibkrSnapAgeMin <= 10)
+          ? (ibkrStopListByTicker[pos.ticker] || []).filter(s => s.action === wantAction && s.permId)
+          : [];
+        if (protList.length) {
+          const tightest = protList.reduce((best, s) =>
+            (isLong ? s.price > best.price : s.price < best.price) ? s : best, protList[0]);
+          for (const s of protList) {
+            if (s.permId === tightest.permId) continue;
+            await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: pos.ticker, permId: s.permId, reason: 'DUP_PROTECTIVE_STOP' });
+            actions.push({ type: 'CANCEL_DUP_STOP', ticker: pos.ticker, permId: s.permId, price: s.price });
+          }
+          // Surviving tightest is an UNTAGGED stop tighter than our 2-bar trail =
+          // a deliberate manual tighten → adopt it, stand down (tightest-wins).
+          const tighterThanTrail = isLong ? tightest.price > trail : tightest.price < trail;
+          if ((tightest.ref || '') !== 'PNTHR' && tighterThanTrail) manualFloor = tightest.price;
+        }
+
+        if (manualFloor != null) {
+          // Adopt the tighter manual stop; never push our own looser 2-bar stop on top.
+          if (pos.stop !== manualFloor) actions.push({ type: 'ADOPT_TIGHTER_STOP', ticker: pos.ticker, stop: manualFloor });
+          pos.stop = manualFloor;
+        } else {
+          // VERIFY the stop EXISTS on the exit side (a record's pos.stop is only intent;
+          // it diverges when never placed/cancelled → NAKED MKSI/TXN 2026-06-03).
+          const stopMissingInIbkr = ibkrSnapAgeMin <= 10 && !(ibkrStopSidesByTicker[pos.ticker]?.has(wantAction));
+          // VERIFY the stop QUANTITY covers the whole position. When lots fill,
+          // totalShares grows but the stop keeps its old qty; if the 2-bar level
+          // happens to equal pos.stop, the price check skips and the added shares go
+          // NAKED (HUBS 2026-06-05: covered 4 of 10). Fire when fresh coverage < pos.
+          const ibkrStopShares = ibkrStopSharesByTicker[pos.ticker]?.[wantAction];
+          const stopQtyShort = ibkrSnapAgeMin <= 10 && typeof ibkrStopShares === 'number' && ibkrStopShares < (+pos.totalShares || 0);
+          if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr || stopQtyShort) {
+            pos.stop = trail;
+            await enqueueAmbushOrder(db, 'MODIFY_STOP', {
+              ticker: pos.ticker, direction: pos.direction,
+              newStopPrice: pos.stop, shares: pos.totalShares,
+              reason: stopMissingInIbkr ? '2BAR_TRACK_REPLACE_NAKED' : (stopQtyShort ? '2BAR_TRACK_QTY_COVER' : '2BAR_TRACK'),
+            });
+            actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, naked: stopMissingInIbkr || undefined, qtyShort: stopQtyShort || undefined });
+          }
         }
       }
 

@@ -8,6 +8,7 @@
 // engine being wrong. Works in dry-run AND live. Drives the Devour-row pills + the Copy-Diag.
 import { getAmbushPositions, getAmbushConfig } from './ambushStateManager.js';
 import { getUserProfile } from '../database.js';
+import { MAX_LOSS as ENGINE_MAX_LOSS, getSizingMultiplier } from './ambushEngine.js';
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const TOL = { AVG: 0.03, STOP: 0.03, LEVEL: 0.03 };
@@ -15,7 +16,10 @@ const PCT_TOL = 0.003; // 0.3% of price — the real "matches" band so a $0.40 g
 const within = (a, b, ref) => Math.abs(a - b) <= Math.max(0.05, (ref || 0) * PCT_TOL);
 const CAP_PCT = 0.10;      // 10% NAV max notional per ticker
 const RISK_PCT_CAP = 0.01; // 1% NAV max risk per position (at full 5 lots)
-const MAX_LOSS = 150;      // Scott's per-position max loss for current NAV — the binding cap is min($150, 1% NAV)
+// Per-position max-loss cap now TRACKS the engine's graduated dial
+// (ENGINE_MAX_LOSS x getSizingMultiplier(nav): 50% < $125k, 75% < $166k, 100% >=
+// $166k) instead of a hardcoded $150, so the monitor's cap rises with NAV exactly
+// as sizing does. At today's launch NAV the dial = $300 x 0.50 = $150 (unchanged).
 
 function worst(...s) {
   if (s.includes('red')) return 'red';
@@ -117,9 +121,10 @@ function checkCap(notional, nav) {
 }
 function checkRisk(riskAtFull, nav) {
   if (riskAtFull == null || !nav) return { status: 'gray' };
-  const cap = Math.min(MAX_LOSS, nav * RISK_PCT_CAP); // binding = smaller of $150 and 1% NAV
+  const dial = ENGINE_MAX_LOSS * getSizingMultiplier(nav); // engine's graduated max-loss
+  const cap = Math.min(dial, nav * RISK_PCT_CAP);          // binding = smaller of dial and 1% NAV
   if (riskAtFull <= cap) return { status: 'green' };
-  return { status: riskAtFull < cap * 1.25 ? 'yellow' : 'red', reason: `$${riskAtFull.toFixed(0)} risk at 5 lots > $${cap.toFixed(0)} cap (max-loss $${MAX_LOSS} / 1% NAV $${(nav * RISK_PCT_CAP).toFixed(0)})` };
+  return { status: riskAtFull < cap * 1.25 ? 'yellow' : 'red', reason: `$${riskAtFull.toFixed(0)} risk at 5 lots > $${cap.toFixed(0)} cap (dial $${dial.toFixed(0)} / 1% NAV $${(nav * RISK_PCT_CAP).toFixed(0)})` };
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────

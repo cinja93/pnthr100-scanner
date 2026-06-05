@@ -306,6 +306,19 @@ class PNTHRBridge(EWrapper, EClient):
         # in TWS, set to 'PNTHR' for orders this bridge placed via the API.
         # The orphan janitor uses this as its primary whitelist.
         order_ref = (getattr(order, 'orderRef', '') or '').strip()
+        # DOWNGRADE GUARD (2026-06-05): a single sync calls reqOpenOrders() (binds
+        # THIS client's own orders → real orderId + 'PNTHR' ref) then reqAllOpenOrders()
+        # (captures manual TWS orders too, but may re-report our own orders UNBOUND:
+        # orderId 0, empty ref). Never let the unbound report overwrite the bound one —
+        # an orderId-0 entry is uncancellable (TWS error 10147) and that is exactly
+        # what created the restart orphans (BABA/WRD 2026-06-05). Keep the strongest
+        # identity seen for this permId this sync.
+        prior = self.open_orders.get(key)
+        if prior:
+            if not orderId and prior.get('orderId'):
+                orderId = prior['orderId']
+            if not order_ref and prior.get('orderRef'):
+                order_ref = prior['orderRef']
         self.open_orders[key] = {
             'orderId':   orderId,
             'permId':    perm_id,
@@ -1507,11 +1520,20 @@ def main():
         while True:
             if app.connected:
                 # Refresh open stop orders snapshot before building payload.
-                # reqAllOpenOrders() returns ALL orders in the account (not just
-                # this client's), so manually-placed TWS stop orders are captured.
+                # ROOT-CAUSE FIX (2026-06-05): reqOpenOrders() FIRST re-BINDS this
+                # client's own prior-session orders — restoring their real orderId AND
+                # the 'PNTHR' orderRef. Without it, a bridge restart left our own GTC
+                # stops returned UNBOUND (orderId 0, no tag) by reqAllOpenOrders alone,
+                # so they (a) looked like manual stops the sweep won't touch and (b)
+                # were uncancellable by orderId 0 (TWS 10147) — the BABA/WRD orphans.
+                # Then reqAllOpenOrders() adds genuinely manual TWS stops. The openOrder
+                # downgrade-guard keeps the bound identity if the 2nd call re-reports 0.
                 app.open_orders = {}
                 app.orders_ready.clear()
-                app.reqAllOpenOrders()
+                app.reqOpenOrders()              # bind OUR own orders (real orderId + ref)
+                app.orders_ready.wait(timeout=5)
+                app.orders_ready.clear()
+                app.reqAllOpenOrders()           # + capture manual TWS orders
                 app.orders_ready.wait(timeout=5)  # orders arrive fast
 
                 # Request executions (fills) from TWS. Default lookback is

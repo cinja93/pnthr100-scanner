@@ -61,6 +61,10 @@ SYNC_INTERVAL = 60  # seconds between read-only pushes
 # Per-action gating lives server-side in the enqueue hooks (IBKR_AUTO_*
 # env vars on Render). Both layers must be on for a command to flow.
 IBKR_WRITES_ENABLED = os.getenv('IBKR_WRITES_ENABLED', 'false').lower() == 'true'
+# 679/Carnivore (MAIN outbox) execution poller. DEFAULT OFF (Scott 2026-06-05: ONLY Ambush
+# trades on this account). When false, the bridge never starts the 679 execution thread, so a
+# non-Ambush order cannot execute through this bridge. Read-only views are unaffected.
+MAIN_OUTBOX_ENABLED = os.getenv('MAIN_OUTBOX_ENABLED', 'false').lower() == 'true'
 # Dry-run logs commands and reports DONE without actually calling IB API.
 # Useful to verify the wire format before flipping IBKR_WRITES_ENABLED.
 IBKR_WRITES_DRY_RUN = os.getenv('IBKR_WRITES_DRY_RUN', 'true').lower() == 'true'
@@ -1417,18 +1421,24 @@ def main():
     app.account_ready.wait(timeout=15)
     app.positions_ready.wait(timeout=15)
 
-    # Phase 4 outbox poller — runs in its own daemon thread alongside the
-    # read-only sync loop. When IBKR_WRITES_ENABLED is false (default), the
-    # poller loops but never calls the server or IB API.
+    # Phase 4 outbox poller (the MAIN 679/Carnivore execution path). DISABLED by default
+    # (Scott 2026-06-05: ONLY Ambush trades on this account). The bridge does NOT run the
+    # 679 execution poller unless MAIN_OUTBOX_ENABLED=true, so a non-Ambush order can never
+    # execute through this bridge — regardless of the Render auto-exec flags. The read-only
+    # views (PNTHR MCE / AI Orders / trades) are UNAFFECTED: signal generation + the
+    # read-only IBKR sync are separate and keep running. Re-enable by setting MAIN_OUTBOX_ENABLED=true.
     rate_limiter = RateLimiter(RATE_PER_SYMBOL_PER_MIN, RATE_GLOBAL_PER_MIN)
     outbox_stop_event = threading.Event()
-    outbox_thread = threading.Thread(
-        target=outbox_poller_loop,
-        args=(app, rate_limiter, outbox_stop_event),
-        daemon=True,
-        name='outbox-poller',
-    )
-    outbox_thread.start()
+    if MAIN_OUTBOX_ENABLED:
+        outbox_thread = threading.Thread(
+            target=outbox_poller_loop,
+            args=(app, rate_limiter, outbox_stop_event),
+            daemon=True,
+            name='outbox-poller',
+        )
+        outbox_thread.start()
+    else:
+        print("[BRIDGE] 679/Carnivore execution poller DISABLED (MAIN_OUTBOX_ENABLED=false) — only Ambush can trade.")
 
     # Ambush V7 outbox poller — separate thread, faster poll cycle.
     # Polls /api/admin/ambush-outbox/pending for Ambush-specific commands.

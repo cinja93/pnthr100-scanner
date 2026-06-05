@@ -570,6 +570,7 @@ async function _runAmbushTickInner() {
   const ibkrSharesByTicker = {};
   const ibkrAvgByTicker = {};
   const ibkrStopSidesByTicker = {}; // ticker -> Set of protective stop actions present in IBKR ('SELL'/'BUY')
+  const ibkrStopSharesByTicker = {}; // ticker -> { action -> total shares resting on that side }
   let ibkrSnapAgeMin = Infinity;
   try {
     const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
@@ -585,6 +586,10 @@ async function _runAmbushTickInner() {
       const t = (s.symbol || '').toUpperCase();
       if (t && (s.orderType === 'STP' || s.orderType === 'STP LMT') && s.action) {
         (ibkrStopSidesByTicker[t] = ibkrStopSidesByTicker[t] || new Set()).add(s.action);
+        // Track total shares resting on each side so Check B can detect a stop
+        // that exists but UNDER-COVERS the position (qty lag after lots fill).
+        const bag = (ibkrStopSharesByTicker[t] = ibkrStopSharesByTicker[t] || {});
+        bag[s.action] = (bag[s.action] || 0) + (+s.shares || 0);
       }
     }
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
@@ -1256,13 +1261,23 @@ async function _runAmbushTickInner() {
         // place while the 60s snapshot catches up is idempotent (never a duplicate).
         const wantAction = isLong ? 'SELL' : 'BUY';
         const stopMissingInIbkr = ibkrSnapAgeMin <= 10 && !(ibkrStopSidesByTicker[pos.ticker]?.has(wantAction));
-        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr) {
+        // VERIFY the stop QUANTITY covers the whole position — not just that a stop
+        // exists at the right price. When pyramid lots fill, totalShares grows but
+        // the protective stop keeps its old (smaller) qty; if the 2-bar level happens
+        // to equal pos.stop, the price check above sees "no change" and skips, leaving
+        // the added shares NAKED (HUBS 2026-06-05: stop covered 4 of 10). Fire a
+        // MODIFY_STOP whenever a FRESH snapshot shows the exit-side coverage is less
+        // than the position. The bridge sweeps+places exactly one, so it's idempotent.
+        const ibkrStopShares = ibkrStopSharesByTicker[pos.ticker]?.[wantAction];
+        const stopQtyShort = ibkrSnapAgeMin <= 10 && typeof ibkrStopShares === 'number' && ibkrStopShares < (+pos.totalShares || 0);
+        if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr || stopQtyShort) {
           pos.stop = trail;
           await enqueueAmbushOrder(db, 'MODIFY_STOP', {
             ticker: pos.ticker, direction: pos.direction,
-            newStopPrice: pos.stop, shares: pos.totalShares, reason: stopMissingInIbkr ? '2BAR_TRACK_REPLACE_NAKED' : '2BAR_TRACK',
+            newStopPrice: pos.stop, shares: pos.totalShares,
+            reason: stopMissingInIbkr ? '2BAR_TRACK_REPLACE_NAKED' : (stopQtyShort ? '2BAR_TRACK_QTY_COVER' : '2BAR_TRACK'),
           });
-          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, naked: stopMissingInIbkr || undefined });
+          actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, naked: stopMissingInIbkr || undefined, qtyShort: stopQtyShort || undefined });
         }
       }
 

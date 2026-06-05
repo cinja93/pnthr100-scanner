@@ -63,6 +63,69 @@ const FMP_API_KEY = process.env.FMP_API_KEY;
 const AMBUSH_REGIME_GATE = false;
 const AMBUSH_BE75_SNAP   = false;
 
+// ── Log a broker-stop exit (2026-06-05) ──────────────────────────────────────
+// When a position's IBKR-resting protective stop FIRES, it fills at the broker
+// instantly — almost always BEFORE the 60s engine tick catches it. The engine
+// then only sees the position go FLAT and reconciles it (AUTO_RECONCILE_FLAT /
+// the doLiveExit reconcile-guard); neither path ran doLiveExit's trade logging.
+// Result: most stop exits were MISSING from pnthr_ambush_trades, undercounting the
+// engine's history/stats (WIX +$4 on 2026-06-05 was unlogged). The real fill IS in
+// pnthr_ibkr_executions (the main-book processor tags Ambush tickers
+// SKIPPED_NO_ACTIVE_POSITION but still records price/shares). This logs the REAL
+// fill as a trade — never a fabricated PnL. Idempotent by closeExecId. Logging
+// only: it places NO orders. Returns {pnl,exitPrice,estimated} or null.
+async function logReconciledExit(db, pos, today, reason, ownerId) {
+  try {
+    const shares = Math.abs(+pos.totalShares || 0);
+    if (!shares || pos.avgCost == null) return null;
+    const isLong = pos.direction === 'LONG';
+    const exitSide = isLong ? 'SLD' : 'BOT';        // long sells to exit; short buys to cover
+    const since = new Date(Date.now() - 30 * 60000);
+    const q = { symbol: pos.ticker, side: exitSide, processedAt: { $gte: since } };
+    if (ownerId) q.ownerId = ownerId;
+    const fills = await db.collection('pnthr_ibkr_executions').find(q).sort({ processedAt: -1 }).toArray();
+    // Accumulate the most-recent exit-side fills up to the position size.
+    let need = shares, cost = 0, got = 0; const execIds = [];
+    for (const f of fills) {
+      if (need <= 0) break;
+      const fq = Math.min(need, Math.abs(+f.shares || 0));
+      if (fq <= 0) continue;
+      cost += fq * (+f.price || 0); got += fq; need -= fq; if (f.execId) execIds.push(f.execId);
+    }
+    const closeExecId = execIds[0] || null;
+    if (closeExecId && await db.collection('pnthr_ambush_trades').findOne({ closeExecId })) return null; // already logged
+    let exitPrice, estimated = false;
+    if (got > 0 && got >= shares * 0.5) {
+      exitPrice = +(cost / got).toFixed(4);          // real share-weighted fill
+    } else if (pos.stop != null) {
+      exitPrice = +pos.stop; estimated = true;       // fill not synced yet — fall back to the stop level
+    } else return null;
+    const comm = calcCommission(shares, exitPrice);
+    let pnl, borrow = 0;
+    if (isLong) {
+      pnl = +(shares * exitPrice - comm - shares * pos.avgCost).toFixed(2);
+    } else {
+      const entryD = pos.entryDate ? new Date(pos.entryDate) : new Date(today);
+      const tradingDays = Math.max(1, Math.round((new Date(today) - entryD) / 86400000 * 5 / 7));
+      borrow = calcBorrowCost(shares, pos.avgCost, tradingDays, getSectorName(pos.ticker));
+      pnl = +(shares * (pos.avgCost - exitPrice) - comm - borrow).toFixed(2);
+    }
+    const trade = {
+      ticker: pos.ticker, direction: pos.direction, entryPrice: pos.avgCost,
+      exitPrice, shares, pnl, entryDate: pos.entryDate, exitDate: today,
+      exitType: reason, cycleNum: pos.cycleNum, commission: comm,
+      peakProfit: pos.peak, closeExecId, source: 'IBKR_STOP_RECONCILE',
+    };
+    if (borrow) trade.borrow = borrow;
+    if (estimated) trade.exitEstimated = true;
+    await logAmbushTrade(db, trade);
+    return { pnl, exitPrice, estimated };
+  } catch (e) {
+    console.warn(`[Ambush] logReconciledExit ${pos?.ticker} failed (non-fatal): ${e.message}`);
+    return null;
+  }
+}
+
 // ── Eastern Time Helpers ───────────────────────────────────────────────────
 
 function getETComponents(now = new Date()) {
@@ -945,16 +1008,20 @@ async function _runAmbushTickInner() {
       const newestActivity = stamps.length ? Math.max(...stamps) : 0;
       if (newestActivity && (Date.now() - newestActivity) < 90000) continue; // too fresh — await sync
       const engineShares = pos.totalShares;
+      // Log the REAL broker-stop exit before clearing the record (entry data still
+      // intact on `pos`). The IBKR-resting stop fired on its own → this is the path
+      // that previously dropped the trade from the log (WIX +$4 2026-06-05).
+      const exitLog = await logReconciledExit(db, pos, today, 'STOP_FIRED_IBKR', config.ownerId);
       await upsertAmbushPosition(db, pos.ticker, {
         state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
         entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
-        atBE: false, trailingActive: false, beDate: null, peak: 0,
+        atBE: false, trailingActive: false, beDate: null, peak: 0, lotTriggerLot: null, lotTriggerPrice: null,
         prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
         cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePriceAt: now,
         reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
       });
       pos.state = STATES.STALKING; pos.totalShares = 0; // reflect in-memory so Phase A skips it
-      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0 });
+      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0, loggedPnl: exitLog?.pnl, exitEstimated: exitLog?.estimated || undefined });
       console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${engineShares}sh -> FLAT (IBKR flat, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Phantom cleared.`);
     }
   }
@@ -1115,7 +1182,12 @@ async function _runAmbushTickInner() {
           // when flat — never when IBKR holds the opposite side, where the add-side
           // cancel could hit the other position's protective stop. (PNTHR-tagged
           // only; manual TWS stops are left alone.)
+          let guardExitLog = null;
           if (!ibkrSh) {
+            // Truly flat at the broker = the IBKR stop fired before this tick. Log the
+            // REAL exit (entry data still on `pos`) so the trade isn't dropped, then
+            // cancel any add-side lot trigger so a stale stop can't re-open the name.
+            guardExitLog = await logReconciledExit(db, pos, today, exitType, config.ownerId);
             await enqueueAmbushOrder(db, 'CANCEL_LOT_TRIGGER', {
               ticker: pos.ticker, direction: pos.direction, reason: 'RECONCILE_FLAT',
             });
@@ -1128,7 +1200,7 @@ async function _runAmbushTickInner() {
             cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
             reconciledFlat: `IBKR_${ibkrSh ?? 0}_AT_${exitType}_${today}`,
           });
-          actions.push({ type: 'RECONCILE_SKIP_EXIT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibkrSh ?? 0, reason: exitType });
+          actions.push({ type: 'RECONCILE_SKIP_EXIT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibkrSh ?? 0, reason: exitType, loggedPnl: guardExitLog?.pnl });
           exited = true;
           return;
         }

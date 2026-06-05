@@ -197,7 +197,8 @@ async function main() {
     return dir === 'LONG' ? r >= 0 : r < 0;
   }
 
-  const spyWeekly = (spyWeeklyDoc?.weekly || []).slice().sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+  // Map to a `time` field (the raw bars use weekOf/date) so all the SPY lookups below resolve.
+  const spyWeekly = (spyWeeklyDoc?.weekly || []).map(w => ({ time: w.weekOf || w.date, close: w.close })).sort((a, b) => a.time.localeCompare(b.time));
   console.log(`  Hourly: ${hMinDate} → ${hMaxDate} (${tradingDates.length} trading days) · Tickers ${Object.keys(hourlyByDay).length}`);
 
   // ── [2] SIGNALS — build BOTH param sets (AI spec vs V7.4 carnivore overlay) ────

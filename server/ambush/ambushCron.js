@@ -841,6 +841,14 @@ async function _runAmbushTickInner() {
 
   // 3. Determine MCE candidate tickers (not already tracked)
   const existingTickers = new Set(allPositions.map(p => p.ticker));
+  // HELD = an OPEN position (not a flat STALKING re-entry record). Used for the
+  // candidate `tracked` flag so flat re-entry candidates still count as eligible
+  // and only real positions read as "in a position" (2026-06-05).
+  const heldTickers = new Set(
+    allPositions
+      .filter(p => p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0)
+      .map(p => p.ticker)
+  );
   const mceCandidates = [];
   if (!isFirstHour) {
     for (const ticker of getAiTickers()) {
@@ -863,7 +871,7 @@ async function _runAmbushTickInner() {
     // V7.6: directional sector filter — a sector is BULL (longs ok) or BEAR (shorts ok) by 5-day return.
     const sectorOkLong  = getSectorOk(ctx, ticker, today, 'LONG');
     const sectorOkShort = getSectorOk(ctx, ticker, today, 'SHORT');
-    const tracked = existingTickers.has(ticker);
+    const tracked = heldTickers.has(ticker); // only an OPEN position counts as "in a position"
     const sector = getSectorName(ticker);
     // V7.4: regime no longer gates readiness (longs & shorts taken in any regime).
     const longRegimeOk  = AMBUSH_REGIME_GATE ? !!regime : true;

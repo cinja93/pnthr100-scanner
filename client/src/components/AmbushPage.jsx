@@ -428,11 +428,9 @@ function DirBadge({ direction }) {
 }
 
 // ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
-function WatchCol({ title, color, items, onTicker }) {
-  // WEEKLY stage: the weekly signal has FIRED for every name here (that's why it's in
-  // the pool), so eligible names are GREEN. Dim only if it can't proceed — sector on
-  // AVOID, or already in a position (•). Daily progress is shown in the DAILY box below,
-  // NOT by dimming here (these stay in the weekly pool the whole week).
+function WatchCol({ title, color, items, onTicker, eng, chipStyle }) {
+  // Chips colored by ENGAGEMENT (eng): SOLID green/red = in play (held • / daily
+  // cleared), YELLOW = attacking, LIGHT green/red = weekly signal but not in play yet.
   const readyCount = items.filter(i => i.ready).length;
   return (
     <div style={{ flex: 1, minWidth: 220 }}>
@@ -441,16 +439,11 @@ function WatchCol({ title, color, items, onTicker }) {
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {items.length === 0 ? <span style={{ color: '#555', fontSize: 12 }}>none today</span> : items.map(it => {
-          const reason = it.tracked ? 'already in a position' : !it.sectorOk ? 'sector AVOID' : 'weekly fired — eligible';
-          const dim = !it.ready || it.tracked;
+          const e = eng(it.ticker);
           return (
-            <span key={it.ticker} onClick={() => onTicker?.(it.ticker)} title={`${it.sector} — ${reason} · click for charts`} style={{
-              fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace',
-              color: it.ready ? '#000' : '#888',
-              background: it.ready ? color : '#161616',
-              border: `1px solid ${it.ready ? color : '#2a2a2a'}`,
-              opacity: dim ? 0.55 : 1, cursor: 'pointer',
-            }}>{it.ticker}{it.tracked ? ' •' : ''}</span>
+            <span key={it.ticker} onClick={() => onTicker?.(it.ticker)} title={`${it.sector} — ${e.label} · click for charts`} style={chipStyle(e)}>
+              {it.ticker}{e.held ? ' •' : ''}
+            </span>
           );
         })}
       </div>
@@ -811,6 +804,41 @@ export default function AmbushPage() {
   const hunting = lastResult.hunting || []; // daily-cleared candidates (HUNTING stage)
   const huntingSet = new Set(hunting.map(h => h.ticker));
 
+  // ── Per-stage funnel chip coloring (Scott 2026-06-05) ────────────────────────
+  // Each box colors its OWN gate; direction = green(long)/red(short):
+  //   • Held position → SOLID bright + "•" (in the kill), wherever it appears.
+  //   • Weekly box  → LIGHT tint (the weekly signal is live).
+  //   • Daily box   → LIGHT tint if the daily trigger cleared; FAINT if not yet.
+  //   • Hourly box  → BRIGHT solid once the hourly fired today (entered — kept all
+  //                   day); AMBER while armed but not yet fired.
+  const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const posByTicker = {};
+  for (const p of positions) posByTicker[(p.ticker || '').toUpperCase()] = p;
+  const funnelStyle = (ticker, isLong, stage) => {
+    const t = (ticker || '').toUpperCase();
+    const p = posByTicker[t];
+    const base  = isLong ? '#22c55e' : '#ef4444';
+    const light = { bg: isLong ? 'rgba(34,197,94,0.16)' : 'rgba(239,68,68,0.16)', border: isLong ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)', text: isLong ? '#86efac' : '#fca5a5' };
+    const faint = { bg: isLong ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)', border: '#2a2a2a', text: '#6b6b6b' };
+    const solid = { bg: base, border: base, text: '#000' };
+    const amber = { bg: '#f59e0b', border: '#f59e0b', text: '#000' };
+    const held = p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0);
+    const firedToday = p && (p.state === 'ATTACK' || p.entryDate === todayET); // hourly fired today
+    if (held) return { ...solid, held: true, label: 'in a position' };
+    if (stage === 'weekly') return { ...light, held: false, label: 'weekly signal live' };
+    if (stage === 'daily')  return (huntingSet.has(t) || firedToday)
+      ? { ...light, held: false, label: 'daily trigger cleared' }
+      : { ...faint, held: false, label: 'daily not cleared yet' };
+    // hourly
+    return firedToday
+      ? { ...solid, held: false, label: 'hourly fired — entered today' }
+      : { ...amber, held: false, label: 'armed — waiting on the hourly break' };
+  };
+  const engChipStyle = (e) => ({
+    fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace', cursor: 'pointer',
+    color: e.text, background: e.bg, border: `1px solid ${e.border}`,
+  });
+
   const byState = {
     STALKING: positions.filter(p => p.state === 'STALKING'),
     ATTACK:   positions.filter(p => p.state === 'ATTACK'),
@@ -1112,8 +1140,8 @@ export default function AmbushPage() {
             <div className={styles.emptyState}>No active signals loaded yet — appears once the engine ticks.</div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '6px 2px' }}>
-              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
-              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
+              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} eng={(t) => funnelStyle(t, true, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
+              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} eng={(t) => funnelStyle(t, false, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
             </div>
           )
         )}
@@ -1123,15 +1151,12 @@ export default function AmbushPage() {
       {(() => {
         const longs = watching.longs, shorts = watching.shorts;
         const fired = (it) => huntingSet.has(it.ticker);
-        const dailyChip = (it) => {
-          const g = fired(it);
+        const dailyChip = (it, isLong) => {
+          const e = funnelStyle(it.ticker, isLong, 'daily');
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title="click for charts" style={{
-              background: g ? 'rgba(34,197,94,0.15)' : 'rgba(120,120,120,0.08)',
-              border: `1px solid ${g ? '#22c55e' : '#444'}`,
-              color: g ? '#4ade80' : '#777',
-              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}>{it.ticker}</span>
+            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title={`${e.label} · click for charts`} style={engChipStyle(e)}>
+              {it.ticker}{e.held ? ' •' : ''}
+            </span>
           );
         };
         const lFired = longs.filter(fired).length, sFired = shorts.filter(fired).length;
@@ -1153,11 +1178,11 @@ export default function AmbushPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, padding: '10px 14px' }}>
                 <div style={{ minWidth: 220 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONGS · {lFired}/{longs.length} fired daily</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{longs.length ? longs.map(dailyChip) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{longs.length ? longs.map(it => dailyChip(it, true)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
                 <div style={{ minWidth: 220 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORTS · {sFired}/{shorts.length} fired daily</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{shorts.length ? shorts.map(dailyChip) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{shorts.length ? shorts.map(it => dailyChip(it, false)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
               </div>
             )}
@@ -1167,19 +1192,22 @@ export default function AmbushPage() {
 
       {/* ═══ ③ HOURLY — broke the hourly bar (green) / waiting (grey) ═══ */}
       {(() => {
-        const attackSet = new Set(byState.ATTACK.map(p => p.ticker));
+        // Population = daily-cleared candidates (armed) + any name that fired/entered
+        // TODAY (kept in this box all day, per Scott 2026-06-05), deduped by ticker.
+        const hourlyMap = {};
+        for (const h of hunting) hourlyMap[(h.ticker || '').toUpperCase()] = { ticker: h.ticker, direction: h.direction };
+        for (const p of positions.filter(p => p.entryDate === todayET)) hourlyMap[(p.ticker || '').toUpperCase()] = { ticker: p.ticker, direction: p.direction };
+        const armed = Object.values(hourlyMap);
+        const isFired = (tk) => { const p = posByTicker[(tk || '').toUpperCase()]; return !!(p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0 || p.state === 'ATTACK' || p.entryDate === todayET)); };
+        const firedCount = armed.filter(a => isFired(a.ticker)).length;
         const hourlyChip = (it) => {
-          const g = attackSet.has(it.ticker);
+          const e = funnelStyle(it.ticker, it.direction === 'LONG', 'hourly');
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title="click for charts" style={{
-              background: g ? 'rgba(34,197,94,0.18)' : 'rgba(120,120,120,0.08)',
-              border: `1px solid ${g ? '#22c55e' : '#444'}`,
-              color: g ? '#4ade80' : '#777',
-              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}>{it.ticker}{g ? ' ⚡' : ''}</span>
+            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title={`${e.label} · click for charts`} style={engChipStyle(e)}>
+              {it.ticker}{e.held ? ' •' : ''}
+            </span>
           );
         };
-        const armed = hunting; // daily-green names, now watching the hourly
         return (
           <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ATTACK }}>
             <div className={styles.sectionHeader}>
@@ -1188,8 +1216,8 @@ export default function AmbushPage() {
                 <InfoPopup text="The daily-green names, now watched every 60s for the 1-bar hourly break. GREY = armed, waiting for the break. GREEN ⚡ = it just broke the prior hourly bar and the entry fires this tick — a brief flash before it becomes a live position (DEVOUR). This is the pounce." wide />
               </span>
               <div className={styles.sectionBadges}>
-                <span style={{ color: '#22c55e' }}>FIRING {byState.ATTACK.length}</span>
-                <span style={{ color: '#888' }}>ARMED {armed.length}</span>
+                <span style={{ color: '#22c55e' }}>FIRED {firedCount}</span>
+                <span style={{ color: '#f59e0b' }}>ARMED {armed.length - firedCount}</span>
               </div>
             </div>
             {armed.length === 0 ? (

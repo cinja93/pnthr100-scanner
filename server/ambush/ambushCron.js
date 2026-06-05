@@ -126,6 +126,24 @@ async function logReconciledExit(db, pos, today, reason, ownerId) {
   }
 }
 
+// ── Cancel a flat position's leftover stop orders (2026-06-05) ────────────────
+// On a broker-fired exit the protective stop FILLS (closing the position) but the
+// on-deck lot-trigger add order keeps RESTING — an orphan that could re-OPEN the
+// name if price reaches it (AAOI BUY STP @208.83 on 2026-06-05). The engine-
+// initiated exit (SELL_EXIT) already sweeps related orders; the broker-fired
+// reconcile paths did not. Cancel every PNTHR-tagged stop for the (truly flat)
+// ticker by permId — now reliable since the bridge re-binds its own orders. Manual
+// TWS stops (untagged) are left alone. Cancel only — no entries.
+async function cancelLeftoverStops(db, ticker, stopList) {
+  let n = 0;
+  for (const s of (stopList || [])) {
+    if ((s.ref || '') !== 'PNTHR' || !s.permId) continue;
+    await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker, permId: s.permId, reason: 'RECONCILE_FLAT_LEFTOVER' });
+    n++;
+  }
+  return n;
+}
+
 // ── Eastern Time Helpers ───────────────────────────────────────────────────
 
 function getETComponents(now = new Date()) {
@@ -758,6 +776,15 @@ async function _runAmbushTickInner() {
           .filter(p => (+p.totalShares || 0) !== 0 && p.state !== 'CLOSED')
           .map(p => `${(p.ticker || '').toUpperCase()}_${p.direction}`)
       );
+      // Tickers whose exit is IN-FLIGHT: doLiveExit enqueued a SELL_EXIT that hasn't
+      // filled yet, so IBKR still shows the position. Do NOT re-adopt these — that
+      // re-fired the exit (double order + double trade log: ILMN/MKSI 2026-06-04).
+      // 3-min window; if the exit genuinely failed, adopt can take over after it.
+      const recentlyExited = new Set(
+        allPositions
+          .filter(p => p.exitEnqueuedAt && (Date.now() - new Date(p.exitEnqueuedAt).getTime()) < 180000)
+          .map(p => (p.ticker || '').toUpperCase())
+      );
       const barDocs = await db.collection('pnthr_ambush_hourly_bars').find({}).toArray();
       const barMap = {};
       for (const d of barDocs) barMap[(d.ticker || '').toUpperCase()] = d;
@@ -765,6 +792,7 @@ async function _runAmbushTickInner() {
         if (!sh) continue;
         const dir = sh > 0 ? 'LONG' : 'SHORT';
         if (managed.has(`${t}_${dir}`)) continue; // engine already holds this side — skip
+        if (recentlyExited.has(t)) continue;       // exit in-flight — let SELL_EXIT fill, don't re-adopt
         const d = barMap[t];
         if (!d || !Array.isArray(d.bars) || d.bars.length < 3) continue; // need bars for the stop — retry next tick
         const ageM = d.syncedAt ? (Date.now() - new Date(d.syncedAt).getTime()) / 60000 : Infinity;
@@ -1012,6 +1040,9 @@ async function _runAmbushTickInner() {
       // intact on `pos`). The IBKR-resting stop fired on its own → this is the path
       // that previously dropped the trade from the log (WIX +$4 2026-06-05).
       const exitLog = await logReconciledExit(db, pos, today, 'STOP_FIRED_IBKR', config.ownerId);
+      // Cancel leftover orders (the on-deck lot-trigger that the broker-fired exit
+      // left resting — PEGA SELL STP 33.77 / AAOI BUY STP 208.83 on 2026-06-05).
+      const leftover = await cancelLeftoverStops(db, pos.ticker, ibkrStopListByTicker[pos.ticker]);
       await upsertAmbushPosition(db, pos.ticker, {
         state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
         entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
@@ -1021,7 +1052,7 @@ async function _runAmbushTickInner() {
         reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
       });
       pos.state = STATES.STALKING; pos.totalShares = 0; // reflect in-memory so Phase A skips it
-      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0, loggedPnl: exitLog?.pnl, exitEstimated: exitLog?.estimated || undefined });
+      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0, loggedPnl: exitLog?.pnl, exitEstimated: exitLog?.estimated || undefined, leftoverCancelled: leftover || undefined });
       console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${engineShares}sh -> FLAT (IBKR flat, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Phantom cleared.`);
     }
   }
@@ -1186,11 +1217,10 @@ async function _runAmbushTickInner() {
           if (!ibkrSh) {
             // Truly flat at the broker = the IBKR stop fired before this tick. Log the
             // REAL exit (entry data still on `pos`) so the trade isn't dropped, then
-            // cancel any add-side lot trigger so a stale stop can't re-open the name.
+            // cancel EVERY leftover PNTHR stop (the on-deck lot-trigger + any protective
+            // remnant) so a stale order can't re-open the name.
             guardExitLog = await logReconciledExit(db, pos, today, exitType, config.ownerId);
-            await enqueueAmbushOrder(db, 'CANCEL_LOT_TRIGGER', {
-              ticker: pos.ticker, direction: pos.direction, reason: 'RECONCILE_FLAT',
-            });
+            await cancelLeftoverStops(db, pos.ticker, ibkrStopListByTicker[pos.ticker]);
           }
           await upsertAmbushPosition(db, pos.ticker, {
             state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
@@ -1239,6 +1269,11 @@ async function _runAmbushTickInner() {
           prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
           todayFirstHourLow: pos.todayFirstHourLow, todayFirstHourHigh: pos.todayFirstHourHigh,
           todayDate: today, livePrice: price, livePriceAt: now,
+          // Mark the exit as IN-FLIGHT. The SELL_EXIT below fills async; until IBKR
+          // confirms flat, AUTO-ADOPT must NOT re-adopt this still-held position (that
+          // re-fired doLiveExit → double exit order + double trade log: ILMN/MKSI
+          // 2026-06-04). Cleared naturally on the next entry/adopt after the window.
+          exitEnqueuedAt: now,
         });
         await enqueueAmbushOrder(db, isLong ? 'SELL_EXIT' : 'COVER_EXIT', {
           ticker: pos.ticker, shares: exitShares, direction: pos.direction, reason: exitType,

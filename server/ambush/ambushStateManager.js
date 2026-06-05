@@ -97,6 +97,20 @@ export async function countAmbushByState(db) {
 // ── Trade Log ───────────────────────────────────────────────────────────────
 
 export async function logAmbushTrade(db, trade) {
+  // Idempotency guard: skip an identical exit already logged in the last 5 min. A
+  // re-fired exit on the next tick (before the SELL_EXIT filled) double-logged
+  // ILMN/MKSI on 2026-06-04. Two genuinely-identical exits (same ticker, exact exit
+  // price, shares, day) within 5 min don't happen, so this only catches duplicates.
+  if (trade.ticker && trade.exitPrice != null && trade.shares != null) {
+    const dupe = await db.collection(TRADES_COLLECTION).findOne({
+      ticker: trade.ticker,
+      exitPrice: trade.exitPrice,
+      shares: trade.shares,
+      exitDate: trade.exitDate,
+      createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) },
+    });
+    if (dupe) return { duplicate: true, _id: dupe._id };
+  }
   return db.collection(TRADES_COLLECTION).insertOne({
     ...trade,
     createdAt: new Date(),

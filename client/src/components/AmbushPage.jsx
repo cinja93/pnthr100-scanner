@@ -812,9 +812,13 @@ export default function AmbushPage() {
   //   • Hourly box  → BRIGHT solid once the hourly fired today (entered — kept all
   //                   day); AMBER while armed but not yet fired.
   const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const NEAR_PCT = 0.005; // within 0.5% of the hourly trigger → AMBER "approaching" precursor
   const posByTicker = {};
   for (const p of positions) posByTicker[(p.ticker || '').toUpperCase()] = p;
-  const funnelStyle = (ticker, isLong, stage) => {
+  // nearPct per armed name (how close to its hourly trigger), from the engine.
+  const nearByTicker = {};
+  for (const h of hunting) if (h && h.ticker && h.nearPct != null) nearByTicker[h.ticker.toUpperCase()] = h.nearPct;
+  const funnelStyle = (ticker, isLong, stage, near) => {
     const t = (ticker || '').toUpperCase();
     const p = posByTicker[t];
     const base  = isLong ? '#22c55e' : '#ef4444';
@@ -829,15 +833,31 @@ export default function AmbushPage() {
     if (stage === 'daily')  return (huntingSet.has(t) || firedToday)
       ? { ...light, held: false, label: 'daily trigger cleared' }
       : { ...faint, held: false, label: 'daily not cleared yet' };
-    // hourly
-    return firedToday
-      ? { ...solid, held: false, label: 'hourly fired — entered today' }
-      : { ...amber, held: false, label: 'armed — waiting on the hourly break' };
+    // hourly: fired today → bright; armed & within 0.5% of the trigger → AMBER
+    // (approaching, may fire — no guarantee); armed but still far → faint.
+    if (firedToday) return { ...solid, held: false, label: 'hourly fired — entered today' };
+    if (near != null && near <= NEAR_PCT) return { ...amber, held: false, label: `approaching the hourly break (${(near * 100).toFixed(2)}% away)` };
+    return { ...faint, held: false, label: near != null ? `armed — ${(near * 100).toFixed(2)}% from the hourly break` : 'armed — waiting on the hourly break' };
   };
   const engChipStyle = (e) => ({
     fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontFamily: 'monospace', cursor: 'pointer',
     color: e.text, background: e.bg, border: `1px solid ${e.border}`,
   });
+
+  // ── DIRECTIONAL CONFLICT detection (Scott 2026-06-05) ────────────────────────
+  // A held position whose direction is OPPOSITE its weekly/daily signal (e.g. an
+  // over-sell flipped a long into a short — the D contamination). Flag it: the hourly
+  // chip flashes and a banner asks for discretionary attention. Signal direction comes
+  // from the weekly BL+1 (long) / SS+1 (short) lists; position direction from IBKR.
+  const signalDir = {};
+  for (const w of (watching.longs || [])) signalDir[(w.ticker || '').toUpperCase()] = 'LONG';
+  for (const w of (watching.shorts || [])) signalDir[(w.ticker || '').toUpperCase()] = 'SHORT';
+  const dirConflicts = positions.filter(p => {
+    const t = (p.ticker || '').toUpperCase();
+    const held = p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0;
+    return held && signalDir[t] && signalDir[t] !== p.direction;
+  });
+  const conflictSet = new Set(dirConflicts.map(p => (p.ticker || '').toUpperCase()));
 
   const byState = {
     STALKING: positions.filter(p => p.state === 'STALKING'),
@@ -1122,6 +1142,19 @@ export default function AmbushPage() {
         </div>
       )}
 
+      {/* ═══ DIRECTIONAL CONFLICT — position opposite its signal (Scott 2026-06-05) ═══ */}
+      <style>{`@keyframes pnthrConflictFlash { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(251,191,36,0); } 50% { opacity: 0.5; box-shadow: 0 0 9px 2px rgba(251,191,36,0.9); } }`}</style>
+      {dirConflicts.length > 0 && (
+        <div style={{ margin: '0 0 12px', padding: '10px 14px', background: '#2a1c0a', border: '2px solid #fbbf24', borderRadius: 8, animation: 'pnthrConflictFlash 1.1s ease-in-out infinite' }}>
+          <div style={{ fontWeight: 800, color: '#fbbf24', letterSpacing: 0.4, marginBottom: 4 }}>⚠ DIRECTIONAL CONFLICT — {dirConflicts.length} NEED ATTENTION</div>
+          {dirConflicts.map(p => (
+            <div key={p.ticker} style={{ fontSize: 12, color: '#f0d090', padding: '2px 0' }}>
+              <b style={{ color: '#fff' }}>{p.ticker}</b> — position is <b>{p.direction}</b> but the signal is <b>{signalDir[(p.ticker || '').toUpperCase()]}</b>. Discretionary review.
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ═══ WATCHING — today's BL+1 / SS+1 candidates ═══ */}
       <div className={styles.section}>
         <div className={styles.sectionHeader} onClick={() => setShowWatching(!showWatching)} style={{ cursor: 'pointer' }}>
@@ -1207,10 +1240,14 @@ export default function AmbushPage() {
         const isFired = (tk) => { const p = posByTicker[(tk || '').toUpperCase()]; return !!(p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0 || p.state === 'ATTACK' || p.entryDate === todayET)); };
         const firedCount = armed.filter(a => isFired(a.ticker)).length;
         const hourlyChip = (it) => {
+          const t = (it.ticker || '').toUpperCase();
           const e = funnelStyle(it.ticker, it.direction === 'LONG', 'hourly');
+          const conflict = conflictSet.has(t);
+          const style = { ...engChipStyle(e) };
+          if (conflict) { style.animation = 'pnthrConflictFlash 0.9s ease-in-out infinite'; style.border = '2px solid #fbbf24'; }
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title={`${e.label} · click for charts`} style={engChipStyle(e)}>
-              {it.ticker}{e.held ? ' •' : ''}
+            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title={conflict ? `⚠ DIRECTION CONFLICT — position is ${it.direction} but the signal is ${signalDir[t]}. Needs attention.` : `${e.label} · click for charts`} style={style}>
+              {it.ticker}{conflict ? ' ⚠' : (e.held ? ' •' : '')}
             </span>
           );
         };

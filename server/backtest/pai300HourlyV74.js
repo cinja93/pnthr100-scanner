@@ -273,7 +273,7 @@ async function main() {
   }
 
   // ── SIMULATION ENGINE ──────────────────────────────────────────────────────
-  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false, wdMode = 'fixed', wdCap = null }) {
+  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false, wdMode = 'fixed', wdCap = null, tenCapAdds = false }) {
     const twoBarTrail   = exitMode === '2bartrail'; // single ratcheting stop = 2-bar low
     const twoBarGoverns = exitMode === '2bar' || twoBarTrail;
     const useBE75 = exitMode === 'be75';
@@ -481,8 +481,16 @@ async function main() {
               const lotTrigger = isLong ? +(pos.originalEntry * (1 + offset)).toFixed(2) : +(pos.originalEntry * (1 - offset)).toFixed(2);
               const triggered = isLong ? hBar.high >= lotTrigger : hBar.low <= lotTrigger;
               if (triggered) {
-                const lotShares = pos.lotPlan[pos.nextLot];
                 const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
+                let lotShares = pos.lotPlan[pos.nextLot];
+                if (tenCapAdds) {
+                  // 10% NAV cap RE-CHECKED on every add (Scott 2026-06-04): trim the add so the
+                  // position never exceeds 10% of NAV (marked at the lot fill price). If already at
+                  // the cap, skip this lot and advance nextLot so it isn't re-tested every bar.
+                  const maxSh = Math.floor((nav() * TICKER_CAP_PCT) / fillPrice);
+                  lotShares = Math.min(lotShares, Math.max(0, maxSh - pos.totalShares));
+                  if (lotShares < 1) { pos.nextLot++; return; }
+                }
                 const c = comm(lotShares, fillPrice); totalComm += c;
                 const lotCost = lotShares * fillPrice + c;
                 if (cash >= lotCost) {
@@ -877,6 +885,74 @@ async function main() {
     const dl = path.join(os.homedir(), 'Downloads');
     const csv = ['ticker,sector,trades,winRatePct,totalPnl,avgPnlPerTrade', ...ranked.map(([t, v]) => `${t},${v.sec},${v.trades},${((v.wins / v.trades) * 100).toFixed(1)},${Math.round(v.pnl)},${Math.round(v.pnl / v.trades)}`)];
     try { fs.writeFileSync(path.join(dl, `PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`), csv.join('\n')); console.log(`\nWrote ranking: ~/Downloads/PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`); } catch {}
+    process.exit(0);
+  }
+
+  // ── TEN-CAP COMPARE (analysis only: node pai300HourlyV74.js --tencap) ─────────
+  // Scott 2026-06-04: keep EXACTLY V7.4 (green-confirmed re-entry, wide running-low stop,
+  // 2-bar exit, no regime gate) but ADD the 10% NAV cap RE-CHECKED on every pyramid add
+  // (pure V7.4 applies the 10% cap at entry sizing only). The 1% cap and the graduated
+  // $150→$225→$300 dial (useGraduated) are already in V7.4. This isolates the on-add cap's
+  // effect vs pure V7.4. Does NOT write the projection baseline.
+  if (process.argv.includes('--tencap')) {
+    const base = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1, useGraduated: true };
+    const years = (new Date(hourlyTradingDates[hourlyTradingDates.length - 1] + 'T12:00:00') - new Date(hourlyTradingDates[0] + 'T12:00:00')) / (365.25 * 86400000);
+    const m = v => '$' + Math.round(v).toLocaleString(); const p = (s, n) => String(s).padStart(n);
+
+    // ── WITHDRAWAL scenario: each time WORKING ≥ $2M → bank $1M, trade on with the rest;
+    //    repeat every time it climbs back to $2M. TOTAL RETURN counts the banked capital:
+    //    total value = working equity + everything banked. (Scott 2026-06-04.)
+    const tv = (r) => {
+      const led = r.dailyLedger || [];
+      const curve = led.map(s => (+s.nav) + (+s.withdrawn || 0));        // working + banked, daily
+      const dts = led.map(s => String(s.date).slice(0, 10));
+      const dret = []; for (let i = 1; i < curve.length; i++) if (curve[i - 1] > 0) dret.push((curve[i] - curve[i - 1]) / curve[i - 1]);
+      let peak = curve[0] || NAV_INITIAL, maxDD = 0; for (const v of curve) { if (v > peak) peak = v; const dd = (peak - v) / peak; if (dd > maxDD) maxDD = dd; }
+      const totalValue = r.equity + r.totalWithdrawn;
+      return {
+        totalValue, banked: r.totalWithdrawn, working: r.equity,
+        totalReturn: (totalValue - NAV_INITIAL) / NAV_INITIAL * 100,
+        cagr: (Math.pow(totalValue / NAV_INITIAL, 1 / years) - 1) * 100,
+        sharpe: computeSharpe(dret, dts), sortino: computeSortino(dret), maxDD: maxDD * 100,
+        pf: r.pf, wr: r.wr, trades: r.trades, lotFills: r.totalLotFills, worst: r.worstSingleTrade,
+        withdrawals: Math.round(r.totalWithdrawn / WITHDRAWAL_AMOUNT), peakDep: r.peakDeployedPct,
+      };
+    };
+    console.log(`\n[TEN-CAP] V7.4 vs V7.4 + 10% cap on adds  (start $${NAV_INITIAL.toLocaleString()}, graduated $150 dial, 1% cap, $2M→bank $1M)\n`);
+    const P = tv(runSim({ ...base, withdrawals: true, tenCapAdds: false, label: 'V7.4 pure' }));
+    const Cc = tv(runSim({ ...base, withdrawals: true, tenCapAdds: true, label: 'V7.4 +10% cap' }));
+
+    console.log('  WITHDRAWAL SCENARIO — total return INCLUDES capital withdrawn (total value = banked + working)');
+    console.log('  ' + 'metric'.padEnd(24) + p('V7.4 pure', 17) + p('V7.4 +10% cap', 17));
+    console.log('  ' + '-'.repeat(58));
+    const wrows = [
+      ['TOTAL RETURN (incl. banked)', `+${P.totalReturn.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`, `+${Cc.totalReturn.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`],
+      ['TOTAL VALUE (banked+working)', m(P.totalValue), m(Cc.totalValue)],
+      ['  └ banked (withdrawn)', m(P.banked) + ` (${P.withdrawals}×$1M)`, m(Cc.banked) + ` (${Cc.withdrawals}×$1M)`],
+      ['  └ working balance', m(P.working), m(Cc.working)],
+      ['Total-value CAGR', `+${P.cagr.toFixed(1)}%`, `+${Cc.cagr.toFixed(1)}%`],
+      ['Sharpe', P.sharpe.toFixed(2), Cc.sharpe.toFixed(2)],
+      ['Sortino', P.sortino.toFixed(1), Cc.sortino.toFixed(1)],
+      ['Max DD (total value)', P.maxDD.toFixed(2) + '%', Cc.maxDD.toFixed(2) + '%'],
+      ['Profit Factor', P.pf.toFixed(1) + 'x', Cc.pf.toFixed(1) + 'x'],
+      ['Win Rate', P.wr.toFixed(0) + '%', Cc.wr.toFixed(0) + '%'],
+      ['Total trades', P.trades.toLocaleString(), Cc.trades.toLocaleString()],
+      ['Lot fills', P.lotFills.toLocaleString(), Cc.lotFills.toLocaleString()],
+      ['Worst single trade', m(P.worst), m(Cc.worst)],
+      ['Peak deployed %', P.peakDep + '%', Cc.peakDep + '%'],
+    ];
+    for (const [a, b, c] of wrows) console.log('  ' + a.padEnd(24) + p(b, 17) + p(c, 17));
+
+    // Pure-compounding reference (no withdrawals — apples-to-apples with the +14,793% card).
+    const std = (r) => { const eq = (r.dailyLedger || []).map(s => +s.nav); const dts = (r.dailyLedger || []).map(s => String(s.date).slice(0, 10)); const dr = []; for (let i = 1; i < eq.length; i++) if (eq[i - 1] > 0) dr.push((eq[i] - eq[i - 1]) / eq[i - 1]); r.sharpe = computeSharpe(dr, dts); r.sortino = computeSortino(dr); return r; };
+    const pc = std(runSim({ ...base, withdrawals: false, tenCapAdds: false, label: 'pure' }));
+    const cc = std(runSim({ ...base, withdrawals: false, tenCapAdds: true, label: 'cap' }));
+    console.log('\n  PURE-COMPOUNDING REFERENCE (no withdrawals — matches the +14,793% card):');
+    console.log('    V7.4 pure:      ' + `+${pc.netReturn.toFixed(0)}% / +${pc.cagr.toFixed(1)}% CAGR / ending ` + m(pc.equity));
+    console.log('    V7.4 +10% cap:  ' + `+${cc.netReturn.toFixed(0)}% / +${cc.cagr.toFixed(1)}% CAGR / ending ` + m(cc.equity));
+    console.log('\n  NOTE: V7.4 ENGINE numbers (green-confirmed re-entry + next-day fill + next-day deferred');
+    console.log('  management). That deferral inflates results and is NOT how the live engine trades intraday');
+    console.log('  (see the live-vs-V7.4 audit). Treat as the V7.4 reference, not a live forecast.\n');
     process.exit(0);
   }
 

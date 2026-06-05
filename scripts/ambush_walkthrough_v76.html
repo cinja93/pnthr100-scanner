@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PNTHR Ambush — System Walkthrough (Rev. 6 — FINAL)</title>
+<style>
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1a1a; font-size: 13.5px; line-height: 1.6; max-width: 780px; margin: 0 auto; padding: 0 20px 70px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 31px; font-weight: 800; letter-spacing: -0.5px; margin: 16px 0 4px; }
+  .lede { font-size: 15px; color: #333; margin: 0 0 8px; }
+  .meta { font-size: 12px; color: #888; margin: 0 0 4px; line-height: 1.5; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em; background: #f0f0f0; border-radius: 4px; padding: 1px 5px; color: #222; }
+  .sec { background: #111; color: #fff; font-size: 18px; font-weight: 700; border-radius: 8px; padding: 11px 16px; margin: 30px 0 14px; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 6px; padding-bottom: 5px; border-bottom: 2px solid #f2c200; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 9px 0; padding-left: 24px; }
+  li { margin: 7px 0; }
+  .small { font-size: 12.5px; color: #666; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: #f4f4f4; font-weight: 700; }
+  .callout { border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px; }
+  .c-key   { background: #eef7ff; border-left: 4px solid #3b82f6; }
+  .c-good  { background: #eefaf0; border-left: 4px solid #22c55e; }
+  .c-watch { background: #fffbe6; border-left: 4px solid #f2c200; }
+  .c-bad   { background: #fdecec; border-left: 4px solid #ef4444; }
+  .badge { display: inline-block; font-family: "SF Mono", Menlo, monospace; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+  .b-stalk { background:#ede9fe; color:#7c3aed; } .b-hunt{ background:#fef3c7; color:#b45309; }
+  .b-attack{ background:#ffedd5; color:#c2410c; } .b-devour{ background:#dcfce7; color:#15803d; }
+  .b-protect{ background:#dbeafe; color:#1d4ed8; } .b-hungry{ background:#fbe2fb; color:#a21caf; }
+  .term { font-weight:700; }
+  .banner { background:#111; color:#fff; border-radius:10px; padding:14px 18px; margin:14px 0; font-size:13.5px; }
+  .banner b { color:#ffd84d; }
+  .win { color:#15803d; font-weight:700; } .lose { color:#b91c1c; font-weight:700; }
+</style>
+</head>
+<body>
+
+<h1>PNTHR Ambush — System Walkthrough</h1>
+<p class="lede">Revision 6 · FINAL · the complete, plain-language explanation of the whole trading system — from the first signal of the week to the last trade of the day.</p>
+<p class="meta"><strong>Revision 6 · FINAL · 2026-06-05.</strong> This describes the <strong>validated</strong> strategy: the V7.5 design with one decisive correction — the <strong>green-confirmed re-entry</strong> — run on the <strong>:00 clock-hour bars you actually see in TWS</strong>. A fresh, court-defensible backtest (on the verified clock-hour data) shows it earns <span class="win">+789% net / +83.2% CAGR</span> over 3.6 years; the last section lists exactly what must change in the live code to match it.</p>
+
+<div class="banner"><b>What changed since Rev 5, in one line.</b> Rev 5 re-entered on <em>any</em> break of the prior hour's high. Backtesting that honestly (no look-ahead, real costs) showed it <span style="color:#ff8a8a">churns the account to zero</span> — tens of thousands of tiny in-and-out trades whose commissions alone exceed the starting capital. Requiring the re-entry bar to <b>close green above the prior bar's high</b> fixes it completely: the same strategy goes from <span style="color:#ff8a8a">−100%</span> to <span style="color:#7CFC00">+789% net</span>. Everything else in the V7.5 design (frozen daily gate, sector filter, tight stop) was sound and is kept.</p></div>
+
+<div class="sec">1. What Ambush is, in one paragraph</div>
+<p>Ambush is an automated trading engine. It watches a fixed list of about 300 stocks (the "AI 300"), and it only buys or sells when several conditions line up at once: a longer-term trend is in place, the trade's sector is moving the right way, a short-term breakout is happening today, and the price has just popped through a precise hourly trigger. When they agree, it takes a position <span class="term">in the direction of the trend</span> — buying breakouts up (a "long") or short-selling breakdowns (a "short"). It starts small and adds only as the trade proves itself, and it always carries a protective stop that trails behind the price and tightens as the trade works, so a winner can't turn back into a loser. It checks everything against your real Interactive Brokers ("IBKR") account every minute and treats that account as the absolute truth. It runs only while the U.S. market is open.</p>
+
+<div class="sec">2. A few words you'll see throughout</div>
+<table>
+  <tr><th>Word</th><th>Plain meaning</th></tr>
+  <tr><td class="term">Long / Short</td><td>Long = you bought, expecting it to rise. Short = you borrowed and sold, expecting it to fall. Everything for a long has a mirror version for a short.</td></tr>
+  <tr><td class="term">Stop</td><td>An automatic exit order resting at the broker. If price reaches it you're out — even if the engine or your computer is off. Your safety net.</td></tr>
+  <tr><td class="term">Hourly bar</td><td>One hour of trading drawn as a candle: a high, low, open and close. A "completed" bar is one whose hour has fully finished. "Green" = it closed higher than it opened.</td></tr>
+  <tr><td class="term">NAV</td><td>Net Asset Value — the total size of the account right now (cash + value of holdings).</td></tr>
+  <tr><td class="term">Lot</td><td>One slice of a position. Ambush builds a full position in five lots, added one at a time as the trade works.</td></tr>
+</table>
+
+<div class="sec">3. The heartbeat — how often it thinks</div>
+<ul>
+  <li><strong>Once every 60 seconds</strong>, Mon–Fri, only while the market is open (9:30 AM–about 4:05 PM ET). Otherwise it does nothing.</li>
+  <li><strong>Only one copy ever acts</strong> each minute — a database lock guarantees it, so an order can never be placed twice.</li>
+  <li>It can be switched off with a single setting. It saves all state between ticks, so it survives restarts without losing any position.</li>
+</ul>
+
+<div class="sec">4. The green lights before a NEW entry</div>
+<p>A stock has to pass <strong>all of these at the same moment</strong>, all pointing the same direction, before Ambush opens a new position:</p>
+<ol>
+  <li><strong>Weekly trend (the slow filter).</strong> Using a proprietary sector-tuned moving average and the PNTHR signal system, the stock has an active <strong>Buy-Long</strong> (or <strong>Sell-Short</strong>) weekly signal. This decides which of the ~300 names may trade today, and in which direction.</li>
+  <li><strong>Sector agrees (directional).</strong> Each AI sector is rated <strong>BULL or BEAR</strong> by its own <strong>5-day return</strong> — positive = BULL, negative = BEAR (the badge on the Sectors AI page). A <strong>long is only allowed in a BULL sector</strong>; a <strong>short only in a BEAR sector</strong>.</li>
+  <li><strong>Daily breakout (today's confirmation).</strong> Live price is <strong>above the higher of the prior two days' highs + a penny</strong> (long) / below the lower of the prior two lows − a penny (short).</li>
+  <li><strong>Hourly trigger (the exact moment).</strong> Live price breaks <strong>above the most-recent completed hourly bar's high + a penny</strong> (long) / below its low − a penny (short). The earliest a new entry can fire is after the first hour completes (10:30).</li>
+</ol>
+<p class="small">A broad market-direction (regime) reading is calculated but <strong>turned off</strong> in this version — Ambush takes both longs and shorts.</p>
+
+<div class="sec">5. How big a bet it makes</div>
+<p>Before entering, Ambush measures the <strong>risk per share</strong> (entry minus the stop) and picks the <strong>smallest</strong> of three limits, so no rule is ever broken:</p>
+<table>
+  <tr><th>Limit</th><th>The math</th><th>Protects</th></tr>
+  <tr><td>Dollar risk</td><td>$300 ÷ risk-per-share</td><td>Never lose more than $300 on one trade's initial stop</td></tr>
+  <tr><td>1% of NAV</td><td>(1% × NAV) ÷ risk-per-share</td><td>One trade never risks more than 1% of the account</td></tr>
+  <tr><td>10% of NAV</td><td>(10% × NAV) ÷ entry price</td><td>No single stock is ever more than 10% of the account</td></tr>
+</table>
+<p>That share count is scaled by a <strong>growth dial</strong> tied to account size:</p>
+<table>
+  <tr><th>NAV</th><th>Dial</th><th>Effect</th></tr>
+  <tr><td>Below $125K</td><td><strong>50%</strong></td><td><strong>~$150 most you can lose on a trade's initial stop — today's setting</strong></td></tr>
+  <tr><td>$125K–$166K</td><td>75%</td><td>~$225</td></tr>
+  <tr><td>$166K and up</td><td>100%</td><td>the full $300</td></tr>
+</table>
+<h3>The five-lot pyramid (with the 10% cap on every add)</h3>
+<p>The full size is split into five lots, added only as price moves in favor:</p>
+<table>
+  <tr><th>Lot</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Added when price is…</td><td>at entry</td><td>+3%</td><td>+6%</td><td>+10%</td><td>+14%</td></tr>
+  <tr><td>Share of the position</td><td>35%</td><td>25%</td><td>20%</td><td>12%</td><td>8%</td></tr>
+</table>
+<p>Only <strong>Lot 1</strong> goes on at entry; Lots 2–5 add automatically as the trade climbs. <strong>Every add re-checks the 10%-of-NAV cap</strong>: if the next lot would push the position past 10% of NAV, the engine trims the top lots (Lot 5, then 4) so the position stays at or under 10% — which also keeps the average cost lower. Costs (slippage, commission, short borrow) are always included.</p>
+
+<div class="sec">6. The life of a trade — six stages</div>
+<table>
+  <tr><th>Stage</th><th>What it means</th></tr>
+  <tr><td><span class="badge b-stalk">① STALKING</span></td><td>Every name with a live weekly signal, waiting for the daily breakout.</td></tr>
+  <tr><td><span class="badge b-hunt">② HUNTING</span></td><td>Daily breakout cleared; watching for the hourly trigger.</td></tr>
+  <tr><td><span class="badge b-attack">③ ATTACK</span></td><td>Trigger fired; the order goes out next tick.</td></tr>
+  <tr><td><span class="badge b-devour">④ DEVOUR</span></td><td>A confirmed position is held, protective stop live at the broker.</td></tr>
+  <tr><td><span class="badge b-hungry">⑤ STILL HUNGRY</span></td><td>A name that exited and is hunting a re-entry. Shows the frozen price it must hold above.</td></tr>
+  <tr><td><span class="badge b-protect">⑥ PROTECT</span></td><td>The trailing stop has climbed above average cost — the trade can no longer lose money.</td></tr>
+</table>
+
+<div class="sec">7. The exit — the two-bar hourly trailing stop</div>
+<div class="callout c-watch">
+  <strong>Long:</strong> stop = the lowest low of the last <strong>two completed hourly bars</strong>, minus a penny.<br>
+  <strong>Short:</strong> stop = the highest high of the last two completed hourly bars, plus a penny.
+</div>
+<ul>
+  <li>It <strong>trails up only</strong>: as the trend climbs the two-bar low rises and the stop follows. It never slides back down.</li>
+  <li>The level is set from the last two <strong>completed</strong> bars, but the exit is <strong>live</strong> — the instant price drops through it, even mid-hour, the resting stop fires.</li>
+  <li>Once the stop trails above average cost, the position flips to <span class="badge b-protect">PROTECT</span> and can't lose money.</li>
+  <li>It governs <strong>from entry</strong> (no $75 break-even snap). A brand-new entry's first stop is the <strong>first-hour low</strong> (the disaster floor) until the two-bar trail rises above it.</li>
+</ul>
+
+<div class="sec">8. Getting back in — a re-entry (the Rev 6 fix)</div>
+<p>When a position exits, the name drops to <span class="badge b-hungry">STILL HUNGRY</span> and can be re-entered — but only on a strict set of checks whose whole purpose is: <strong>only get back in if the trade is genuinely still working, and never churn.</strong></p>
+<ol>
+  <li><strong>The weekly signal is still on.</strong> If the weekly Buy-Long / Sell-Short has ended, the name is dropped.</li>
+  <li><strong>The sector still agrees</strong> (BULL for a long, BEAR for a short).</li>
+  <li><strong>Price is still above the FROZEN original daily breakout.</strong> The 2-day-high level that first qualified the trade this cycle is <strong>frozen</strong> (e.g. $463.89) and held — <em>not</em> re-figured each day. Re-enter only while price holds above it; if it falls below, wait; if it reclaims, eligible again. This stops us re-buying a trade that's rolling over. (Resets only when a new weekly cycle begins.)</li>
+  <li><strong>The re-entry bar CLOSES GREEN above the prior bar's high</strong> (long) / closes red below the prior bar's low (short). <span class="term">This is the decisive Rev 6 change.</span> A brand-new entry uses the lighter intraday poke; a re-entry, because you're jumping back into a trade mid-move, requires the stronger <strong>confirmed close</strong>. Without it the engine re-enters on every intraday wiggle and churns itself to death on commissions; with it, the same strategy is a strong, defensible winner.</li>
+</ol>
+<h3>The tighter stop on a re-entry</h3>
+<ul>
+  <li>The stop starts at the <strong>low of the entry bar</strong> (the bar it broke in on) — tight. Dip below it and you're out for a very small loss, free to re-enter on the next confirmed break (no waiting period).</li>
+  <li>Held through the entry bar and the next two completed hourly bars, then the normal two-bar trailing stop takes over.</li>
+</ul>
+
+<div class="sec">9. The trading day, hour by hour</div>
+<table>
+  <tr><th>Time (ET)</th><th>What the engine does</th></tr>
+  <tr><td>9:25–9:35</td><td><strong>Open blackout.</strong> No new positions. Held positions fully protected by their resting stop.</td></tr>
+  <tr><td>9:30–10:30</td><td>No new positions and no stop re-tightening yet (recording the first-hour high/low). <strong>Held positions are still protected</strong> — their resting stop fires if hit, first hour or not.</td></tr>
+  <tr><td>10:30–16:00</td><td><strong>Full operation:</strong> confirm fills, reconcile to IBKR, manage held positions (add lots, trail stop, take exits), check re-entries, look for new entries — right up to the 4:00 close.</td></tr>
+  <tr><td>16:00–16:05</td><td><strong>Post-bell blackout.</strong> No new positions; held positions still fully managed.</td></tr>
+</table>
+
+<div class="sec">10. The safety net — why it can't make a mess</div>
+<table>
+  <tr><td>Confirmed fills only</td><td>A position is "held" only after IBKR confirms the shares; a rejected order can't become a fake position.</td></tr>
+  <tr><td>Phantom cleanup</td><td>Anything the engine thinks it holds but IBKR shows flat is cleared every minute.</td></tr>
+  <tr><td>One stop per stock; never naked</td><td>Exactly one protective stop in place; if a held stock has none, one is placed immediately. Hand-placed stops are never touched.</td></tr>
+  <tr><td>Check before acting</td><td>No exit or stop is sent unless a fresh IBKR snapshot confirms the position is held, on that side.</td></tr>
+  <tr><td>IBKR is the truth</td><td>Cost basis and share count are reconciled to the broker every tick. One engine, one tick.</td></tr>
+</table>
+
+<div class="sec">11. Capital and withdrawals</div>
+<p>Start $100K. <strong>Each time the working balance reaches $2,000,000, withdraw $1,000,000</strong> (banked, locked, out of trading), and keep trading with the remaining ~$1M; bank another $1M every time it climbs back to $2M. Working capital stays between $1M and $2M — realistic capacity. <strong>Total return counts the banked capital</strong> (total value = banked + working). No leverage: deployed never exceeds available cash.</p>
+
+<div class="sec">12. The validated numbers — honest and court-defensible</div>
+<p>These come from a clean, bar-by-bar intraday backtest of <strong>this exact strategy</strong> (V7.5 + green-confirmed re-entry) over <strong>2022-10-25 → 2026-06-04 (3.61 years), $100K start</strong>, run on the <strong>:00 clock-hour bars that match the trader's TWS chart</strong> (rebuilt from a verified 30-minute backfill — 0 bad bars, 99.4% of days match the daily bars within ±2%). Every real friction is modeled: IBKR commissions, 5 bps slippage on every leg, short borrow, <strong>gap-through stops</strong> (exits fill at the worse of the stop or the bar's open), a <strong>2% average-daily-volume cap</strong> on every fill, and the 10% cap on adds. No next-day look-ahead — every position is managed from its real entry bar.</p>
+<table>
+  <tr><th>Metric</th><th>GROSS</th><th>NET (after 2% mgmt + 30% performance fees)</th></tr>
+  <tr><td>Total return</td><td>+1,818%</td><td class="win">+789%</td></tr>
+  <tr><td>CAGR</td><td>+126.7%</td><td class="win">+83.2%</td></tr>
+  <tr><td>Ending value (from $100K)</td><td>$1,918,247</td><td>$889,294</td></tr>
+  <tr><td>Sharpe / Sortino</td><td>5.07 / 11.6</td><td>3.05 / 4.9</td></tr>
+  <tr><td>Max drawdown</td><td>6.35%</td><td>14.0%</td></tr>
+  <tr><td>Calmar</td><td>19.97</td><td>5.95</td></tr>
+  <tr><td>Profit Factor / Win Rate / Payoff</td><td colspan="2">1.82x · 38% · 3.0x (small frequent losses, fewer larger wins)</td></tr>
+  <tr><td>Positive months</td><td colspan="2">89%</td></tr>
+  <tr><td>Trades (re-entries)</td><td colspan="2">44,546 (39,017)</td></tr>
+  <tr><td>Commission / borrow</td><td colspan="2">$207,769 / $10,493</td></tr>
+</table>
+<div class="callout c-good"><strong>Context.</strong> The old "+14,793%" figure was an artifact of a backtest that didn't manage trades until the next day (look-ahead) — not achievable live. The current live engine, with its any-color re-entry, backtests honestly at <span class="lose">−100%</span>. This strategy — V7.5 + green-confirmed re-entry, on the :00 TWS bars — is the honest, defensible result: a real <span class="win">+789% net / +83.2% CAGR</span>, Sharpe 3.05, with a 14.0% drawdown. (On 9:30-aligned bars with a 60-minute opening range it earns +420% net; the :00 / 30-minute opening range earns more by sizing larger at the same per-trade risk, and improves risk-adjusted metrics too.)</div>
+<div class="callout c-watch"><strong>Two honest caveats (disclose to investors).</strong> (1) <strong>The withdrawal rule barely doesn't fire in-sample</strong> — the account reaches ~$1.91M working in 3.6 years, just under the $2M trigger, so the first $1M banking begins right at the edge of the window; the +789% is the working balance, ~$0 banked yet. (2) <strong>Worst single trade: −$6,653.</strong> The "$150 max loss" describes only the <em>initial</em> Lot-1 risk; once a position pyramids toward 10% of NAV and then <strong>gaps overnight</strong> through its trailed stop, the loss can be larger — though small as a share of NAV (the worst trade was ~0.3% of the account at the time; at the $100K launch size the equivalent worst case is roughly ten times smaller). This gap tail-risk is real and modeled honestly here.</div>
+
+<div class="sec">13. What must change in the LIVE code to match this (sign-off checklist)</div>
+<p>The live engine has drifted from this validated design. The six changes below bring it back in line; the bar-source question (item 6) is now <strong>resolved — everything runs on the :00 TWS bars, and the +789% is re-validated on exactly those bars.</strong> Apply all six, then go live with the bridge in dry-run for the first tick to confirm the first adopt/tighten — "live must match the backtest."</p>
+<table>
+  <tr><th>#</th><th>Rule</th><th>Live today</th><th>Change to (Rev 6)</th><th>Where</th></tr>
+  <tr><td>1</td><td><strong>Re-entry trigger</strong> (the critical fix)</td><td>1-bar break, <strong>any color</strong></td><td><strong>Confirmed GREEN close</strong> above the prior bar's high (red close below for shorts)</td><td><code>ambushCron.js</code> ~1479–1492</td></tr>
+  <tr><td>2</td><td>Re-entry stop</td><td>wide running-low since exit</td><td><strong>Entry-bar low</strong> (tight), then the 2-bar trail after 2 bars</td><td><code>ambushCron.js</code> Phase B ~1326–1328</td></tr>
+  <tr><td>3</td><td>Re-entry daily gate</td><td><strong>rolled</strong> to the current 2-day high</td><td><strong>FROZEN</strong> original breakout, held all cycle (already a locked decision)</td><td><code>ambushCron.js</code> ~437–447, ~1448</td></tr>
+  <tr><td>4</td><td>Sector filter</td><td>no-op (checks an "AVOID" tag never assigned)</td><td>Real <strong>BULL/BEAR by 5-day return</strong>, must match trade direction</td><td><code>ambushEngine.js</code> <code>getSectorOk</code> ~292</td></tr>
+  <tr><td>5</td><td>Signal parameters</td><td>carnivore params (21-wk, 1.10×) for 28 names</td><td>AI params (sector-tuned EMA, 1.25× gate) for <strong>all</strong> AI-300 names</td><td><code>ambushEngine.js</code> ~246–247</td></tr>
+  <tr><td>6</td><td><strong>All bar logic on :00 clock-hour</strong> (decision RESOLVED — re-validated)</td><td>new entries on 9:30-aligned bars; stop/re-entry on :00</td><td>Put <strong>every</strong> decision (new-entry trigger, opening-range stop, 2-bar trail, re-entry) on the <strong>:00 clock-hour bars</strong>. Opening range becomes 9:30–10:00; earliest entry 10:00. This is the basis the +789% is validated on.</td><td><code>ambushCron.js</code> Phase D + bar builder</td></tr>
+</table>
+<p><strong>Keep unchanged (already correct):</strong> the 10% cap on adds, regime gate OFF, the graduated $150→$225→$300 dial, the 1% NAV cap, the two-bar trailing exit, the new-entry first-hour-low stop, the 5-lot pyramid, and the $2M→bank-$1M withdrawal rule.</p>
+<p class="small"><strong>Note on item 1:</strong> this reverses the 2026-06-03 change that switched re-entry to a 1-bar any-color break "to catch fast re-entries." The backtest is unambiguous: that single change is what converted V7.4 into a loser. The green confirmation is what makes the strategy work; missing a few fast re-entries is the price of not churning.</p>
+
+<div class="sec">14. One-page cheat sheet</div>
+<table>
+  <tr><td>What it trades</td><td>The AI 300 (~300 stocks), longs and shorts</td></tr>
+  <tr><td>New entry</td><td>Weekly signal + sector agrees + price past the 2-day high/low + breaks the prior hourly bar — all same direction</td></tr>
+  <tr><td>Entry window</td><td>After 10:30 to the 4:00 close (no entries 9:25–9:35 or 16:00–16:05)</td></tr>
+  <tr><td>Size</td><td>Smallest of $300 risk / 1% NAV / 10% NAV, × growth dial (50% now → ~$150 initial risk)</td></tr>
+  <tr><td>Five lots</td><td>35/25/20/12/8% at +0/3/6/10/14%; every add re-checks the 10% cap, trimming top lots</td></tr>
+  <tr><td>New-entry stop</td><td>First-hour low (long) / high (short)</td></tr>
+  <tr><td>Re-entry rule</td><td>Weekly on + sector agrees + price above the FROZEN original breakout + a <strong>green-confirmed</strong> break of the prior hourly bar</td></tr>
+  <tr><td>Re-entry stop</td><td>Entry-bar low (tight) for ~2 bars, then the two-bar trail</td></tr>
+  <tr><td>Exit</td><td>Two-bar hourly trailing stop, trails up only, governs from entry</td></tr>
+  <tr><td>Withdrawals</td><td>$2M working → bank $1M, trade on with the rest; total return counts the banked capital</td></tr>
+  <tr><td>Validated (net, :00 TWS bars)</td><td>+789% total / +83.2% CAGR / Sharpe 3.05 / 14.0% max DD over 3.6 years</td></tr>
+</table>
+
+<p class="small" style="margin-top:24px">PNTHR Funds — Ambush System Walkthrough, Revision 6 (FINAL), 2026-06-05. Strategy validated by <code>server/backtest/pai300HourlyV75_defensible.js</code> (honest intraday, all real frictions). Numbers are backtested results, not a promise of future performance.</p>
+
+</body>
+</html>

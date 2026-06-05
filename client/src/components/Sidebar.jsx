@@ -40,7 +40,7 @@ const NAV_GROUPS = [
     info: 'investorsDen',
     items: [
       { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | Carnivore', badgeType: 'split', needsAccess: true },
-      { key: 'ambush-ir-live', label: '  Ambush V7.4', badge: 'AMBUSH', badgeType: 'live', needsAccess: true, accessKey: 'ir-live', irChild: true },
+      { key: 'ambush-ir-live', label: '  Ambush V7.6', badge: 'AMBUSH', badgeType: 'live', needsAccess: true, accessKey: 'ir-live', irChild: true },
       { key: 'data-room', label: 'Data Room',            badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
@@ -65,7 +65,7 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'ambush',   label: 'Ambush V7.4',  badge: 'LIVE' },
+      { key: 'ambush',   label: 'Ambush V7.6',  badge: 'LIVE' },
       { key: 'orders',   label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
     ],
   },
@@ -107,7 +107,7 @@ const SECTION_INFO = {
   },
   pnthrLive: {
     title: 'PNTHR Live',
-    body: "Live operations center. Ambush V7.4 is the fully automated intraday system: longs AND shorts in any market regime, 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and a 2-bar trailing exit. Orders shows the active trading pipeline and heat exposure.",
+    body: "Live operations center. Ambush V7.6 is the fully automated intraday system: longs AND shorts in any market regime, 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and a 2-bar trailing exit. Orders shows the active trading pipeline and heat exposure.",
   },
   strategy: {
     title: 'Strategy',

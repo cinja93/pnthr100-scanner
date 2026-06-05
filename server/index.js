@@ -2970,7 +2970,7 @@ app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireIrLiveAccess, irLi
 app.get('/api/carnivore-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, carnivoreIrMetricsHandler);
 app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, carnivoreIrTradesHandler);
 
-// ── PNTHR Ambush V7.4 — Intelligence Report (no-gate + 2-bar; 3 tiers) ───────
+// ── PNTHR Ambush V7.6 — Intelligence Report (no-gate + 2-bar; 3 tiers) ───────
 app.get('/api/ambush-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, ambushIrMetricsHandler);
 app.get('/api/ambush-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, ambushIrTradesHandler);
 
@@ -6645,7 +6645,7 @@ cron.schedule('15 17 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: PNTHR AMBUSH V7.3 — 60-second live tick ─────────────────────────
+// ── Cron: PNTHR AMBUSH V7.6 — 60-second live tick ─────────────────────────
 // Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
 // Data source: IBKR live prices (held tickers) + FMP batch quotes (non-held).
 // The engine's own isMarketHours() gate prevents processing outside 9:30-16:05.
@@ -8630,14 +8630,16 @@ app.post('/api/ambush/discrepancy/:ticker/adopt', authenticateJWT, requireAdmin,
     // NAV for lot sizing.
     let nav = 83000;
     try { const prof = await getUserProfile(req.user.userId); if (prof?.accountSize > 0) nav = prof.accountSize; } catch {}
-    const { sizeLots } = await import('./ambush/ambushEngine.js');
+    const { sizeLots, deriveNextLot } = await import('./ambush/ambushEngine.js');
     const { upsertAmbushPosition } = await import('./ambush/ambushStateManager.js');
     const sizing = sizeLots(entry, stop, dir, nav, 1.0);
     await upsertAmbushPosition(db, ticker, {
       state: 'ACTIVE', direction: dir, totalShares: Math.abs(ib.shares),
       avgCost: +entry.toFixed(4), entryPrice: +entry.toFixed(4), originalEntry: +entry.toFixed(4),
       stop, atBE: true, trailingActive: true, peak: 0,
-      lotPlan: sizing?.lotPlan || null, nextLot: 2, // current IBKR size = base; engine can pyramid L2+ from here
+      // nextLot DERIVED from the held shares (count of lots filled), never hardcoded: the
+      // engine then queues the correct next lot. Hardcoding 2 skipped a pyramid add.
+      lotPlan: sizing?.lotPlan || null, nextLot: deriveNextLot(Math.abs(ib.shares), sizing?.lotPlan),
       adoptedAt: new Date(), adoptedFrom: 'IBKR_DISCREPANCY', updatedAt: new Date(),
     });
     res.json({ ok: true, action: 'adopt', ticker, direction: dir, shares: Math.abs(ib.shares), stop });

@@ -1,5 +1,5 @@
 // server/ambush/ambushEngine.js
-// ── PNTHR AMBUSH V7.3 — Live State Machine ─────────────────────────────────
+// ── PNTHR AMBUSH V7.6 — Live State Machine ─────────────────────────────────
 //
 // Replicates the V7 stress-test backtest logic for live intraday trading.
 // States: STALKING → ATTACK → ACTIVE → PROTECT
@@ -27,7 +27,11 @@ import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
 import { connectToDatabase } from '../database.js';
 
 // ── Constants (locked to V7 backtest) ───────────────────────────────────────
-export const AMBUSH_VERSION = '7.4.0';  // no regime gate (longs+shorts any regime) + 2-bar exit governs (no $75 BE snap)
+export const AMBUSH_VERSION = '7.6.0';  // V7.5 design + GREEN-confirmed re-entry, on :00 TWS clock-hour bars (validated +789% net)
+// V7.6 (2026-06-05): re-entry = GREEN-confirmed close above prior bar's high; re-entry stop = entry-bar low;
+// re-entry daily gate = FROZEN original breakout; sector = real BULL/BEAR by 5-day return; AI signal params for
+// all names; all bar logic on :00 clock-hour bars (opening range 9:30-10:00). Kept from V7.4: no regime gate,
+// 2-bar exit governs from entry, 10% cap on adds, graduated $150 dial.
 
 export const BE_THRESHOLD    = 75;       // dollars unrealized profit to trigger Break Even
 export const VITALITY_PCT    = 0.01;     // 1% NAV per position risk
@@ -36,7 +40,7 @@ export const MAX_LOSS        = 300;      // $300 max risk per position
 export const STRIKE_PCT      = [0.35, 0.25, 0.20, 0.12, 0.08];
 export const LOT_OFFSETS     = [0, 0.03, 0.06, 0.10, 0.14];
 export const SLIPPAGE_BPS    = 5;
-export const FIRST_HOUR_END  = '10:30';
+export const FIRST_HOUR_END  = '10:00';  // V7.6: :00 clock-hour world — opening bar is 9:30-10:00; first new entry at 10:00
 export const PAI300_REGIME_PERIOD = 36;
 export const WITHDRAWAL_THRESHOLD = 2_000_000;
 export const WITHDRAWAL_AMOUNT    = 1_000_000;
@@ -178,6 +182,21 @@ export function sizeLots(entryPrice, stopPrice, direction, nav, sizingMultiplier
   return { totalShares, lotPlan, l1Shares, rps };
 }
 
+// ── nextLot from a known share count (the ONE source of truth for adopt/backfill) ──
+// `nextLot` is the 0-based index of the next lot to fill = the COUNT of lots already
+// filled. After L1 it is 1 (L2 is next), after L1+L2 it is 2 (L3 next), etc. This is the
+// convention every entry path, the lot-add (LOT_OFFSETS[nextLot]/lotPlan[nextLot]), the
+// V7.4 backtest, and the dashboard all use. The adopt + backfill paths must DERIVE it from
+// the held shares, never hardcode it: hardcoding overshoots and makes the engine target the
+// lot AFTER the real next one (skipping a pyramid add) and the card paint a phantom fill.
+export function deriveNextLot(absShares, lotPlan) {
+  if (!Array.isArray(lotPlan) || lotPlan.length === 0) return 1;
+  const abs = Math.abs(+absShares || 0);
+  let run = 0, filled = 0;
+  for (const q of lotPlan) { run += q; if (abs >= run - 0.5) filled++; }
+  return Math.max(1, Math.min(filled, lotPlan.length));
+}
+
 // ── Weekly signal + regime functions ────────────────────────────────────────
 // These load from MongoDB and cache for the duration of each cron tick.
 // The cron tick calls loadSignalContext() once, then passes the context
@@ -210,26 +229,28 @@ export async function loadSignalContext(db) {
   // Ambush is AI 300 only — ALL tickers use PAI300 regime (getRegime)
   // and AI sector tier ranking (getSectorOk). No Carnivore ETF gates.
 
-  // AI sector tier ranks
+  // AI sector tier ranks + 5-day returns (V7.6: the BULL/BEAR sector filter is by 5-day return).
   const sectorRankDocs = await db.collection('pnthr_ai_sector_rank_daily')
     .find({}).sort({ date: 1 }).toArray();
   const aiSectorTierByDate = {};
+  const aiSectorFiveDayByDate = {};   // date -> { sectorId -> fiveDayReturn }
   for (const doc of sectorRankDocs) {
-    const tiers = {};
-    for (const r of (doc.ranks || [])) tiers[r.sectorId] = r.tier;
+    const tiers = {}, fiveDay = {};
+    for (const r of (doc.ranks || [])) { tiers[r.sectorId] = r.tier; fiveDay[r.sectorId] = r.fiveDayReturn; }
     aiSectorTierByDate[doc.date] = tiers;
+    aiSectorFiveDayByDate[doc.date] = fiveDay;
   }
 
-  // Compute weekly signals for all AI tickers
-  const allTickers = Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t] || CARNIVORE_MODE_TICKERS.has(t));
+  // Compute weekly signals for all AI-300 tickers. V7.6: AI params (sector-tuned EMA, 1.25× gate)
+  // for EVERY name — the V7.4 carnivore overlay (21-wk EMA, 1.10× gate for ~28 names) is dropped.
+  const allTickers = Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t]);
   const signalsByTicker = {};
   for (const ticker of allTickers) {
     const bars = weeklyBarsByTicker[ticker];
     if (!bars || bars.length < 35) continue;
-    const isCarnivore = CARNIVORE_MODE_TICKERS.has(ticker);
     const sectorId = AI_TICKER_META[ticker]?.sectorId;
-    const period = isCarnivore ? 21 : (SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30);
-    const gateOffset = isCarnivore ? 0.10 : 0.25;
+    const period = SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30;
+    const gateOffset = 0.25;
     const result = detectAllSignals(bars, period, false, null, gateOffset);
 
     const activeBLPeriods = [], activeSSPeriods = [];
@@ -250,13 +271,14 @@ export async function loadSignalContext(db) {
     }
     if (blStart) activeBLPeriods.push({ from: blStart, to: '9999-12-31', entry: blEntry });
     if (ssStart) activeSSPeriods.push({ from: ssStart, to: '9999-12-31', entry: ssEntry });
-    signalsByTicker[ticker] = { activeBLPeriods, activeSSPeriods, isCarnivore };
+    signalsByTicker[ticker] = { activeBLPeriods, activeSSPeriods, isCarnivore: false };
   }
 
   return {
     weeklyBarsByTicker,
     pai300RegimeByWeek,
     aiSectorTierByDate,
+    aiSectorFiveDayByDate,
     signalsByTicker,
   };
 }
@@ -274,17 +296,25 @@ export function getRegime(ctx, ticker, dateStr) {
   return best !== null ? rm[best] : true;
 }
 
-export function getSectorOk(ctx, ticker, dateStr) {
-  // Ambush is AI 300 only — ALL tickers (including the 26 Carnivore overlap)
-  // use AI sector tier ranking. Every AI 300 ticker is in AI_TICKER_META.
+export function getSectorOk(ctx, ticker, dateStr, direction) {
+  // V7.6: real directional BULL/BEAR sector filter by the sector's 5-day return.
+  //   LONG is allowed only in a BULL sector (5-day return ≥ 0);
+  //   SHORT is allowed only in a BEAR sector (5-day return < 0).
+  // (This replaces the old `tier !== 'AVOID'` check, which was a no-op — the sector
+  // engine writes GO/NEUTRAL/NO_GO, never 'AVOID', so every sector used to pass.)
+  // Only gates ENTRIES/re-entries, never exits, so missing sector data safely skips a
+  // new entry rather than ever blocking a protective exit.
   const sectorId = AI_TICKER_META[ticker]?.sectorId;
-  if (!sectorId) return true; // unknown sector → pass through
-
-  const dates = Object.keys(ctx.aiSectorTierByDate).sort();
+  if (!sectorId) return false; // unknown sector → not eligible (no blind entries)
+  const map = ctx.aiSectorFiveDayByDate;
+  if (!map) return false;
+  const dates = Object.keys(map).sort();
   let best = null;
   for (const d of dates) { if (d <= dateStr) best = d; else break; }
-  if (!best) return true;
-  return ctx.aiSectorTierByDate[best]?.[sectorId] !== 'AVOID';
+  if (!best) return false;
+  const r = map[best]?.[sectorId];
+  if (r === undefined || r === null) return false; // no 5-day data → skip the entry
+  return direction === 'LONG' ? r >= 0 : r < 0;
 }
 
 export function isActiveBL(ctx, ticker, dateStr) {

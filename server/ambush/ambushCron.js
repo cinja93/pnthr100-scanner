@@ -1,5 +1,5 @@
 // server/ambush/ambushCron.js
-// ── PNTHR AMBUSH V7.4 — 60-Second Live Tick Processor ─────────────────────
+// ── PNTHR AMBUSH V7.6 — 60-Second Live Tick Processor ─────────────────────
 //
 // Ticks every 60 seconds during market hours (9:30-16:05 ET, Mon-Fri).
 //
@@ -36,7 +36,7 @@ import {
   STATES, BE_THRESHOLD, STRIKE_PCT, LOT_OFFSETS, SLIPPAGE_BPS, TICKER_CAP_PCT,
   FIRST_HOUR_END, WITHDRAWAL_THRESHOLD, WITHDRAWAL_AMOUNT,
   COMMISSION_PER_SHARE,
-  entrySlip, exitSlip, extractTime, sizeLots,
+  entrySlip, exitSlip, extractTime, sizeLots, deriveNextLot,
   getSizingMultiplier, getSizingTierLabel,
   loadSignalContext, getRegime, getSectorOk, isActiveBL, isActiveSS, getWeeklyTrigger,
   getAiTickers, getSectorName,
@@ -50,16 +50,16 @@ import {
 
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
-// ── PNTHR AMBUSH V7.4 RULE FLAGS (locked 2026-06-01) ─────────────────────────
-// Two changes from V7.3, both validated by the full backtest
-// (server/backtest/pai300HourlyV74.js — "no-gate + 2-bar" = +54.8% total value,
-//  DD 2.17%->1.28%, shorts +$4.0M, deployed <=1x gross, edge persists every year).
-//   1. REGIME GATE REMOVED: take BL+1 longs AND SS+1 shorts in ANY PAI300 regime
-//      (V7.3 took longs only in a bull index, shorts only in a bear index).
-//   2. $75 BREAK-EVEN SNAP REMOVED: the 2-bar broken-low governs the exit from
-//      entry; the first-hour low stays the disaster floor; the lot-trail ratchets
-//      from entry. (V7.3 parked the stop at breakeven once +$75 unrealized.)
-// Flip both back to true to restore exact V7.3 behavior.
+// ── PNTHR AMBUSH V7.6 RULE FLAGS ─────────────────────────────────────────────
+// V7.6 (2026-06-05) = the V7.5 design + GREEN-confirmed re-entry, on :00 TWS clock-hour
+// bars. Validated +789% net / +83.2% CAGR by server/backtest/pai300HourlyV75_defensible.js
+// (CLOCKHOUR + green re-entry). Carried over from V7.4 and kept here:
+//   1. REGIME GATE REMOVED: take BL+1 longs AND SS+1 shorts in ANY PAI300 regime.
+//   2. $75 BREAK-EVEN SNAP REMOVED: the 2-bar broken-low governs the exit from entry.
+// New in V7.6 (coded elsewhere in this file + ambushEngine.js): green-confirmed re-entry
+// (Phase C), entry-bar-low re-entry stop (Phase B), FROZEN daily re-entry gate
+// (applyTriggerMaintenance), real BULL/BEAR sector filter + AI signal params (engine),
+// and ALL bar logic on :00 clock-hour bars (Phase D new-entry, first hour → 10:00).
 const AMBUSH_REGIME_GATE = false;
 const AMBUSH_BE75_SNAP   = false;
 
@@ -431,21 +431,15 @@ function applyTriggerMaintenance(pos, ctx, today, rolling, price) {
   } else if (pos.weeklyTrigger == null && wt?.level != null) {
     pos.weeklyTrigger = wt.level; changed = true;
   }
-  // Daily trigger:
-  //   • HELD position → FREEZE at the entry-day 2-day high (the original breakout this
-  //     position entered on) — for the Live Positions display. Set once, then hold.
-  //   • STALKING re-entry candidate → ROLL with the CURRENT 2-day high every tick
-  //     (Scott 2026-06-04). Re-entry must fire on a break of the *current* daily breakout,
-  //     not a stale frozen level — WCC sat at 369.91 (the 5/29 high) for days while the
-  //     real 2-day high had climbed to 377.91, so it could never re-enter at the right
-  //     level. The gate (Phase C) reads pos.dailyTrigger, so rolling it here fixes both
-  //     the gate and the displayed DY TRIG.
-  const held = (+pos.totalShares || 0) !== 0;
-  if (held) {
-    if (pos.dailyTrigger == null && rolling != null) { pos.dailyTrigger = rolling; changed = true; }
-  } else if (rolling != null && pos.dailyTrigger !== rolling) {
-    pos.dailyTrigger = rolling; changed = true;
-  }
+  // Daily trigger (V7.6 — FROZEN, per the locked re-entry rule):
+  //   FREEZE the daily trigger at the ORIGINAL 2-day breakout the first time it's captured
+  //   this weekly cycle, then HOLD it — for BOTH held positions AND stalking re-entry
+  //   candidates. Re-entry is eligible only while price holds above this frozen level; we do
+  //   NOT roll it up to the current 2-day high (that would chase a fading trade). It resets to
+  //   null only on a new weekly signal cycle (the wtFrom branch above), which re-captures it.
+  //   This reverses the 2026-06-04 "roll the daily" change (the WCC case) — Scott reversed it
+  //   the same day; not re-entering once price falls below the original breakout is intended.
+  if (pos.dailyTrigger == null && rolling != null) { pos.dailyTrigger = rolling; changed = true; }
   return changed;
 }
 
@@ -509,7 +503,7 @@ async function _runAmbushTickInner() {
   const et = getETComponents(now);
   const today = et.date;
   const hourKey = et.hourKey;
-  const isFirstHour = et.totalMinutes < 630; // before 10:30 ET
+  const isFirstHour = et.totalMinutes < 600; // V7.6: before 10:00 ET (:00 clock-hour world — opening bar is 9:30-10:00)
   const maxPositions = config.maxPositions || 999;
   // Entry windows (Scott 2026-06-04): take NEW entries right up to the 4:00 close bell —
   // late-day institutional momentum often carries overnight, and the V7.4 backtest has NO
@@ -706,14 +700,16 @@ async function _runAmbushTickInner() {
         const stop = isLong ? +(Math.min(A.low, B.low) - 0.01).toFixed(2) : +(Math.max(A.high, B.high) + 0.01).toFixed(2);
         const entry = ibkrAvgByTicker[t] || +A.close;
         // Build the L2-L5 pyramid plan from the adopted entry + 2-bar stop, same as a
-        // real entry; nextLot=2 means the live IBKR shares are L1 and Check A queues
-        // L2+ as price runs. Mirrors the manual "Keep (adopt)" path in index.js.
+        // real entry. nextLot = how many lots the live IBKR shares actually cover (DERIVED,
+        // never hardcoded): an L1-sized hold → nextLot=1 so Check A queues L2 next; a
+        // larger manual build resumes at the correct lot. Hardcoding 2 here skipped a lot.
+        // Mirrors the manual "Keep (adopt)" path in index.js.
         const sizing = sizeLots(entry, stop, dir, tradingNav, sizeMult);
         const adopted = {
           state: STATES.ACTIVE, direction: dir, totalShares: Math.abs(sh),
           avgCost: +entry.toFixed(4), entryPrice: +entry.toFixed(4), originalEntry: +entry.toFixed(4),
           stop, atBE: true, trailingActive: true, peak: 0,
-          lotPlan: sizing?.lotPlan || null, nextLot: 2,
+          lotPlan: sizing?.lotPlan || null, nextLot: deriveNextLot(Math.abs(sh), sizing?.lotPlan),
           prevSyntheticBar: { hourKey: String(A.date), open: +A.open, high: +A.high, low: +A.low, close: +A.close },
           prevBarLow: +B.low, prevBarHigh: +B.high,
           adoptedAt: now, adoptedFrom: 'AUTO_IBKR', todayDate: today, livePriceAt: now,
@@ -759,14 +755,16 @@ async function _runAmbushTickInner() {
     const ss = isActiveSS(ctx, ticker, today);
     if (!bl && !ss) continue;
     const regime = getRegime(ctx, ticker, today);
-    const sectorOk = getSectorOk(ctx, ticker, today);
+    // V7.6: directional sector filter — a sector is BULL (longs ok) or BEAR (shorts ok) by 5-day return.
+    const sectorOkLong  = getSectorOk(ctx, ticker, today, 'LONG');
+    const sectorOkShort = getSectorOk(ctx, ticker, today, 'SHORT');
     const tracked = existingTickers.has(ticker);
     const sector = getSectorName(ticker);
     // V7.4: regime no longer gates readiness (longs & shorts taken in any regime).
     const longRegimeOk  = AMBUSH_REGIME_GATE ? !!regime : true;
     const shortRegimeOk = AMBUSH_REGIME_GATE ? !regime  : true;
-    if (bl) watchLongs.push({ ticker, sector, regimeOk: longRegimeOk, sectorOk, tracked, ready: longRegimeOk && sectorOk && !tracked });
-    if (ss) watchShorts.push({ ticker, sector, regimeOk: shortRegimeOk, sectorOk, tracked, ready: shortRegimeOk && sectorOk && !tracked });
+    if (bl) watchLongs.push({ ticker, sector, regimeOk: longRegimeOk, sectorOk: sectorOkLong, tracked, ready: longRegimeOk && sectorOkLong && !tracked });
+    if (ss) watchShorts.push({ ticker, sector, regimeOk: shortRegimeOk, sectorOk: sectorOkShort, tracked, ready: shortRegimeOk && sectorOkShort && !tracked });
   }
   watchLongs.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
   watchShorts.sort((a, b) => (b.ready - a.ready) || a.ticker.localeCompare(b.ticker));
@@ -1321,9 +1319,12 @@ async function _runAmbushTickInner() {
         const rePrice = isLong
           ? entrySlip(price, 'LONG')
           : entrySlip(price, 'SHORT');
+        // V7.6 RE-ENTRY STOP = the GREEN entry bar's low (long) / high (short) — tight, captured
+        // in Phase C as entryBarLow/High. (Was the wide running-low since exit.) The 2-bar trail
+        // takes over once two more clock-hour bars complete. Fall back to running-low if absent.
         const reStop = isLong
-          ? +((pend.runningLow || price * 0.97) - 0.01).toFixed(2)
-          : +((pend.runningHigh || price * 1.03) + 0.01).toFixed(2);
+          ? +(((pend.entryBarLow ?? pend.runningLow ?? price * 0.97)) - 0.01).toFixed(2)
+          : +(((pend.entryBarHigh ?? pend.runningHigh ?? price * 1.03)) + 0.01).toFixed(2);
 
         if (isLong && reStop >= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
         if (!isLong && reStop <= rePrice) { await deleteAmbushPosition(db, pend.ticker); continue; }
@@ -1428,7 +1429,7 @@ async function _runAmbushTickInner() {
           if (isLong && !regime) continue;
           if (!isLong && regime) continue;
         }
-        if (!getSectorOk(ctx, stalk.ticker, today)) continue;
+        if (!getSectorOk(ctx, stalk.ticker, today, stalk.direction)) continue;
 
         // RE-ENTRY GATE — DAILY 2-day-high breakout only (2026-06-04 fix).
         // "Weekly signal intact" is ALREADY enforced by the isActiveBL/isActiveSS check
@@ -1483,20 +1484,34 @@ async function _runAmbushTickInner() {
         // reference is prevSyntheticBar = the most-recent completed bar, seeded from the
         // verified IBKR feed (= the trader's TWS chart). (A protective exit is a 2-bar
         // break; a re-entry is a 1-bar break — different rules, per Scott.)
-        const prevBar = stalk.prevSyntheticBar;  // most-recent completed hourly bar
-        const breakoutLevel = isLong
-          ? +(prevBar.high + 0.01).toFixed(2)
-          : +(prevBar.low - 0.01).toFixed(2);
-        const breakoutDetected = isLong ? price >= breakoutLevel : price <= breakoutLevel;
+        // ── V7.6 GREEN-CONFIRMED RE-ENTRY ─────────────────────────────────────────
+        // Re-enter ONLY when the most-recent COMPLETED clock-hour bar CLOSED GREEN above
+        // the prior bar's high (long) / closed red below the prior bar's low (short): the
+        // bar closed up AND both its high and its close cleared the prior bar's high. This
+        // is the churn off-switch — an any-color intraday poke no longer re-enters. (The
+        // +789% backtest is validated on exactly this rule; any-color backtests at −100%.)
+        const prevBar = stalk.prevSyntheticBar;  // most-recent COMPLETED clock-hour bar (o/h/l/c)
+        const priorHigh = stalk.prevBarHigh, priorLow = stalk.prevBarLow; // the bar before it
+        let breakoutDetected = false;
+        if (isLong && priorHigh != null) {
+          breakoutDetected = prevBar.close > prevBar.open && prevBar.high > priorHigh && prevBar.close > priorHigh;
+        } else if (!isLong && priorLow != null) {
+          breakoutDetected = prevBar.close < prevBar.open && prevBar.low < priorLow && prevBar.close < priorLow;
+        }
+        const breakoutLevel = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2); // for the log
 
         if (breakoutDetected) {
           // Transition STALKING -> ATTACK; Phase B fills at the live price next tick.
+          // Capture the GREEN entry bar's low/high so Phase B can set the tight V7.6
+          // re-entry stop = the entry bar's low (long) / high (short).
           await upsertAmbushPosition(db, stalk.ticker, {
             state: STATES.ATTACK,
             direction: stalk.direction,
             originalEntry: stalk.originalEntry,
             runningLow: stalk.runningLow || prevBar.low,
             runningHigh: stalk.runningHigh || prevBar.high,
+            entryBarLow: prevBar.low,    // V7.6: the green confirming bar = the re-entry "entry bar"
+            entryBarHigh: prevBar.high,
             cycleNum: stalk.cycleNum || 0,
             todayFirstHourLow: stalk.todayFirstHourLow,
             todayFirstHourHigh: stalk.todayFirstHourHigh,
@@ -1548,8 +1563,6 @@ async function _runAmbushTickInner() {
       const price = livePrices[ticker];
       if (!price) continue;
 
-      if (!getSectorOk(ctx, ticker, today)) continue;
-
       // V7.4: regime gate removed — take BL+1 longs AND SS+1 shorts in any regime.
       // (BL and SS are mutually exclusive per ticker; long takes precedence if ever both.)
       let direction = null;
@@ -1562,6 +1575,9 @@ async function _runAmbushTickInner() {
         else if (isActiveSS(ctx, ticker, today)) direction = 'SHORT';
       }
       if (!direction) continue;
+
+      // V7.6: directional BULL/BEAR sector filter (needs the direction, so it runs here).
+      if (!getSectorOk(ctx, ticker, today, direction)) continue;
 
       // 2-day trigger check using cached daily bars
       const priorData = priorDayData[ticker];
@@ -1580,25 +1596,26 @@ async function _runAmbushTickInner() {
     // HUNTING (read-only): surface the daily-cleared candidates to the dashboard.
     huntingList = breakoutCandidates.map(c => ({ ticker: c.ticker, direction: c.direction }));
 
-    // Step 2: For the narrow candidate set, fetch FMP hourly bars for breakout check
+    // Step 2: V7.6 — for the narrow candidate set, fetch FMP 30-min bars and build :00
+    // CLOCK-HOUR bars (matching TWS and the backtest), then check the N=1 breakout on those.
     if (breakoutCandidates.length > 0) {
-      console.log(`[Ambush] MCE: ${breakoutCandidates.length} tickers passed pre-filter, checking hourly breakout...`);
+      console.log(`[Ambush] MCE: ${breakoutCandidates.length} tickers passed pre-filter, checking :00 clock-hour breakout...`);
       const candidateTickers = breakoutCandidates.map(c => c.ticker);
-      const hourlyBars = await fetchFmpHourlyBars(candidateTickers);
+      const min30Map = await fetchFmp30MinBars(candidateTickers);
 
       for (const { ticker, direction } of breakoutCandidates) {
         try {
-          const hBars = hourlyBars[ticker];
-          if (!hBars || hBars.length < 1) continue;
-          const todayOnlyBars = hBars.filter(b => b.date.startsWith(today));
+          // Completed :00 clock-hour bars for today (clockHourBars drops the still-forming hour).
+          const todayOnlyBars = clockHourBars(min30Map[ticker], today, et.totalMinutes)
+            .map(b => ({ date: b.hourKey, open: +b.open, high: +b.high, low: +b.low, close: +b.close }));
           if (todayOnlyBars.length < 1) continue;
 
-          // ── V7.4 N=1 ENTRY (validated, executable) ──────────────────────────
-          // The daily 2-day-high is already cleared (breakoutCandidate). The trigger
-          // is a REAL-TIME break of the high of the most-recent COMPLETED hourly bar
-          // (N=1), caught on this 60s tick — NOT a closed-bar green confirmation, and
-          // NOT a 2-bar wait. Fill at the live price (≈ the breakout, caught <60s).
-          // Stop = first-hour low/high. Earliest entry ~10:30 (break the opening hour).
+          // ── V7.6 N=1 NEW ENTRY (validated, executable, on :00 clock-hour bars) ──
+          // The daily 2-day-high is already cleared (breakoutCandidate). The trigger is a
+          // REAL-TIME break of the high of the most-recent COMPLETED :00 clock-hour bar
+          // (N=1, any color — new entries don't need the green confirm; re-entries do),
+          // caught on this 60s tick. Fill at the live price (≈ the breakout, caught <60s).
+          // Stop = first-hour (9:30-10:00) low/high. Earliest entry ~10:00 (break the opening bar).
           const currentPrice = livePrices[ticker];
           if (!currentPrice) continue;
           const barEndMin = (b) => {

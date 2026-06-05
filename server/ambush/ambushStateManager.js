@@ -16,7 +16,8 @@
 //     avgCost:         136.12,             // weighted avg across filled lots
 //     totalShares:     45,                 // current total shares held
 //     lotPlan:         [16, 11, 9, 5, 4],  // target shares per lot
-//     nextLot:         2,                  // next lot to fill (1-indexed, 1=L2)
+//     nextLot:         1,                  // count of lots filled = 0-based index of next lot
+//                                          //   (1 = L1 filled, L2 is next; L2-add reads lotPlan[1])
 //     originalEntry:   135.50,             // original L1 price for lot offset calc
 //     stop:            131.20,             // current stop price
 //     atBE:            false,              // Break Even triggered?

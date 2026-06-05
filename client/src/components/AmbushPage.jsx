@@ -1,4 +1,4 @@
-// AmbushPage.jsx — PNTHR Ambush V7.4 Dashboard
+// AmbushPage.jsx — PNTHR Ambush V7.6 Dashboard
 // Full phase visibility: STALKING → ATTACK → ACTIVE → PROTECT
 // Every metric the engine uses is surfaced so you can verify the machine.
 
@@ -183,7 +183,7 @@ function LotDetail({ pos }) {
         </div>
       </div>
 
-      {/* Lot-trail status for PROTECT (V7.4) */}
+      {/* Lot-trail status for PROTECT (V7.6) */}
       {pos.state === 'PROTECT' && (
         <div className={styles.lotSection}>
           <div className={styles.lotSectionTitle}>LOT-TRAIL STATUS</div>
@@ -796,8 +796,8 @@ export default function AmbushPage() {
   const toggleExpand = (ticker) => setExpanded(prev => ({ ...prev, [ticker]: !prev[ticker] }));
 
   // ── Loading / Error ──
-  if (loading) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.4" /><div className={styles.loading}>Loading Ambush data...</div></div>;
-  if (error) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.4" /><div className={styles.error}>Error: {error}</div></div>;
+  if (loading) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.6" /><div className={styles.loading}>Loading Ambush data...</div></div>;
+  if (error) return <div className={styles.page}><PageHeader title="PNTHR AMBUSH V7.6" /><div className={styles.error}>Error: {error}</div></div>;
 
   // ── Data prep ──
   const positions = data?.positions || [];
@@ -939,7 +939,7 @@ export default function AmbushPage() {
   // ── Render ──
   return (
     <div className={styles.page}>
-      <PageHeader title="PNTHR AMBUSH V7.4" />
+      <PageHeader title="PNTHR AMBUSH V7.6" />
 
       {/* ═══ STATUS BAR ═══ */}
       <div className={styles.statusBar}>
@@ -1029,7 +1029,7 @@ export default function AmbushPage() {
           background: '#f59e0b22', border: '1px solid #f59e0b66', color: '#f59e0b', fontWeight: 600,
         }}>
           ⚠ WITHDRAW ${Number(lastResult.withdrawalAlert.amount).toLocaleString()} NOW — account hit ${Number(lastResult.withdrawalAlert.nav).toLocaleString()}.
-          The engine is already sizing off ${Number(lastResult.withdrawalAlert.tradingNav).toLocaleString()} (V7.4 rule). Wire the $1M out to stay on the model.
+          The engine is already sizing off ${Number(lastResult.withdrawalAlert.tradingNav).toLocaleString()} (V7.6 rule). Wire the $1M out to stay on the model.
         </div>
       )}
 

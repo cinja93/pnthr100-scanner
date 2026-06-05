@@ -1751,7 +1751,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}
           {renderPage === 'aiOrders' && <AumShield block showDuration><AiOrdersPage /></AumShield>}
 
-          {/* PNTHR AMBUSH — V7.4 intraday Kanban dashboard (no regime gate, longs+shorts, 2-bar exit) */}
+          {/* PNTHR AMBUSH — V7.6 intraday Kanban dashboard (no regime gate, longs+shorts, 2-bar exit) */}
           {renderPage === 'ambush' && <AumShield block showDuration><AmbushPage /></AumShield>}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
@@ -1797,7 +1797,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 
-          {/* Intelligence Report Live — Ambush V7.4 variant */}
+          {/* Intelligence Report Live — Ambush V7.6 variant */}
           {renderPage === 'ambush-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
             ? <IrLivePage fund="ambush" />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>

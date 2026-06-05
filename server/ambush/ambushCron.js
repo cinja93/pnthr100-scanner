@@ -1057,6 +1057,36 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // ── PERIODIC ORPHAN-STOP SWEEP (2026-06-05) ──────────────────────────────────
+  // Belt-and-suspenders for the orphan class. The at-reconcile cleanup above fires
+  // only the instant a position goes flat; this catches anything STRANDED another
+  // way — a stop re-bound onto an already-flat ticker after a restart, a pre-fix
+  // leftover, a missed reconcile tick. Each tick, cancel any PNTHR stop resting on a
+  // TRULY FLAT, IDLE ticker. SAFE vs re-entries: a re-entry candidate is flat with NO
+  // resting orders (entry is a market order; the protective stop is placed AFTER the
+  // fill), and we ONLY sweep a ticker whose engine record is STALKING or absent and
+  // that had no entry/adopt/exit activity in the last 90s — so a fresh entry (which
+  // is ACTIVE/ATTACK/FILLING) or a just-reconciled name is never swept during
+  // snapshot lag. PNTHR-tagged + flat only; manual TWS stops untouched.
+  if (ibkrSnapAgeMin <= 10) {
+    const recBy = {}; for (const p of allPositions) recBy[(p.ticker || '').toUpperCase()] = p;
+    for (const [t, list] of Object.entries(ibkrStopListByTicker)) {
+      if (ibkrSharesByTicker[t]) continue;                              // IBKR holds it — not flat
+      const pnthrStops = (list || []).filter(s => (s.ref || '') === 'PNTHR' && s.permId);
+      if (!pnthrStops.length) continue;
+      const rec = recBy[t];
+      if (rec && rec.state !== STATES.STALKING) continue;              // engine thinks it's live/entering
+      const stamps = [rec?.adoptedAt, rec?.exitEnqueuedAt, rec?.lotFills?.[rec.lotFills?.length - 1]?.at]
+        .filter(Boolean).map(x => new Date(x).getTime()).filter(n => !isNaN(n));
+      if (stamps.length && (Date.now() - Math.max(...stamps)) < 90000) continue; // fresh — await sync
+      const n = await cancelLeftoverStops(db, t, pnthrStops);
+      if (n) {
+        actions.push({ type: 'ORPHAN_SWEEP', ticker: t, cancelled: n });
+        console.log(`[Ambush] ORPHAN-SWEEP ${t}: cancelled ${n} stranded PNTHR stop(s) on a flat/idle ticker.`);
+      }
+    }
+  }
+
   // ═══ PHASE A: Process existing ACTIVE + PROTECT positions ═══
   const activePositions = allPositions.filter(p =>
     p.state === STATES.ACTIVE || p.state === STATES.PROTECT

@@ -1177,11 +1177,18 @@ def _execute_ambush_command(app, rate_limiter, cmd):
         if not entry_result.get('ok'):
             return False, entry_result, entry_result.get('error') or 'ENTRY_FAILED'
 
-        # 2. Protective stop
+        # 2. Protective stop — CLEAN SLATE FIRST. Cancel any existing protective stop
+        # on the exit side before placing the new one, so a re-entry can NEVER stack a
+        # second protective stop. D 2026-06-05: a 22-sh stop from an earlier entry
+        # lingered alongside the new 21-sh stop (~43 sh of coverage on 21 sh); when
+        # price dropped, BOTH fired and OVER-SOLD, flipping the long to a short. Entry
+        # now sweeps-then-places exactly like MODIFY_STOP. (Reconcile-before-act already
+        # guarantees we only enter when flat, so there is no live position to un-protect.)
         stop_price = request.get('stopPrice')
         stop_result = None
         if stop_price:
             time.sleep(1)  # brief pause for TWS to register the position
+            app.cancel_pnthr_protective_stops(ticker, action=stop_action)
             stop_result = app.place_protective_stop(
                 ticker=ticker, action=stop_action, shares=shares,
                 stop_price=stop_price, tif='GTC', rth=True,

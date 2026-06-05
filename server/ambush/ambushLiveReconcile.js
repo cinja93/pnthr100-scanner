@@ -177,7 +177,13 @@ export async function getAmbushLiveReconcile(db) {
 
     // risk ladder: NAV% at each lot level, and risk ($) at full 5 lots
     const lotPlan = pos?.lotPlan || null;
-    const rps = (pos && engStop != null && pos.avgCost) ? Math.abs(pos.avgCost - engStop) : null; // risk per share now
+    // DOWNSIDE risk per share only. When the stop is at/past breakeven the position
+    // CANNOT lose — stopping out books a profit — so risk is $0, not |avg-stop|
+    // (which mislabeled locked PROFIT as risk: HSAI/ILMN false reds 2026-06-05).
+    // Long loses only if stop < avg; short loses only if stop > avg.
+    const rps = (pos && engStop != null && pos.avgCost)
+      ? Math.max(0, isLong ? (pos.avgCost - engStop) : (engStop - pos.avgCost))
+      : null; // downside risk per share now (0 = stop locks a profit)
     const fullSh = lotPlan ? lotPlan.reduce((a, b) => a + b, 0) : null;
     const riskAtFull = (rps != null && fullSh != null) ? +(rps * fullSh).toFixed(2) : (rps != null ? +(rps * engSh).toFixed(2) : null);
     const lotLadder = lotPlan ? lotPlan.map((_, i) => {

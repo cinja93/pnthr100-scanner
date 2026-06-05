@@ -817,6 +817,27 @@ export default function AmbushPage() {
     ACTIVE:   positions.filter(p => p.state === 'ACTIVE'),
     PROTECT:  positions.filter(p => p.state === 'PROTECT'),
   };
+
+  // Order live positions by URGENCY (Scott 2026-06-05): most urgent reconcile
+  // severity at the top (red → amber → green → gray), and within each tier the
+  // least-profitable first — so names needing attention are top-burner and the
+  // ones doing great sit at the bottom. recByTicker is the IBKR-truth reconcile.
+  const sevRank = { red: 0, yellow: 1, amber: 1, green: 2, gray: 3 };
+  const openPnlOf = (p) => {
+    if (!p.avgCost || !p.livePrice || !p.totalShares) return 0;
+    return p.direction === 'LONG'
+      ? (p.livePrice - p.avgCost) * p.totalShares
+      : (p.avgCost - p.livePrice) * p.totalShares;
+  };
+  const byUrgency = (a, b) => {
+    const ra = sevRank[recByTicker[a.ticker]?.rollup] ?? 3;
+    const rb = sevRank[recByTicker[b.ticker]?.rollup] ?? 3;
+    if (ra !== rb) return ra - rb;          // red first, green last
+    return openPnlOf(a) - openPnlOf(b);     // least profitable first within a tier
+  };
+  byState.ACTIVE.sort(byUrgency);
+  byState.PROTECT.sort(byUrgency);
+
   const livePositions = [...byState.PROTECT, ...byState.ACTIVE]; // PROTECT first (more important)
 
   // Live total: current unrealized P&L across all open positions (refreshes each 60s poll).

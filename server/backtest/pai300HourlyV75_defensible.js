@@ -40,7 +40,7 @@ import { applyFeeEngine } from './ai300FeeOverlay.js';
 import { computeSharpe, computeSortino } from '../irLiveService.js';
 
 // ── Constants (mirror ambushEngine.js — single source of truth) ────────────────
-const NAV_INITIAL          = 100_000;          // §3: Filet 100k
+let   NAV_INITIAL          = +(process.env.AMBUSH_START) || 100_000;  // §3: Filet 100k (override via AMBUSH_START for per-tier IR)
 const VITALITY_PCT         = 0.01;             // 1% NAV risk cap
 const TICKER_CAP_PCT       = 0.10;             // 10% NAV single-name cap
 const STRIKE_PCT           = [0.35, 0.25, 0.20, 0.12, 0.08]; // 5-lot pyramid weights
@@ -63,8 +63,14 @@ function sizingMultiplier(nav) {
   return 0.50;
 }
 
-// Filet-100k fund-fee tier (§4)
+// Filet-100k fund-fee tier (§4) — used by the analysis modes (always $100K).
 const FILET_TIER = { startingCapital: 100_000, baseRate: 0.30, loyaltyRate: 0.25 };
+// Per-tier fund-fee schedule by seed capital (for the per-tier IR data emit).
+function feeTierFor(seed) {
+  if (seed <= 100_000) return { label: 'Filet',       key: '100k', startingCapital: seed, baseRate: 0.30, loyaltyRate: 0.25 };
+  if (seed <= 500_000) return { label: 'Porterhouse', key: '500k', startingCapital: seed, baseRate: 0.25, loyaltyRate: 0.20 };
+  return                       { label: 'Wagyu',       key: '1m',   startingCapital: seed, baseRate: 0.20, loyaltyRate: 0.15 };
+}
 
 // ── The locked literal-spec configuration (the canonical default run) ───────────
 const SPEC = {
@@ -267,7 +273,7 @@ async function main() {
         cash += proceeds;
       }
       if (pnl < worstSingleTrade) worstSingleTrade = pnl;
-      exits.push({ pnl, date, hour, ticker, type, direction: pos.direction, shares, avgCost: +pos.avgCost.toFixed(4), exitPrice: +exitPriceSlipped.toFixed(4), entryDate: pos.entryDate, isReentry: !!pos.isReentry, cycleNum: pos.cycleNum });
+      exits.push({ pnl, date, hour, ticker, type, direction: pos.direction, shares, avgCost: +pos.avgCost.toFixed(4), originalEntry: +(pos.originalEntry || pos.avgCost).toFixed(4), exitPrice: +exitPriceSlipped.toFixed(4), entryDate: pos.entryDate, isReentry: !!pos.isReentry, cycleNum: pos.cycleNum });
       return pnl;
     }
 
@@ -672,7 +678,8 @@ async function main() {
   console.log('[4] Building GROSS total-value curve + metrics...');
   const grossM = curveMetrics(grossCurve, 'equity');
   console.log('[5] Applying Filet-100k fund-fee overlay (GROSS → NET)...');
-  const { netCurve, totalMgmtFees, totalPerfFees, finalHwm, quarterlyLog } = applyFeeEngine(grossCurve, FILET_TIER);
+  const FEE_TIER = feeTierFor(NAV_INITIAL); // per-seed fund-fee schedule (Filet/Porterhouse/Wagyu)
+  const { netCurve, totalMgmtFees, totalPerfFees, finalHwm, quarterlyLog } = applyFeeEngine(grossCurve, FEE_TIER);
   const netM = curveMetrics(netCurve, 'netEquity');
   const ts = tradeStats(exits);
   const { pf, wr, payoff, avgWin, avgLoss, realizedDD$ } = { ...ts, realizedDD$: ts.realizedDD$ };
@@ -832,6 +839,50 @@ async function main() {
       fs.writeFileSync(projPath, JSON.stringify(projOut));
       console.log(`\n  Wrote LIVE projection baseline: server/data/ambushProjectionBaseline.json (V7.6, ${factors.length} days, net +${netM.totalReturn.toFixed(0)}%)`);
     } catch (e) { console.error('  baseline write failed:', e.message); }
+  }
+
+  // ── EMIT_IR=1 — write the per-tier IR-page data (V7.6) for this seed ───────────
+  // ambushIrService.js reads server/data/ambushIr/{key}.json (grossDaily/netDaily/
+  // tradeStats/tradeLog) and computes the IR metrics itself. Run once per seed
+  // (AMBUSH_START=100000/500000/1000000) so the per-tier withdrawal + ADV + dial
+  // behavior is real, not a scale of the $100K run.
+  if (process.env.EMIT_IR === '1' && V75_GREEN && CLOCKHOUR) {
+    const statGroup = (arr) => {
+      const wins = arr.filter(e => e.pnl > 0), losses = arr.filter(e => e.pnl < 0);
+      const gw = wins.reduce((s, e) => s + e.pnl, 0), gl = Math.abs(losses.reduce((s, e) => s + e.pnl, 0));
+      const aw = wins.length ? gw / wins.length : 0, al = losses.length ? gl / losses.length : 0;
+      return { count: arr.length, total: arr.length, wins: wins.length, losses: losses.length,
+        winRate: arr.length ? +(wins.length / arr.length * 100).toFixed(1) : 0,
+        profitFactor: gl ? +(gw / gl).toFixed(2) : 999, grossWin: +gw.toFixed(2), grossLoss: +gl.toFixed(2),
+        avgWin: +aw.toFixed(2), avgLoss: +al.toFixed(2), payoffRatio: al ? +(aw / al).toFixed(1) : 0 };
+    };
+    const closedExits = exits.filter(e => e.type !== 'OPEN_AT_END');
+    const sortedClosed = closedExits.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+    let rq = NAV_INITIAL, rpk = NAV_INITIAL, rddpct = 0;
+    for (const e of sortedClosed) { rq += e.pnl; if (rq > rpk) rpk = rq; const dd = (rq - rpk) / rpk * 100; if (dd < rddpct) rddpct = dd; }
+    const combined = statGroup(closedExits);
+    const tradeStats = { total: exits.length, closed: closedExits.length, open: exits.length - closedExits.length,
+      bl: statGroup(closedExits.filter(e => e.direction === 'LONG')), ss: statGroup(closedExits.filter(e => e.direction === 'SHORT')),
+      combined, combinedNet: combined, realizedDD: +rddpct.toFixed(2) };
+    const tradeLog = sortedClosed.map(e => {
+      const basis = e.avgCost * e.shares; const pct = basis > 0 ? +(e.pnl / basis * 100).toFixed(2) : 0;
+      return { ticker: e.ticker, signal: e.direction === 'LONG' ? 'BL' : 'SS', direction: e.direction, sectorName: getSectorName(e.ticker),
+        entryDate: e.entryDate, exitDate: e.date, entryPrice: e.originalEntry, exitPrice: e.exitPrice, avgCost: e.avgCost,
+        totalShares: e.shares, lots: null, tradingDays: countTradingDays(e.entryDate, e.date), exitReason: e.type,
+        grossProfitPct: pct, netProfitPct: pct, grossDollarPnl: +e.pnl.toFixed(2), netDollarPnl: +e.pnl.toFixed(2), netIsWinner: e.pnl > 0 };
+    });
+    const firstTradeDate = sortedClosed[0]?.entryDate || dailyLedger[0]?.date;
+    const tierFile = {
+      tier: FEE_TIER.label, seedNav: NAV_INITIAL, version: '7.6.0', firstTradeDate,
+      grossDaily: dailyLedger.map(d => ({ date: d.date, equity: d.totalValue })),
+      netDaily: netCurve.map(n => ({ date: n.date, netEquity: n.netEquity })),
+      tradeStats, tradeLog, totalTrades: exits.length,
+    };
+    try {
+      const p = new URL(`../data/ambushIr/${FEE_TIER.key}.json`, import.meta.url).pathname;
+      fs.writeFileSync(p, JSON.stringify(tierFile));
+      console.log(`\n  Wrote IR tier data: server/data/ambushIr/${FEE_TIER.key}.json (${FEE_TIER.label} $${(NAV_INITIAL/1000).toLocaleString()}K, ${tradeLog.length.toLocaleString()} trades, net end $${Math.round(netM.ending).toLocaleString()})`);
+    } catch (e) { console.error('  IR tier write failed:', e.message); }
   }
 
   console.log('\n' + RULE + '\n');

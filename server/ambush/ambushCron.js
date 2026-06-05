@@ -1029,6 +1029,37 @@ async function _runAmbushTickInner() {
           if (ibkrAbs !== (+pos.totalShares || 0)) {
             console.log(`[Ambush] SHARES-SYNC ${pos.ticker} ${pos.direction}: eng ${+pos.totalShares || 0} -> IBKR ${ibkrAbs}sh (stop qty + display now match the broker)`);
             pos.totalShares = ibkrAbs;
+            // V7.6 (2026-06-05): a grown share count means a RESTING lot trigger
+            // filled at the broker. Advance the ladder from IBKR truth so Check A
+            // rests the NEXT lot. There is NO modeled fill anymore — the broker is
+            // the ONLY thing that advances the ladder (feedback_executable_no_lookahead:
+            // live must match the backtest's at-trigger fill). deriveNextLot = count
+            // of lots whose cumulative planned shares are covered by what IBKR holds.
+            if (pos.lotPlan) {
+              const derivedLot = deriveNextLot(ibkrAbs, pos.lotPlan);
+              if (derivedLot > pos.nextLot) {
+                console.log(`[Ambush] LOT-SYNC ${pos.ticker}: nextLot ${pos.nextLot} -> ${derivedLot} (a resting lot filled at the broker)`);
+                // Record the fill(s) for the Lot Plan panel + audit trail: the
+                // resting order(s) for lots [nextLot .. derivedLot-1] just filled.
+                // Approx fill price = the lot's trigger (where the resting STP sat);
+                // the IBKR-truth avgCost synced above carries the exact cost basis.
+                const newFills = [];
+                for (let L = pos.nextLot; L < derivedLot; L++) {
+                  const off = LOT_OFFSETS[L];
+                  const trg = isLong
+                    ? +(pos.originalEntry * (1 + off)).toFixed(2)
+                    : +(pos.originalEntry * (1 - off)).toFixed(2);
+                  newFills.push({ lot: L, at: now, price: trg });
+                }
+                pos.lotFills = [...(pos.lotFills || []), ...newFills];
+                pos.nextLot = derivedLot;
+              } else if (derivedLot < pos.nextLot) {
+                // Shares fell below the ladder mark (a partial manual trim) — pull
+                // the on-deck lot back to broker truth so we don't skip an add.
+                console.log(`[Ambush] LOT-SYNC ${pos.ticker}: nextLot ${pos.nextLot} -> ${derivedLot} (shares trimmed at the broker)`);
+                pos.nextLot = derivedLot;
+              }
+            }
           }
         }
       }
@@ -1065,10 +1096,20 @@ async function _runAmbushTickInner() {
         const snapFresh = ibkrSnapAgeMin <= 10;
         if (snapFresh && !(typeof ibkrSh === 'number' && ibkrSh !== 0 && Math.sign(ibkrSh) === wantSign)) {
           console.error(`[Ambush] RECONCILE GUARD: refusing ${actionType} on ${pos.ticker} ${pos.direction} ${pos.totalShares}sh — IBKR holds ${ibkrSh ?? 0}. Reconciling engine record to FLAT; no phantom order placed.`);
+          // If the broker is TRULY flat, cancel any add-side lot trigger we left
+          // resting so a stale stop can't re-open the name (the GH orphan). Only
+          // when flat — never when IBKR holds the opposite side, where the add-side
+          // cancel could hit the other position's protective stop. (PNTHR-tagged
+          // only; manual TWS stops are left alone.)
+          if (!ibkrSh) {
+            await enqueueAmbushOrder(db, 'CANCEL_LOT_TRIGGER', {
+              ticker: pos.ticker, direction: pos.direction, reason: 'RECONCILE_FLAT',
+            });
+          }
           await upsertAmbushPosition(db, pos.ticker, {
             state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
             entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
-            atBE: false, trailingActive: false, beDate: null, peak: 0,
+            atBE: false, trailingActive: false, beDate: null, peak: 0, lotTriggerLot: null, lotTriggerPrice: null,
             prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
             cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
             reconciledFlat: `IBKR_${ibkrSh ?? 0}_AT_${exitType}_${today}`,
@@ -1108,7 +1149,7 @@ async function _runAmbushTickInner() {
           runningHigh: isLong ? (pos.runningHigh || pos.syntheticBar?.high || price) : price,
           cycleNum: (pos.cycleNum || 0) + 1,
           entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
-          atBE: false, trailingActive: false, beDate: null, peak: 0,
+          atBE: false, trailingActive: false, beDate: null, peak: 0, lotTriggerLot: null, lotTriggerPrice: null,
           prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
           todayFirstHourLow: pos.todayFirstHourLow, todayFirstHourHigh: pos.todayFirstHourHigh,
           todayDate: today, livePrice: price, livePriceAt: now,
@@ -1120,58 +1161,76 @@ async function _runAmbushTickInner() {
         exited = true;
       };
 
-      // Check A: Lot trigger (fill first, then the stop follows the lots).
-      if (pos.nextLot <= 4 && pos.lotPlan) {
+      // Check A: RESTING NEXT-LOT ORDER (V7.6, 2026-06-05) — keep EXACTLY ONE
+      // add-side stop order resting at IBKR for the NEXT unfilled lot, so the
+      // pyramid fills AT the trigger price (matches the backtest) and we never tie
+      // up capital on lots that aren't next-on-deck. LONG add = BUY STOP above;
+      // SHORT add = SELL STOP below (the OPPOSITE side from the protective stop, so
+      // the two never collide). The broker fills it; the shares-sync above advances
+      // pos.nextLot from IBKR truth; this block then rests the FOLLOWING lot. There
+      // is NO modeled fill anymore — the broker is the only thing that advances the
+      // ladder. The old V7.3 lot-based trailing stop stays REMOVED: the protective
+      // stop is the 2-bar level, managed solely by Check B below (one manager, one
+      // protective stop; the ALAB double-stop cannot recur).
+      //
+      // Idempotent: we only (re)enqueue PLACE_LOT_TRIGGER when the lot we want
+      // CHANGED (lotTriggerLot !== nextLot) OR the add-side order is missing from a
+      // FRESH IBKR snapshot (covers a failed place / bridge restart). The bridge
+      // sweeps any existing add-side lot order before placing, so a repeat is never
+      // a duplicate. On a normal exit the SELL_EXIT/COVER_EXIT command already
+      // cancels every resting order, so here we only proactively CANCEL for the
+      // over-cap / ladder-complete cases.
+      const addAction  = isLong ? 'BUY' : 'SELL';                       // lot-add side
+      const addPresent = !!ibkrStopSidesByTicker[pos.ticker]?.has(addAction);
+      const addMissing = ibkrSnapAgeMin <= 10 && !addPresent;
+      if (!exited && (+pos.totalShares || 0) > 0 && pos.nextLot <= 4 && pos.lotPlan) {
         const offset = LOT_OFFSETS[pos.nextLot];
         const lotTrigger = isLong
           ? +(pos.originalEntry * (1 + offset)).toFixed(2)
           : +(pos.originalEntry * (1 - offset)).toFixed(2);
-        const triggered = isLong ? price >= lotTrigger : price <= lotTrigger;
+        const lotShares = +pos.lotPlan[pos.nextLot] || 0;
         // ── 10% NAV HARD CAP ON ADDS (2026-06-04) ──────────────────────────────
-        // sizeLots() caps the position at 10% NAV / entry AT ENTRY, but nothing re-checked
-        // the cap as lots pyramid on. Combined with the missing shares-sync above, modeled
-        // adds let positions drift toward ~20% NAV this week (LI, INTU, GH). Mirror the 679
-        // book's HARD GATE (feedback_concentration_cap, 2026-05-05): once the live notional
-        // is at/over 10% of NAV, place NO further lot. We size off the IBKR-synced
-        // avgCost + totalShares and the next lot's shares, so the check is on real exposure.
-        const liveNotional = (+pos.avgCost || price) * (+pos.totalShares || 0);
-        const nextLotNotional = (+pos.lotPlan[pos.nextLot] || 0) * lotTrigger;
-        const capDollars = nav * TICKER_CAP_PCT;
-        const overCap = (liveNotional + nextLotNotional) > capDollars;
-        if (triggered && overCap) {
-          console.warn(`[Ambush] CAP-BLOCK ${pos.ticker} ${pos.direction}: L${pos.nextLot + 1} add skipped — live $${Math.round(liveNotional)} + next $${Math.round(nextLotNotional)} > 10% NAV $${Math.round(capDollars)}. No pyramid past the cap.`);
-        }
-        if (triggered && !overCap) {
-          const lotShares = pos.lotPlan[pos.nextLot];
-          const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
-          const oldCost = pos.avgCost * pos.totalShares;
-          pos.totalShares += lotShares;
-          // NOTE: this modeled avgCost is a sub-60s PLACEHOLDER only. The IBKR-truth
-          // sync at the top of this loop overwrites avgCost with the broker's real
-          // average on the very next tick. Do NOT treat this line as the cost basis.
-          pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
-          pos.nextLot++;
-          // Timestamp this lot fill for the Lot Plan panel (lot index = pos.nextLot - 1).
-          pos.lotFills = [...(pos.lotFills || []), { lot: pos.nextLot - 1, at: now, price: fillPrice }];
+        // Mirror the 679 book's HARD GATE (feedback_concentration_cap, 2026-05-05):
+        // once live exposure (IBKR-synced avgCost x totalShares) + the next lot's
+        // notional would breach 10% of NAV, rest NO further lot.
+        const liveNotional    = (+pos.avgCost || price) * (+pos.totalShares || 0);
+        const nextLotNotional = lotShares * lotTrigger;
+        const overCap = (liveNotional + nextLotNotional) > (nav * TICKER_CAP_PCT);
 
-          // V7.6 (2026-06-03): the protective stop is the CURRENT 2-bar-low and is
-          // managed SOLELY by Check B (2BAR_TRACK) below. The old V7.3 lot-based
-          // trailing stop (move the stop to the previous lot's trigger on each lot
-          // fill) was REMOVED — it was a SECOND, conflicting protective-stop manager
-          // that raced Check B and left TWO resting SELL stops in IBKR (the ALAB
-          // duplicate: LOT_TRAIL @365.04 + 2BAR_TRACK @352.26 on 2026-06-03). On a
-          // lot fill, Check A now ONLY records the fill + places the next lot trigger;
-          // it never touches the protective stop. One manager, one stop.
-
-          actions.push({
-            type: 'LOT_FILL', ticker: pos.ticker,
-            lot: pos.nextLot - 1, shares: lotShares, price: fillPrice,
-          });
+        if (lotShares <= 0 || overCap) {
+          // Don't want a resting lot here — cancel the add-side order if one rests.
+          if (addPresent || pos.lotTriggerLot != null) {
+            await enqueueAmbushOrder(db, 'CANCEL_LOT_TRIGGER', {
+              ticker: pos.ticker, direction: pos.direction,
+              reason: overCap ? 'OVER_CAP' : 'NO_SHARES',
+            });
+            if (overCap) console.warn(`[Ambush] CAP-BLOCK ${pos.ticker} ${pos.direction}: L${pos.nextLot + 1} resting add cancelled — live $${Math.round(liveNotional)} + next $${Math.round(nextLotNotional)} > 10% NAV $${Math.round(nav * TICKER_CAP_PCT)}.`);
+            pos.lotTriggerLot = null;
+            pos.lotTriggerPrice = null;
+            actions.push({ type: 'LOT_CANCEL', ticker: pos.ticker, reason: overCap ? 'OVER_CAP' : 'NO_SHARES' });
+          }
+        } else if (pos.lotTriggerLot !== pos.nextLot || addMissing) {
+          // Rest exactly one order for the NEXT lot. (Re)place when the on-deck lot
+          // advanced or a fresh snapshot shows it missing; the bridge sweeps the
+          // add-side first, so this is safe to repeat without stacking duplicates.
           await enqueueAmbushOrder(db, 'PLACE_LOT_TRIGGER', {
             ticker: pos.ticker, direction: pos.direction,
-            lot: pos.nextLot - 1, shares: lotShares, triggerPrice: lotTrigger,
+            lot: pos.nextLot, shares: lotShares, triggerPrice: lotTrigger,
           });
+          pos.lotTriggerLot = pos.nextLot;
+          pos.lotTriggerPrice = lotTrigger;
+          actions.push({ type: 'LOT_RESTING', ticker: pos.ticker, lot: pos.nextLot, shares: lotShares, trigger: lotTrigger, replace: addPresent });
         }
+      } else if (!exited && pos.lotTriggerLot != null) {
+        // Ladder complete (nextLot > 4) or no shares left — cancel any lingering rest.
+        if (addPresent) {
+          await enqueueAmbushOrder(db, 'CANCEL_LOT_TRIGGER', {
+            ticker: pos.ticker, direction: pos.direction, reason: 'LADDER_COMPLETE',
+          });
+          actions.push({ type: 'LOT_CANCEL', ticker: pos.ticker, reason: 'LADDER_COMPLETE' });
+        }
+        pos.lotTriggerLot = null;
+        pos.lotTriggerPrice = null;
       }
 
       // Check B: 2-BAR-LOW EXIT STOP (V7.6, 2026-06-03) — maintain a REAL resting STP order
@@ -1255,6 +1314,8 @@ async function _runAmbushTickInner() {
           totalShares: pos.totalShares,
           nextLot: pos.nextLot,
           lotFills: pos.lotFills,
+          lotTriggerLot: pos.lotTriggerLot ?? null,
+          lotTriggerPrice: pos.lotTriggerPrice ?? null,
           atBE: pos.atBE,
           trailingActive: false,
           beDate: pos.beDate,

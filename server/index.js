@@ -8419,7 +8419,7 @@ app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, asy
 // ── PNTHR AMBUSH outbox endpoints ─────────────────────────────────────────
 // Separate outbox for Ambush strategy. The bridge polls these endpoints
 // alongside the main ibkr-outbox. Commands: BUY_ENTRY, SHORT_ENTRY,
-// SELL_EXIT, COVER_EXIT, MODIFY_STOP, PLACE_LOT_TRIGGER.
+// SELL_EXIT, COVER_EXIT, MODIFY_STOP, PLACE_LOT_TRIGGER, CANCEL_LOT_TRIGGER.
 
 app.get('/api/admin/ambush-outbox/pending', authenticateJWT, requireAdmin, async (req, res) => {
   try {

@@ -1222,9 +1222,16 @@ def _execute_ambush_command(app, rate_limiter, cmd):
             None if result.get('ok') else f'MODIFY_FAILED_PHASE_{result.get("phase")}')
 
     # ── PLACE_LOT_TRIGGER ────────────────────────────────────────────────
-    # Same as main outbox PLACE_LOT_TRIGGER
+    # Rest ONE add-side stop for the next pyramid lot (LONG add = BUY STOP above,
+    # SHORT add = SELL STOP below). IDEMPOTENT: sweep any existing add-side lot
+    # trigger for this ticker FIRST, then place exactly one — so the engine
+    # re-resting the same on-deck lot (snapshot-lag re-place) never stacks a
+    # duplicate. cancel_pnthr_protective_stops is side-aware: it touches ONLY the
+    # add-side, leaving the opposite-side protective stop and any manual TWS stop
+    # untouched (the ALAB double-stop cannot recur).
     if command == 'PLACE_LOT_TRIGGER':
         lot_action = 'BUY' if is_long else 'SELL'
+        app.cancel_pnthr_protective_stops(ticker, action=lot_action)
         result = app.place_protective_stop(
             ticker=ticker, action=lot_action, shares=request.get('shares'),
             stop_price=request.get('triggerPrice'), tif='GTC', rth=True,
@@ -1233,6 +1240,18 @@ def _execute_ambush_command(app, rate_limiter, cmd):
             result['lot'] = request.get('lot')
         return result.get('ok', False), result, (
             None if result.get('ok') else result.get('error') or result.get('status'))
+
+    # ── CANCEL_LOT_TRIGGER ───────────────────────────────────────────────
+    # Cancel the resting add-side lot trigger for `ticker` (LONG add = BUY STP,
+    # SHORT add = SELL STP). Used when the position goes over the 10% cap, the
+    # ladder is complete, or a phantom reconciles to flat. Side-aware: leaves the
+    # opposite-side protective stop and any manual TWS stop alone. Idempotent
+    # (ALREADY_GONE = success), so a repeat with nothing to cancel is harmless.
+    if command == 'CANCEL_LOT_TRIGGER':
+        lot_action = 'BUY' if is_long else 'SELL'
+        result = app.cancel_pnthr_protective_stops(ticker, action=lot_action)
+        return result.get('ok', False), result, (
+            None if result.get('ok') else 'CANCEL_LOT_FAILED')
 
     return False, None, f'UNKNOWN_AMBUSH_COMMAND:{command}'
 

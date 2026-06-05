@@ -117,7 +117,7 @@ export async function enqueueAmbushOrder(db, command, request) {
   const id = `amb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   return db.collection(OUTBOX_COLLECTION).insertOne({
     id,
-    command,       // BUY_ENTRY, SELL_EXIT, PLACE_STOP, MODIFY_STOP, PLACE_LOT_TRIGGER, COVER_EXIT, SHORT_ENTRY
+    command,       // BUY_ENTRY, SELL_EXIT, PLACE_STOP, MODIFY_STOP, PLACE_LOT_TRIGGER, CANCEL_LOT_TRIGGER, COVER_EXIT, SHORT_ENTRY
     request,       // { ticker, shares, price, stopPrice, direction, lot, ... }
     status: 'PENDING',
     createdAt: new Date(),

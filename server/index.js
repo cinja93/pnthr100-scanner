@@ -3949,6 +3949,21 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       ).map(p => p.ticker?.toUpperCase()).filter(Boolean)
     );
 
+    // Ambush ownership guard (mirrors ibkrSync.js Phase-3 + orphanOrderJanitor.js):
+    // tickers in pnthr_ambush_positions are managed END TO END by the intraday
+    // Ambush engine (entries, exits, lot pyramids, protective/trailing stops, all
+    // via pnthr_ambush_outbox) and live in their OWN book + reconcile banner
+    // (/api/ambush/discrepancies). They are NEVER written to the old Command book
+    // (pnthr_portfolio), so this legacy reconcile would otherwise flag every Ambush
+    // fill as IBKR_ONLY "TICKER MISSING — NOT in PNTHR Assistant". Skip them here so
+    // the false alerts stop; the Ambush banner owns their reconcile. This does NOT
+    // touch PNTHR AI Orders (different collections) or any real Command position.
+    const ambushOwnedTickers = new Set(
+      (await db.collection('pnthr_ambush_positions')
+        .find({}, { projection: { ticker: 1 } }).toArray()
+      ).map(a => a.ticker?.toUpperCase()).filter(Boolean)
+    );
+
     // Build lookup maps (active IBKR positions only — 0-share entries excluded)
     const ibkrByTicker = {};
     for (const ip of ibkrPositions) {
@@ -4171,6 +4186,9 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       if (!pnthrByTicker[ticker]) {
         // Suppress alert if the ticker was recently closed in PNTHR (within 7 days)
         if (recentlyClosedTickers.has(ticker)) continue;
+        // Owned by the Ambush engine — handled end-to-end in its own book/banner,
+        // never the old Command book. Suppress the false IBKR_ONLY alert.
+        if (ambushOwnedTickers.has(ticker)) continue;
         const rawIbkrShares = +(ibkrByTicker[ticker].shares) || 0;
         const ibkrShares    = Math.abs(rawIbkrShares);
         const soldToday     = todaySoldShares[ticker]   || 0;
@@ -4235,6 +4253,18 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
     const userId = req.user.userId;
     const ticker = (req.body.ticker || '').toUpperCase();
     if (!ticker) return res.status(400).json({ error: 'ticker required' });
+
+    // Ambush ownership guard: refuse to create a Command card for a ticker the
+    // intraday Ambush engine owns (pnthr_ambush_positions). Both engines share ONE
+    // IBKR account; a shadow Command record + its competing protective stop is the
+    // exact AVGO 2026-06-02 contamination (Ambush opened long, closed it, the
+    // orphaned shadow stop fired → account flipped short). The Ambush engine
+    // manages these end to end in its own book. Mirrors ibkrSync.js Phase-3 hand-off.
+    const ambushOwned = await db.collection('pnthr_ambush_positions')
+      .findOne({ ticker }, { projection: { _id: 1 } });
+    if (ambushOwned) {
+      return res.status(409).json({ error: `${ticker} is managed by the Ambush engine and cannot be imported into the Command book (Ambush owns its entries, stops, and exits).` });
+    }
 
     // Pull live IBKR snapshot for this user
     const ibkrDoc = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: userId });

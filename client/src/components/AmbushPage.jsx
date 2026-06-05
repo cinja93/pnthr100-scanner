@@ -714,6 +714,19 @@ export default function AmbushPage() {
   const [error, setError] = useState(null);
   const [tickRunning, setTickRunning] = useState(false);
   const [expanded, setExpanded] = useState({});
+  // Acknowledged directional conflicts ("It's all good") — keyed by ticker:direction,
+  // persisted so a deliberate position-vs-signal divergence (e.g. an intentional
+  // discretionary short) stops nagging across refreshes. A NEW conflict, or the same
+  // ticker flipping to a different direction, re-alerts (the key changes).
+  const [ackedConflicts, setAckedConflicts] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('pnthr_acked_conflicts') || '[]')); }
+    catch { return new Set(); }
+  });
+  const ackConflict = (key) => setAckedConflicts(prev => {
+    const next = new Set(prev); next.add(key);
+    try { localStorage.setItem('pnthr_acked_conflicts', JSON.stringify([...next])); } catch { /* */ }
+    return next;
+  });
   // Click any ticker → open the weekly + daily chart modal (prev/next navigates the box's list).
   const [chartTickers, setChartTickers] = useState([]);
   const [chartIndex, setChartIndex] = useState(0);
@@ -852,10 +865,11 @@ export default function AmbushPage() {
   const signalDir = {};
   for (const w of (watching.longs || [])) signalDir[(w.ticker || '').toUpperCase()] = 'LONG';
   for (const w of (watching.shorts || [])) signalDir[(w.ticker || '').toUpperCase()] = 'SHORT';
+  const conflictKey = (p) => `${(p.ticker || '').toUpperCase()}:${p.direction}`;
   const dirConflicts = positions.filter(p => {
     const t = (p.ticker || '').toUpperCase();
     const held = p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0;
-    return held && signalDir[t] && signalDir[t] !== p.direction;
+    return held && signalDir[t] && signalDir[t] !== p.direction && !ackedConflicts.has(conflictKey(p));
   });
   const conflictSet = new Set(dirConflicts.map(p => (p.ticker || '').toUpperCase()));
 
@@ -1148,8 +1162,9 @@ export default function AmbushPage() {
         <div style={{ margin: '0 0 12px', padding: '10px 14px', background: '#2a1c0a', border: '2px solid #fbbf24', borderRadius: 8, animation: 'pnthrConflictFlash 1.1s ease-in-out infinite' }}>
           <div style={{ fontWeight: 800, color: '#fbbf24', letterSpacing: 0.4, marginBottom: 4 }}>⚠ DIRECTIONAL CONFLICT — {dirConflicts.length} NEED ATTENTION</div>
           {dirConflicts.map(p => (
-            <div key={p.ticker} style={{ fontSize: 12, color: '#f0d090', padding: '2px 0' }}>
-              <b style={{ color: '#fff' }}>{p.ticker}</b> — position is <b>{p.direction}</b> but the signal is <b>{signalDir[(p.ticker || '').toUpperCase()]}</b>. Discretionary review.
+            <div key={p.ticker} style={{ fontSize: 12, color: '#f0d090', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ flex: 1 }}><b style={{ color: '#fff' }}>{p.ticker}</b> — position is <b>{p.direction}</b> but the signal is <b>{signalDir[(p.ticker || '').toUpperCase()]}</b>. Discretionary review.</span>
+              <button onClick={() => ackConflict(conflictKey(p))} title="Dismiss this conflict (you've vetted it). It re-alerts only if the position flips direction." style={{ background: '#1f3a24', color: '#4ade80', border: '1px solid #2f6e3f', borderRadius: 5, padding: '3px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>It's all good</button>
             </div>
           ))}
         </div>

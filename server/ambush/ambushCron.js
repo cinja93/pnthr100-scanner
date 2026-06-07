@@ -1867,6 +1867,26 @@ async function _runAmbushTickInner() {
       const candidateTickers = breakoutCandidates.map(c => c.ticker);
       const min30Map = await fetchFmp30MinBars(candidateTickers);
 
+      // PROXIMITY (2026-06-05): how close each daily-cleared name is to its HOURLY
+      // trigger (high+0.01 long / low-0.01 short of the most-recent COMPLETED clock-
+      // hour bar). The dashboard glows a name AMBER when it's within ~0.5% — a "may
+      // fire soon" precursor — vs faint when still far. Read-only; same trigger math
+      // as the entry check below, just surfaced for the funnel.
+      const barEndMinP = (d) => { const t = extractTime(d); return parseInt(t.slice(0, 2), 10) * 60 + parseInt(t.slice(3, 5), 10) + 60; };
+      for (const h of huntingList) {
+        try {
+          const bars = clockHourBars(min30Map[h.ticker], today, et.totalMinutes)
+            .map(b => ({ date: b.hourKey, high: +b.high, low: +b.low }));
+          const completed = bars.filter(b => barEndMinP(b.date) <= et.totalMinutes).sort((a, b) => a.date.localeCompare(b.date));
+          const price = livePrices[h.ticker];
+          if (!completed.length || !price) continue;
+          const priorBar = completed[completed.length - 1];
+          const trig = h.direction === 'LONG' ? +(priorBar.high + 0.01).toFixed(2) : +(priorBar.low - 0.01).toFixed(2);
+          h.hourlyTrigger = trig;
+          h.nearPct = trig ? +(Math.abs(price - trig) / trig).toFixed(4) : null;
+        } catch { /* leave proximity undefined → dashboard shows faint */ }
+      }
+
       for (const { ticker, direction } of breakoutCandidates) {
         try {
           // Completed :00 clock-hour bars for today (clockHourBars drops the still-forming hour).

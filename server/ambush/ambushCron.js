@@ -1389,6 +1389,18 @@ async function _runAmbushTickInner() {
           ? +(pos.originalEntry * (1 + offset)).toFixed(2)
           : +(pos.originalEntry * (1 - offset)).toFixed(2);
         const lotShares = +pos.lotPlan[pos.nextLot] || 0;
+        // ── PLAN IS CANONICAL FOR LOT-ADD SIZE (2026-06-08) ────────────────────
+        // The resting add-side order MUST hold exactly lotPlan[nextLot] shares. If a
+        // FRESH (<=10m) snapshot shows the add resting with a DIFFERENT share count —
+        // a manual TWS edit (SE 36 vs plan 5, OSK 11 vs 8 on 2026-06-08) or any drift —
+        // the engine re-places it to the plan below. Mirrors the 679 book's locked
+        // "lot trigger shares auto-correct" rule (feedback_lot_trigger_share_auto_correct):
+        // the PNTHR plan is canonical, no manual FIX. The bridge sweeps the add side
+        // before placing, so the correction never stacks a duplicate. (A grown POSITION
+        // is handled separately by SHARES-SYNC/LOT-SYNC above, which advances nextLot;
+        // this only guards the size of the order resting for the on-deck lot.)
+        const addRestingShares = ibkrSnapAgeMin <= 10 ? (+ibkrStopSharesByTicker[pos.ticker]?.[addAction] || 0) : 0;
+        const addWrongSize = ibkrSnapAgeMin <= 10 && addPresent && addRestingShares !== lotShares;
         // ── 10% NAV HARD CAP ON ADDS (2026-06-04) ──────────────────────────────
         // Mirror the 679 book's HARD GATE (feedback_concentration_cap, 2026-05-05):
         // once live exposure (IBKR-synced avgCost x totalShares) + the next lot's
@@ -1409,17 +1421,19 @@ async function _runAmbushTickInner() {
             pos.lotTriggerPrice = null;
             actions.push({ type: 'LOT_CANCEL', ticker: pos.ticker, reason: overCap ? 'OVER_CAP' : 'NO_SHARES' });
           }
-        } else if (pos.lotTriggerLot !== pos.nextLot || addMissing) {
+        } else if (pos.lotTriggerLot !== pos.nextLot || addMissing || addWrongSize) {
           // Rest exactly one order for the NEXT lot. (Re)place when the on-deck lot
-          // advanced or a fresh snapshot shows it missing; the bridge sweeps the
+          // advanced, a fresh snapshot shows it missing, OR the resting add's SHARE
+          // COUNT drifted from the plan (manual TWS edit); the bridge sweeps the
           // add-side first, so this is safe to repeat without stacking duplicates.
+          if (addWrongSize) console.warn(`[Ambush] LOT-SIZE-CORRECT ${pos.ticker} ${pos.direction}: resting add ${addRestingShares}sh != plan L${pos.nextLot + 1} ${lotShares}sh — re-placing to canonical plan size.`);
           await enqueueAmbushOrder(db, 'PLACE_LOT_TRIGGER', {
             ticker: pos.ticker, direction: pos.direction,
             lot: pos.nextLot, shares: lotShares, triggerPrice: lotTrigger,
           });
           pos.lotTriggerLot = pos.nextLot;
           pos.lotTriggerPrice = lotTrigger;
-          actions.push({ type: 'LOT_RESTING', ticker: pos.ticker, lot: pos.nextLot, shares: lotShares, trigger: lotTrigger, replace: addPresent });
+          actions.push({ type: addWrongSize ? 'LOT_SIZE_CORRECT' : 'LOT_RESTING', ticker: pos.ticker, lot: pos.nextLot, shares: lotShares, trigger: lotTrigger, was: addWrongSize ? addRestingShares : undefined, replace: addPresent });
         }
       } else if (!exited && pos.lotTriggerLot != null) {
         // Ladder complete (nextLot > 4) or no shares left — cancel any lingering rest.

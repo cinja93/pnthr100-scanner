@@ -1214,8 +1214,45 @@ async function _runAmbushTickInner() {
         }
       }
 
-      // ── During first hour: only collect data, skip price checks ──
+      // ── During first hour: collect data + enforce SAFETY invariants, skip TRAILING ──
+      // The first hour (before 10:00 ET) intentionally defers moving the stop LEVEL — the
+      // 2-bar level needs COMPLETED bars and today's opening bar isn't done. It must NOT
+      // defer two BROKER-TRUTH invariants, or a position that GREW via a resting lot that
+      // filled near the PRIOR close sits with a too-small stop — partly NAKED — for the
+      // whole 9:30-10:00 window. ROOT CAUSE (TTD/WIX 2026-06-08): L2 filled at IBKR Fri near
+      // close (engine off over the weekend); Monday open the SHARES-SYNC block above set
+      // pos.totalShares to IBKR truth IN MEMORY, but this branch persisted only avgCost and
+      // `continue`d — dropping the synced share count AND skipping the Check-B stop coverage.
+      // So IBKR held 63/45 while the protective stop covered only the L1 37/26 → 26/19 sh
+      // naked every opening until the engine "self-healed" at 10:00 ET. Fix: during the first
+      // hour ALSO (1) persist the IBKR-synced totalShares/nextLot/lotFills, and (2) top up the
+      // protective stop's QUANTITY to cover every share, at the EXISTING level (never a fresh
+      // trail). The full Check-B dedup / manual-floor / level-trail still runs post-first-hour.
       if (isFirstHour) {
+        // (2) Qty-only coverage. If a FRESH (<=10m) snapshot shows the protective stop on
+        // our exit side covers fewer shares than we now hold, re-place it with full qty at
+        // the TIGHTER of our stored 2-bar level (from prior completed bars) and whatever is
+        // already resting — so we NEVER loosen and NEVER trail on incomplete first-hour data.
+        if (pos.atBE && pos.stop != null) {
+          const wantAction = isLong ? 'SELL' : 'BUY';
+          const ibkrStopShares = ibkrStopSharesByTicker[pos.ticker]?.[wantAction];
+          const stopQtyShort = ibkrSnapAgeMin <= 10 && typeof ibkrStopShares === 'number'
+            && ibkrStopShares < (+pos.totalShares || 0);
+          if (stopQtyShort) {
+            const restingPx = (ibkrStopListByTicker[pos.ticker] || [])
+              .filter(s => s.action === wantAction && typeof s.price === 'number')
+              .reduce((b, s) => b == null ? s.price : (isLong ? Math.max(b, s.price) : Math.min(b, s.price)), null);
+            const coverPrice = restingPx == null ? pos.stop
+              : (isLong ? Math.max(pos.stop, restingPx) : Math.min(pos.stop, restingPx));
+            pos.stop = +coverPrice.toFixed(2);
+            await enqueueAmbushOrder(db, 'MODIFY_STOP', {
+              ticker: pos.ticker, direction: pos.direction,
+              newStopPrice: pos.stop, shares: pos.totalShares, reason: '2BAR_TRACK_QTY_COVER',
+            });
+            console.log(`[Ambush] FIRST-HOUR QTY-COVER ${pos.ticker} ${pos.direction}: stop covers ${ibkrStopShares} of ${pos.totalShares}sh — re-placing @ ${pos.stop} for full qty (no trail).`);
+            actions.push({ type: 'TRACK_STOP', ticker: pos.ticker, stop: pos.stop, qtyShort: true, firstHour: true });
+          }
+        }
         await upsertAmbushPosition(db, pos.ticker, {
           syntheticBar: pos.syntheticBar,
           prevSyntheticBar: pos.prevSyntheticBar,
@@ -1223,6 +1260,10 @@ async function _runAmbushTickInner() {
           todayFirstHourHigh: pos.todayFirstHourHigh,
           todayDate: pos.todayDate,
           avgCost: pos.avgCost,          // persist the IBKR-synced cost basis even during first hour
+          totalShares: pos.totalShares,  // (1) persist IBKR-synced share count (was dropped → naked stop)
+          nextLot: pos.nextLot,          // (1) persist the ladder advance from the broker fill
+          lotFills: pos.lotFills,        // (1) persist recorded fill(s) for the audit trail
+          stop: pos.stop,                // (1) persist any qty-cover stop level set just above
           livePrice: price,
           livePriceAt: now,
         });

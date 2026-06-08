@@ -1512,7 +1512,12 @@ async function _runAmbushTickInner() {
           // NAKED (HUBS 2026-06-05: covered 4 of 10). Fire when fresh coverage < pos.
           const ibkrStopShares = ibkrStopSharesByTicker[pos.ticker]?.[wantAction];
           const stopQtyShort = ibkrSnapAgeMin <= 10 && typeof ibkrStopShares === 'number' && ibkrStopShares < (+pos.totalShares || 0);
-          if (pos.stop == null || Math.abs(trail - pos.stop) >= 0.01 || stopMissingInIbkr || stopQtyShort) {
+          // Compare price levels in WHOLE CENTS, never floating-point dollars. Math.abs(3.39 - 3.40)
+          // evaluates to 0.009999999999999787 (just under 0.01), so the old `>= 0.01` test read FALSE
+          // and a real one-penny tighten (3.40 -> 3.39) was silently skipped — the stop froze (GRAB,
+          // a penny-priced name, 2026-06-08). Integer cents are exact and can never miss a penny.
+          const levelChangedByAPenny = pos.stop == null || Math.round(trail * 100) !== Math.round(pos.stop * 100);
+          if (levelChangedByAPenny || stopMissingInIbkr || stopQtyShort) {
             pos.stop = trail;
             await enqueueAmbushOrder(db, 'MODIFY_STOP', {
               ticker: pos.ticker, direction: pos.direction,

@@ -66,7 +66,7 @@ import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
 import InvestorManagementPage from './components/InvestorManagementPage';
-import { fetchTopStocks, fetchShortStocks, fetchAiTopStocks, fetchAiShortStocks, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
+import { fetchTopStocks, fetchShortStocks, fetchAiTopStocks, fetchAiShortStocks, fetchAiRankHistory, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
 import './App.css';
@@ -1028,6 +1028,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const [scannerUniverse, setScannerUniverse] = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [aiStocks, setAiStocks] = useState([]);
   const [aiSignals, setAiSignals] = useState({});
+  const [aiRankHistory, setAiRankHistory] = useState({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [aiEarnings, setAiEarnings] = useState({});
@@ -1063,6 +1064,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
       const data = await fetchFn();
       setAiStocks(data);
       setAiSignals({});
+      fetchAiRankHistory().then(d => setAiRankHistory(d?.history || {})).catch(() => {});
       const tickers = data.map(s => s.ticker);
       const opts = { shortList: scanType === 'short' };
       Promise.all([
@@ -1687,7 +1689,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length > 0 && (
-                  <StockTable key={risingMode ? `ai-rising-${activePage}` : `ai-${activePage}`} stocks={risingMode ? risingStocks : aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange defaultSort={risingMode ? { key: 'rankChange', direction: 'desc' } : null} />
+                  <StockTable key={risingMode ? `ai-rising-${activePage}` : `ai-${activePage}`} stocks={risingMode ? risingStocks : aiStocks} signals={aiSignals} laserSignals={{}} signalsLoading={false} earnings={aiEarnings} onTickerClick={handleRowClick} scanType={scanType} hideExchange rankHistory={risingMode ? aiRankHistory : null} defaultSort={risingMode ? { key: 'rankSlope', direction: 'asc' } : null} />
                 )}
 
                 {!aiLoading && !aiError && aiStocks.length === 0 && (

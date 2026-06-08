@@ -138,6 +138,7 @@ import {
   getRankingByDate,
   getMostRecentRanking,
   getStockHistory,
+  getAiRankHistory,
   getListEntryDates,
   getLatestSignals,
   createUser,
@@ -1303,6 +1304,18 @@ app.post('/api/ai-rankings/save', authenticateJWT, requireAdmin, async (req, res
   } catch (error) {
     console.error('Error in manual AI ranking save:', error);
     res.status(500).json({ error: error.message || 'Failed to save AI ranking' });
+  }
+});
+
+// AI rank-trajectory history: per-ticker weekly rank across all saved AI snapshots,
+// returned in ONE call (powers the Rising-list rank sparklines).
+app.get('/api/ai-rankings/history', async (req, res) => {
+  try {
+    const data = await getAiRankHistory();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching AI rank history:', error);
+    res.status(500).json({ error: 'Failed to fetch AI rank history' });
   }
 });
 

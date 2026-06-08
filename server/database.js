@@ -640,6 +640,35 @@ export async function cleanupOldAiRankings(weeksToKeep = 12) {
   }
 }
 
+// Per-ticker weekly RANK history across every saved AI snapshot (oldest → newest).
+// Powers the Rising-list rank-trajectory sparklines. Each snapshot is re-sorted by YTD
+// return + re-ranked the same way the live page is, so a ticker's history is the exact
+// rank it held that week. Returns { dates: [...], history: { TICKER: [{ date, rank }] } }.
+export async function getAiRankHistory() {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return { dates: [], history: {} };
+    const collection = database.collection('ai_rankings');
+    const docs = await collection.find({}, { projection: { date: 1, rankings: 1 } }).sort({ date: 1 }).toArray();
+    const dates = [];
+    const history = {};
+    for (const doc of docs) {
+      if (!doc.date) continue;
+      dates.push(doc.date);
+      const ranked = sortRankingsByYtdAndAssignRank(doc.rankings || []);
+      for (const s of ranked) {
+        const t = (s.ticker || '').toUpperCase();
+        if (!t || s.rank == null) continue;
+        (history[t] ||= []).push({ date: doc.date, rank: s.rank });
+      }
+    }
+    return { dates, history };
+  } catch (error) {
+    console.error('Error getting AI rank history:', error.message);
+    return { dates: [], history: {} };
+  }
+}
+
 // ── Mobile app integration (READ-ONLY from stt-production-db) ──
 // This never writes, updates, or deletes anything in the mobile app's database.
 

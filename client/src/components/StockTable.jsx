@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { computeWeeksAgo, computeTradingDaysAgo } from '../utils/dateUtils';
 import { getStrategyMode } from '../utils/strategyMode';
+import { computeRankSlope } from '../utils/rankTrend';
+import RankSparkline from './RankSparkline';
+import RankChartModal from './RankChartModal';
 import styles from './StockTable.module.css';
 
 import confirmedBuyIcon from './Confirmed Buy Signal.png';
@@ -142,9 +145,10 @@ function getPegTooltip(peg) {
   return `PEG: ${peg.toFixed(2)} — ${reading}`;
 }
 
-export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null, heldTickers = null, defaultSort = null }) {
+export default function StockTable({ stocks, signals = {}, laserSignals = {}, signalsLoading = false, earnings = {}, scannerRanks = null, hideSector = false, hideEarnings = false, hideExchange = false, weeklySignalLabel = 'PNTHR Signal', showDailySignal = false, dailySignals = {}, showKillScore = false, showMode = false, groupBySector = false, groupByCategory = false, pinSignal = null, compact = false, highlightAllEarnings = false, earningsHighlightWindow = null, onTickerClick, onRemove, scanType, rankLabel = 'Performance Rank', analyzeScores = null, fcfMap = null, valMap = null, heldTickers = null, defaultSort = null, rankHistory = null }) {
   const [sortConfig, setSortConfig] = useState(defaultSort || { key: (groupBySector || groupByCategory) ? 'ytdReturn' : 'rank', direction: (groupBySector || groupByCategory) ? 'desc' : 'asc' });
   const [selectedTicker, setSelectedTicker] = useState(null);
+  const [rankModalTicker, setRankModalTicker] = useState(null);
   const listRef = useRef([]);
 
   // Arrow-key navigation through visible rows
@@ -179,6 +183,16 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
       if (!aPin && bPin) return 1;
     }
     const dir = sortConfig.direction === 'asc' ? 1 : -1;
+
+    // Rank-trend slope (Rising sparklines): steepest climb to #1 first; no-history names sink.
+    if (sortConfig.key === 'rankSlope') {
+      const sa = computeRankSlope(rankHistory?.[a.ticker?.toUpperCase()]);
+      const sb = computeRankSlope(rankHistory?.[b.ticker?.toUpperCase()]);
+      if (sa == null && sb == null) return 0;
+      if (sa == null) return 1;
+      if (sb == null) return -1;
+      return dir * (sa - sb);
+    }
 
     // Special handling for rank when using scanner ranks (nulls sort last)
     if (sortConfig.key === 'rank' && hasScannerRanks) {
@@ -384,7 +398,8 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
     (showDailySignal ? 2 : 0) +
     (showKillScore ? 1 : 0) +
     (analyzeScores ? 1 : 0) +
-    (showMode ? 1 : 0);
+    (showMode ? 1 : 0) +
+    (rankHistory ? 1 : 0);
 
   return (
     <div className={styles.tableContainer} style={compact ? { minHeight: 0 } : undefined}>
@@ -403,6 +418,9 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
             <th onClick={() => handleSort('ticker')} className={styles.sortable}>
               Ticker {getSortIndicator('ticker')}
             </th>
+            {rankHistory && <th onClick={() => handleSort('rankSlope')} className={styles.sortable} title="Weekly rank trajectory — click to sort by steepest climb to #1">
+              Rank Trend {getSortIndicator('rankSlope')}
+            </th>}
             {!hideExchange && <th onClick={() => handleSort('exchange')} className={styles.sortable}>
               Exchange {getSortIndicator('exchange')}
             </th>}
@@ -589,6 +607,11 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                   </div>
                   {stock.companyName && <div className={styles.companyName}>{stock.companyName}</div>}
                 </td>
+                {rankHistory && (
+                  <td onClick={e => e.stopPropagation()} style={{ padding: '2px 8px' }}>
+                    <RankSparkline history={rankHistory[stock.ticker?.toUpperCase()]} onClick={() => setRankModalTicker(stock.ticker)} />
+                  </td>
+                )}
                 {!hideExchange && <td>{stock.exchange}</td>}
                 {!hideSector && <td>{stock.sector}</td>}
                 <td className={styles.price}>${stock.currentPrice.toLocaleString()}</td>
@@ -603,7 +626,7 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
                     {analyzeScores && <td><span className={styles.loadingDots}>···</span></td>}
                   </>
                 ) : (signalData?.signal === 'BE' || signalData?.signal === 'SE') ? (
-                  <td colSpan={analyzeScores ? 4 : 3} className={styles.pauseCell}>
+                  <td colSpan={(analyzeScores ? 4 : 3) + (rankHistory ? 1 : 0)} className={styles.pauseCell}>
                     <span className={styles.pauseBadge}>⏸ PAUSE</span>
                   </td>
                 ) : (
@@ -737,6 +760,13 @@ export default function StockTable({ stocks, signals = {}, laserSignals = {}, si
           })()}
         </tbody>
       </table>
+      {rankModalTicker && (
+        <RankChartModal
+          ticker={rankModalTicker}
+          history={rankHistory?.[rankModalTicker?.toUpperCase()]}
+          onClose={() => setRankModalTicker(null)}
+        />
+      )}
     </div>
   );
 }

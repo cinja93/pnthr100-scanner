@@ -93,6 +93,19 @@ export async function fetchAiShortStocks() {
   return response.json();
 }
 
+// AI rank-trajectory history: { dates, history: { TICKER: [{ date, rank }] } } — for the Rising sparklines.
+// Soft-fails to an empty shape so the page never breaks when no snapshots exist yet.
+export async function fetchAiRankHistory() {
+  try {
+    const response = await apiFetch(`${API_BASE}/api/ai-rankings/history`, { headers: authHeaders() });
+    if (!response.ok) return { dates: [], history: {} };
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching AI rank history:', error);
+    return { dates: [], history: {} };
+  }
+}
+
 // Fetch list of available historical rankings (last 12 weeks)
 export async function fetchAvailableDates() {
   try {

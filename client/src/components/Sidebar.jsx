@@ -67,6 +67,7 @@ const NAV_GROUPS = [
     items: [
       { key: 'ambush',   label: 'Ambush V7.6',  badge: 'LIVE' },
       { key: 'orders',   label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'eliteAi',  label: 'Elite AI',  badge: 'NEW' },
     ],
   },
   {

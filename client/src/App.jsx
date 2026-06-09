@@ -62,6 +62,7 @@ import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner
 import ReentryBanner from './components/ReentryBanner';
 import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
+import EliteAiPage from './components/EliteAiPage';
 import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
@@ -1755,6 +1756,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AMBUSH — V7.6 intraday Kanban dashboard (no regime gate, longs+shorts, 2-bar exit) */}
           {renderPage === 'ambush' && <AumShield block showDuration><AmbushPage /></AumShield>}
+
+          {/* PNTHR Elite AI — automated funnel for AI 300 Elite (read-only v1, new isolated page) */}
+          {renderPage === 'eliteAi' && <EliteAiPage />}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}

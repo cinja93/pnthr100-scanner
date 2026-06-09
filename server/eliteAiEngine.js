@@ -83,10 +83,32 @@ export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {})
   return { created, totalOpen: existing.length + created.length, weekOf: doc?.weekOf || null, candidatesScanned: orders.length, minGrade };
 }
 
+// Independent rule-recompute verification — the paper analogue of Ambush's
+// IBKR-truth reconcile. Recomputes what each value SHOULD be per the strategy
+// and flags drift. When live, the IBKR-position comparison plugs in here.
+export function verifyElitePosition(pos, nav = 100000) {
+  const isLong = pos.direction === 'LONG';
+  const entry = +pos.entryPrice, stop = +(pos.stop ?? pos.stopPrice), avg = +pos.avgCost || entry, sh = +pos.totalShares || 0;
+  const cur = +pos.currentPrice || entry;
+  const checks = {};
+  checks.direction = ((pos.signal === 'BL') === isLong) ? { status: 'green' } : { status: 'red', reason: `${pos.signal}≠${pos.direction}` };
+  const plannedFilled = (pos.lotPlan || []).slice(0, pos.nextLot || 1).reduce((s, v) => s + v, 0);
+  checks.shares = (sh === plannedFilled) ? { status: 'green' } : { status: 'yellow', reason: `${sh} vs plan ${plannedFilled}` };
+  checks.stopLevel = (isLong ? stop < cur : stop > cur) ? { status: 'green' } : { status: 'red', reason: `wrong side of ${cur.toFixed(2)}` };
+  const notional = sh * avg;
+  checks.cap = (notional <= nav * 0.10 + 1) ? { status: 'green' } : { status: 'red', reason: `${(notional / nav * 100).toFixed(1)}% > 10%` };
+  const riskPct = (Math.abs(avg - stop) * sh) / nav;
+  checks.risk = (riskPct <= 0.015) ? { status: 'green' } : { status: 'yellow', reason: `${(riskPct * 100).toFixed(2)}% NAV` };
+  const ord = { red: 3, yellow: 2, green: 1 }; let rollup = 'green'; const reasons = [];
+  for (const [k, c] of Object.entries(checks)) { if (ord[c.status] > ord[rollup]) rollup = c.status; if (c.reason) reasons.push(`${k}: ${c.reason}`); }
+  return { rollup, checks, reasons };
+}
+
 export async function getElitePositions() {
   const db = await connectToDatabase();
   if (!db) return [];
-  return db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).sort({ createdAt: -1 }).toArray();
+  const positions = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).sort({ createdAt: -1 }).toArray();
+  return positions.map(p => ({ ...p, rec: verifyElitePosition(p) }));
 }
 
 // Clear the paper book (dry-run only — never touches anything but pnthr_elite_positions).

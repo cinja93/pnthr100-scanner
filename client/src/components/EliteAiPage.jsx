@@ -25,6 +25,8 @@ const STAGES = [
 ];
 const GRADE_STYLE = { BEST: { op: 1.0, ring: '#f59e0b', glow: true }, BETTER: { op: 0.92, ring: '#a78bfa', glow: false }, GOOD: { op: 0.62, ring: '#6d5bbf', glow: false } };
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
+const PILL = { green: '#22c55e', yellow: '#f59e0b', red: '#ef4444', gray: '#555' };
+const CHECK_LABEL = { direction: 'Dir', shares: 'Shares', stopLevel: 'Stop', cap: '10% cap', risk: 'Risk' };
 
 const fmt = (n, d = 2) => (n == null || isNaN(n)) ? '--' : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtUsd = (n) => (n == null || isNaN(n)) ? '--' : `$${fmt(n, 2)}`;
@@ -59,8 +61,9 @@ function LadderCard({ pos }) {
   const ordered = isLong ? [...lots].reverse() : lots;
 
   return (
-    <div style={{ border: '1px solid #2a3a2e', borderLeft: '4px solid #22c55e', borderRadius: 8, background: '#0e0e13', padding: '12px 14px', marginBottom: 10 }}>
+    <div style={{ border: '1px solid #2a3a2e', borderLeft: `4px solid ${pos.rec ? (PILL[pos.rec.rollup] || '#22c55e') : '#22c55e'}`, borderRadius: 8, background: '#0e0e13', padding: '12px 14px', marginBottom: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        {pos.rec && <span title={pos.rec.reasons?.length ? pos.rec.reasons.join('  •  ') : 'all checks green'} style={{ width: 11, height: 11, borderRadius: '50%', background: PILL[pos.rec.rollup] || PILL.gray, flexShrink: 0, boxShadow: pos.rec.rollup === 'red' ? `0 0 6px ${PILL.red}` : 'none' }} />}
         <span style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>{pos.ticker}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? '#16a34a' : '#dc2626', border: `1px solid ${isLong ? '#16a34a' : '#dc2626'}`, borderRadius: 3, padding: '1px 6px' }}>{pos.direction}</span>
         <span style={{ fontSize: 11, color: '#f59e0b' }}>{pos.qualityGrade}</span>
@@ -98,6 +101,21 @@ function LadderCard({ pos }) {
         <span style={{ color: '#999' }}>Risk <b style={{ ...mono, color: risk > 200 ? '#ef4444' : '#ddd' }}>{fmtUsd(risk)}</b></span>
         <span style={{ color: '#999' }}>RPS <b style={{ ...mono, color: '#ddd' }}>{fmtUsd(rps)}</b></span>
       </div>
+
+      {/* RULE VERIFICATION — paper analogue of Ambush's IBKR-truth checks */}
+      {pos.rec && (
+        <div style={{ border: '1px solid #2a2a33', borderRadius: 6, padding: '6px 9px', marginTop: 9, background: '#121217' }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#9a9aa6', letterSpacing: 0.5 }}>RULE VERIFICATION <span style={{ color: '#555', fontWeight: 400 }}>· paper (IBKR-truth when live)</span></span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 5 }}>
+            {Object.entries(pos.rec.checks).map(([k, c]) => (
+              <span key={k} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5, color: c.status === 'red' ? '#ffb4b4' : c.status === 'yellow' ? '#f0d090' : '#8a8a96' }} title={c.reason || 'OK'}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: PILL[c.status] || PILL.gray }} />
+                {CHECK_LABEL[k] || k}{c.status !== 'green' && c.reason ? `: ${c.reason}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

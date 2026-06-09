@@ -580,6 +580,23 @@ export async function runAiOrders(opts = {}) {
   return response.json();
 }
 
+// PNTHR Elite AI — dry-run paper engine (isolated)
+export async function fetchEliteAiPositions() {
+  const r = await apiFetch(`${API_BASE}/api/elite-ai/positions`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
+export async function runEliteDryRun(opts = {}) {
+  const r = await apiFetch(`${API_BASE}/api/admin/elite-ai/dry-run`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(opts) });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
+export async function resetEliteDryRun(opts = {}) {
+  const r = await apiFetch(`${API_BASE}/api/admin/elite-ai/reset`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(opts) });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
+
 // PNTHR AI Kill — v1 ranked scores
 export async function fetchLatestAiKill() {
   const response = await apiFetch(`${API_BASE}/api/ai-kill/latest`, { headers: authHeaders() });

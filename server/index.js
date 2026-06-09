@@ -38,6 +38,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalance
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
+import { runEliteAiDryRun, getElitePositions, resetEliteDryRun } from './eliteAiEngine.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2564,6 +2565,20 @@ app.post('/api/admin/run-ai-orders', authenticateJWT, requireAdmin, async (req, 
     console.error('[AI Orders] manual run failed:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── PNTHR Elite AI — DRY-RUN paper engine (isolated pnthr_elite_positions, no orders/IBKR) ──
+app.get('/api/elite-ai/positions', authenticateJWT, async (req, res) => {
+  try { res.json(await getElitePositions()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/elite-ai/dry-run', authenticateJWT, requireAdmin, async (req, res) => {
+  try { res.json(await runEliteAiDryRun(req.body || {})); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/elite-ai/reset', authenticateJWT, requireAdmin, async (req, res) => {
+  try { res.json(await resetEliteDryRun()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Standalone auto-execute trigger (runs against latest existing orders doc)

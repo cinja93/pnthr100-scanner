@@ -14,6 +14,7 @@ import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchE
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import LongShortScorecard from './LongShortScorecard';
+import AiTickerChartModal from './AiTickerChartModal';
 import styles from './AmbushPage.module.css';
 
 const STAGES = [
@@ -33,7 +34,7 @@ const fmtUsd = (n) => (n == null || isNaN(n)) ? '--' : `$${fmt(n, 2)}`;
 
 // DEVOUR ladder card — lays a paper position out as a price ladder (L1 anchor,
 // lots stacking toward the trend, stop on the risk side).
-function LadderCard({ pos }) {
+function LadderCard({ pos, onChart, allTickers }) {
   const isLong = pos.direction === 'LONG';
   const anchor = pos.originalEntry || pos.entryPrice || 0;
   const total = (pos.lotPlan || []).reduce((s, v) => s + v, 0);
@@ -53,7 +54,7 @@ function LadderCard({ pos }) {
     <div style={{ border: '1px solid #2a3a2e', borderLeft: `4px solid ${pos.rec ? (PILL[pos.rec.rollup] || '#22c55e') : '#22c55e'}`, borderRadius: 8, background: '#0e0e13', padding: '12px 14px', marginBottom: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         {pos.rec && <span title={pos.rec.reasons?.length ? pos.rec.reasons.join('  •  ') : 'all checks green'} style={{ width: 11, height: 11, borderRadius: '50%', background: PILL[pos.rec.rollup] || PILL.gray, flexShrink: 0, boxShadow: pos.rec.rollup === 'red' ? `0 0 6px ${PILL.red}` : 'none' }} />}
-        <span style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>{pos.ticker}</span>
+        <span onClick={() => onChart?.(pos.ticker, allTickers)} title="click for charts" style={{ fontWeight: 800, fontSize: 16, color: '#fff', cursor: 'pointer' }}>{pos.ticker}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? '#16a34a' : '#dc2626', border: `1px solid ${isLong ? '#16a34a' : '#dc2626'}`, borderRadius: 3, padding: '1px 6px' }}>{pos.direction}</span>
         <span style={{ fontSize: 11, color: '#f59e0b' }}>{pos.qualityGrade}</span>
         <span style={{ fontSize: 11, color: '#888' }}>{pos.sector}</span>
@@ -138,6 +139,8 @@ export default function EliteAiPage() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [chartTickers, setChartTickers] = useState([]);
+  const [chartIndex, setChartIndex] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -151,6 +154,7 @@ export default function EliteAiPage() {
   const doRun = async () => { setRunning(true); setMsg(null); try { const r = await runEliteDryRun({}); setMsg(`Dry-run: opened ${r.created?.length || 0} paper position(s), ${r.totalOpen} open.`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
   const doReset = async () => { setRunning(true); setMsg(null); try { const r = await resetEliteDryRun(); setMsg(`Reset: cleared ${r.deleted} paper position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
   const doManage = async () => { setRunning(true); setMsg(null); try { const r = await manageEliteDryRun(); setMsg(`Tick: ${r.fills} lot fill(s), ${r.exits} exit(s) across ${r.managed} position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
+  const openChart = (ticker, list) => { const arr = (list && list.length) ? [...new Set(list)] : [ticker]; setChartIndex(Math.max(0, arr.indexOf(ticker))); setChartTickers(arr); };
 
   const candidates = doc?.signals || [];
   const heldTickers = new Set(positions.map(p => (p.ticker || '').toUpperCase()));
@@ -182,8 +186,8 @@ export default function EliteAiPage() {
       {list.length === 0 ? <div className={styles.emptyState}>No breakout candidates waiting — every confirmed name is already in the paper book below</div> : (
         <div style={{ padding: '8px 10px' }}>
           {list.map(c => (
-            <span key={c.ticker} title={`${c.ticker}  ${c.sectorName || ''}\nL1 trigger $${(+c.entryTrigger).toFixed(2)} | weekly stop $${(+c.weeklyStop).toFixed(2)} | ${(c.lotShares || [])[0] || 0} sh | RPS $${(+c.rps).toFixed(2)}\nweekly BL ${c.signalDate || ''}`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#16a34a', color: '#fff', border: '1px solid #f59e0b' }}>
+            <span key={c.ticker} onClick={() => openChart(c.ticker, list.map(x => x.ticker))} title={`${c.ticker}  ${c.sectorName || ''}\nL1 trigger $${(+c.entryTrigger).toFixed(2)} | weekly stop $${(+c.weeklyStop).toFixed(2)} | ${(c.lotShares || [])[0] || 0} sh | RPS $${(+c.rps).toFixed(2)}\nweekly BL ${c.signalDate || ''} · click for charts`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#16a34a', color: '#fff', border: '1px solid #f59e0b', cursor: 'pointer' }}>
               {c.ticker}<span style={{ fontSize: 9, opacity: 0.8 }}>${(+c.entryTrigger).toFixed(0)}</span>
             </span>
           ))}
@@ -277,8 +281,8 @@ export default function EliteAiPage() {
               {stalking.length === 0 ? <div className={styles.emptyState}>No names in the weekly BL pool waiting (or orders still loading)</div> : (
                 <div style={{ padding: '8px 10px' }}>
                   {stalking.map(o => (
-                    <span key={o.ticker} title={`${o.ticker}  ${o.sectorName || ''}${o.qualityGrade ? '  ·  ' + o.qualityGrade : ''}`}
-                      style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#221f33', color: '#cdb6ff', border: '1px solid #6d5bbf' }}>
+                    <span key={o.ticker} onClick={() => openChart(o.ticker, stalking.map(x => x.ticker))} title={`${o.ticker}  ${o.sectorName || ''}${o.qualityGrade ? '  ·  ' + o.qualityGrade : ''} · click for charts`}
+                      style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#221f33', color: '#cdb6ff', border: '1px solid #6d5bbf', cursor: 'pointer' }}>
                       {o.ticker}
                     </span>
                   ))}
@@ -292,19 +296,22 @@ export default function EliteAiPage() {
                 <div className={styles.sectionBadges}><span style={{ color: '#22c55e' }}>DEVOUR {devour.length}</span><span title="Open paper P&L of the DEVOUR positions — refreshes every 60s" style={{ fontSize: 13, fontWeight: 800, color: devourPnl >= 0 ? '#22c55e' : '#ef4444', background: '#0e0e13', border: `1px solid ${devourPnl >= 0 ? '#1f3a24' : '#4a2230'}`, borderRadius: 5, padding: '2px 9px' }}>{devourPnl >= 0 ? '+' : ''}{fmtUsd(devourPnl)} open</span></div></div>
               {devour.length === 0
                 ? <div className={styles.emptyState}>No paper positions yet — the cron auto-enters the MCE breakout names during market hours, or click "Run Dry-Run" now</div>
-                : <div style={{ padding: '4px 8px' }}>{devour.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>}
+                : <div style={{ padding: '4px 8px' }}>{devour.map(p => <LadderCard key={p.ticker} pos={p} onChart={openChart} allTickers={devour.map(x => x.ticker)} />)}</div>}
             </div>
 
             {protect.length > 0 && (
               <div className={styles.section} style={{ borderLeftColor: '#3b82f6' }}>
                 <div className={styles.sectionHeader}><span className={styles.sectionTitle}>PROTECT — stop ratcheted to break-even+</span>
                   <div className={styles.sectionBadges}><span style={{ color: '#3b82f6' }}>PROTECT {protect.length}</span></div></div>
-                <div style={{ padding: '4px 8px' }}>{protect.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>
+                <div style={{ padding: '4px 8px' }}>{protect.map(p => <LadderCard key={p.ticker} pos={p} onChart={openChart} allTickers={protect.map(x => x.ticker)} />)}</div>
               </div>
             )}
           </>
         )}
       </div>
+      {chartTickers.length > 0 && (
+        <AiTickerChartModal tickers={chartTickers} initialIndex={chartIndex} onClose={() => setChartTickers([])} />
+      )}
     </AumShield>
   );
 }

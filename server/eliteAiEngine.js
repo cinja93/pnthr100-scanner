@@ -47,6 +47,10 @@ export async function runEliteAiDryRun({ nav } = {}) {
 
   const existing = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   const held = new Set(existing.map(p => p.ticker));
+  // ONE MCE shot per name per day: block re-entry of a name that already stopped out today.
+  // The daily-bar backtest can't churn intraday; the 60s live cron can — without this guard a
+  // name re-enters the instant it stops out (UMC churned 48x in a day). Resets next session.
+  const tradedToday = new Set((await db.collection(TRADES).find({ exitDate: todayET() }, { projection: { ticker: 1 } }).toArray()).map(t => t.ticker));
   // capital gates (mirror aiAutoExecute): 15% NAV heat cap + 20% buying-power reserve
   let runningRisk = existing.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
   let availBP = paperNav - existing.reduce((s, p) => s + (+p.avgCost || +p.entryPrice) * (+p.totalShares || 0), 0) - paperNav * 0.20;
@@ -54,7 +58,7 @@ export async function runEliteAiDryRun({ nav } = {}) {
   const now = new Date(), today = todayET();
 
   for (const c of candidates) {
-    if (held.has(c.ticker)) continue;
+    if (held.has(c.ticker) || tradedToday.has(c.ticker)) continue;   // skip names that already had their shot today
     const entry = +c.entryTrigger, stop = +c.weeklyStop;
     const lotPlan = (c.lotShares || []).map(n => Math.max(1, Math.round((+n || 0) * sizingMult)));  // graduated sizing
     const rps = +c.rps || (entry - stop);

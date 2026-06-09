@@ -10,7 +10,7 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchLatestAiOrders, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun } from '../services/api';
+import { fetchLatestAiOrders, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import styles from './AmbushPage.module.css';
@@ -67,6 +67,7 @@ function LadderCard({ pos }) {
         <span style={{ fontSize: 11, color: '#888' }}>{pos.sector}</span>
         <span style={{ fontSize: 10, color: '#a78bfa', border: '1px solid #6d5bbf', borderRadius: 3, padding: '1px 6px' }}>PAPER</span>
         <span style={{ flex: 1 }} />
+        {pos.livePnl != null && <span style={{ fontSize: 12, fontWeight: 700, color: pos.livePnl >= 0 ? '#22c55e' : '#ef4444' }} title="Paper unrealized P&L">{pos.livePnl >= 0 ? '+' : ''}{fmtUsd(pos.livePnl)}</span>}
         <span style={{ fontSize: 11, color: '#888' }}>{pos.entryDate}</span>
       </div>
 
@@ -119,6 +120,7 @@ export default function EliteAiPage() {
 
   const doRun = async (minGrade) => { setRunning(true); setMsg(null); try { const r = await runEliteDryRun({ minGrade }); setMsg(`Dry-run (${minGrade}): opened ${r.created?.length || 0} paper position(s), ${r.totalOpen} open.`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
   const doReset = async () => { setRunning(true); setMsg(null); try { const r = await resetEliteDryRun(); setMsg(`Reset: cleared ${r.deleted} paper position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
+  const doManage = async () => { setRunning(true); setMsg(null); try { const r = await manageEliteDryRun(); setMsg(`Tick: ${r.fills} lot fill(s), ${r.exits} exit(s) across ${r.managed} position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
 
   const orders = (doc?.orders || []).filter(o => o.signal === 'BL' || o.signal === 'SS');
   const stalking = orders.filter(o => o.qualityGrade !== 'BEST');
@@ -153,6 +155,7 @@ export default function EliteAiPage() {
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', border: '1px solid #6d5bbf', borderRadius: 4, padding: '3px 8px' }}>DRY-RUN · PAPER</span>
           <button disabled={running} onClick={() => doRun('BEST')} style={{ background: '#16a34a', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Run Dry-Run (BEST)</button>
           <button disabled={running} onClick={() => doRun('BETTER')} style={{ background: '#7c3aed', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>+ BETTER</button>
+          <button disabled={running} onClick={doManage} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Tick (manage)</button>
           <button disabled={running} onClick={doReset} style={{ background: 'transparent', color: '#888', border: '1px solid #3a3a44', borderRadius: 5, padding: '5px 12px', cursor: 'pointer' }}>Reset paper book</button>
           {msg && <span style={{ fontSize: 12, color: '#9ae6b4' }}>{msg}</span>}
         </div>
@@ -185,6 +188,14 @@ export default function EliteAiPage() {
                 ? <div className={styles.emptyState}>No paper positions — click "Run Dry-Run" to open the current BEST-grade names on paper</div>
                 : <div style={{ padding: '4px 8px' }}>{devour.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>}
             </div>
+
+            {protect.length > 0 && (
+              <div className={styles.section} style={{ borderLeftColor: '#3b82f6' }}>
+                <div className={styles.sectionHeader}><span className={styles.sectionTitle}>PROTECT — stop ratcheted to break-even+</span>
+                  <div className={styles.sectionBadges}><span style={{ color: '#3b82f6' }}>PROTECT {protect.length}</span></div></div>
+                <div style={{ padding: '4px 8px' }}>{protect.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>
+              </div>
+            )}
           </>
         )}
       </div>

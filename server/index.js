@@ -38,7 +38,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalance
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
-import { runEliteAiDryRun, getElitePositions, resetEliteDryRun } from './eliteAiEngine.js';
+import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades } from './eliteAiEngine.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2578,6 +2578,14 @@ app.post('/api/admin/elite-ai/dry-run', authenticateJWT, requireAdmin, async (re
 });
 app.post('/api/admin/elite-ai/reset', authenticateJWT, requireAdmin, async (req, res) => {
   try { res.json(await resetEliteDryRun()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/elite-ai/manage', authenticateJWT, requireAdmin, async (req, res) => {
+  try { res.json(await manageEliteAiDryRun()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/elite-ai/trades', authenticateJWT, async (req, res) => {
+  try { res.json(await getEliteTrades()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6582,6 +6590,27 @@ setInterval(async () => {
   } finally {
     aiGradeMonitorRunning = false;
   }
+}, 60_000);
+
+// ── Elite AI — paper dry-run manage loop — every 60s during market hours ──────
+// Paper only: fills L2-L5 as price clears triggers, ratchets the stop, exits on
+// a stop hit. Writes ONLY to pnthr_elite_positions / pnthr_elite_trades — never
+// touches Ambush, pnthr_portfolio, or any live order path.
+let eliteManageRunning = false;
+setInterval(async () => {
+  if (eliteManageRunning) return;
+  const now = new Date();
+  const [hStr, mStr] = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false }).split(':');
+  const mins = parseInt(hStr, 10) * 60 + parseInt(mStr, 10);
+  if (mins < 570 || mins > 960) return; // 9:30 AM – 4:00 PM ET only
+  const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
+  if (dow === 'Sat' || dow === 'Sun') return;
+  eliteManageRunning = true;
+  try {
+    const r = await manageEliteAiDryRun();
+    if (r.changed) console.log(`[Elite DryRun] ${r.fills} lot fill(s), ${r.exits} exit(s) across ${r.managed} paper positions`);
+  } catch (e) { console.error('[Elite DryRun] manage failed:', e.message); }
+  finally { eliteManageRunning = false; }
 }, 60_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET

@@ -17,9 +17,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 import { connectToDatabase } from './database.js';
 import { getLatestAiOrders } from './aiOrdersPipeline.js';
-import { computeLotTargetShares } from './lotMath.js';
+import { computeLotTargetShares, LOT_OFFSETS } from './lotMath.js';
 
 const COLL = 'pnthr_elite_positions';
+const TRADES = 'pnthr_elite_trades';
+const FMP = 'https://financialmodelingprep.com/api/v3';
 const GRADE_RANK = { GOOD: 0, BETTER: 1, BEST: 2 };
 
 function todayET() {
@@ -92,5 +94,84 @@ export async function resetEliteDryRun() {
   const db = await connectToDatabase();
   if (!db) return { deleted: 0 };
   const r = await db.collection(COLL).deleteMany({ dryRun: true });
+  await db.collection(TRADES).deleteMany({ dryRun: true });
   return { deleted: r.deletedCount };
+}
+
+// Live FMP quotes for a set of tickers → { TICKER: price }
+async function fetchQuotes(tickers) {
+  const K = process.env.FMP_API_KEY; const out = {};
+  for (let i = 0; i < tickers.length; i += 50) {
+    const batch = tickers.slice(i, i + 50);
+    try { const r = await fetch(`${FMP}/quote/${batch.join(',')}?apikey=${K}`); const j = await r.json(); if (Array.isArray(j)) for (const q of j) if (q.price != null) out[(q.symbol || '').toUpperCase()] = +q.price; } catch { /* skip */ }
+  }
+  return out;
+}
+
+// ── MANAGE pass (paper) ──────────────────────────────────────────────────────
+// For each open paper position, against the live price: fill L2-L5 as price
+// clears each +3/6/10/14% trigger, ratchet the stop as lots fill (L3→break-even,
+// L4→L2 level, L5→L3 level), and close on a stop hit. Updates live P&L + peak.
+// Paper only — touches nothing but pnthr_elite_positions / pnthr_elite_trades.
+const RATCHET_AT = { 3: 0, 4: 1, 5: 2 }; // nextLot reached → stop anchored at LOT_OFFSETS[index]
+
+export async function manageEliteAiDryRun() {
+  const db = await connectToDatabase();
+  if (!db) return { fills: 0, exits: 0, changed: false };
+  const positions = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
+  if (!positions.length) return { fills: 0, exits: 0, changed: false };
+
+  const prices = await fetchQuotes([...new Set(positions.map(p => p.ticker))]);
+  let fills = 0, exits = 0;
+
+  for (const p of positions) {
+    const px = prices[p.ticker]; if (px == null) continue;
+    const isLong = p.direction === 'LONG';
+    const anchor = +p.originalEntry || +p.entryPrice;
+    let nextLot = p.nextLot || 1, totalShares = p.totalShares || 0, avgCost = +p.avgCost || anchor, stop = +p.stop || +p.stopPrice, atBE = !!p.atBE;
+    let changed = false;
+
+    // (a) lot fills — paper-fill at the trigger as price clears it
+    while (nextLot < 5) {
+      const trig = isLong ? +(anchor * (1 + LOT_OFFSETS[nextLot])).toFixed(2) : +(anchor * (1 - LOT_OFFSETS[nextLot])).toFixed(2);
+      const cleared = isLong ? px >= trig : px <= trig;
+      if (!cleared) break;
+      const addSh = (p.lotPlan || [])[nextLot] || 0;
+      if (addSh > 0) { avgCost = (avgCost * totalShares + trig * addSh) / (totalShares + addSh); totalShares += addSh; }
+      nextLot += 1; fills++; changed = true;
+    }
+
+    // (b) ratchet stop as lots fill
+    if (RATCHET_AT[nextLot] != null) {
+      const lvl = isLong ? +(anchor * (1 + LOT_OFFSETS[RATCHET_AT[nextLot]])).toFixed(2) : +(anchor * (1 - LOT_OFFSETS[RATCHET_AT[nextLot]])).toFixed(2);
+      const newStop = isLong ? Math.max(stop, lvl) : Math.min(stop, lvl);
+      if (newStop !== stop) { stop = newStop; changed = true; }
+      atBE = true;
+    }
+
+    // (c) exit on stop hit (paper)
+    const stopHit = isLong ? px <= stop : px >= stop;
+    if (stopHit) {
+      const exitPx = stop;
+      const pnl = isLong ? (exitPx - avgCost) * totalShares : (avgCost - exitPx) * totalShares;
+      const now = new Date();
+      await db.collection(COLL).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitReason: 'STOP', pnl: +pnl.toFixed(2), nextLot, totalShares, avgCost: +avgCost.toFixed(4), stop, closedAt: now, updatedAt: now } });
+      await db.collection(TRADES).insertOne({ ticker: p.ticker, direction: p.direction, entryPrice: p.entryPrice, exitPrice: exitPx, avgCost: +avgCost.toFixed(4), shares: totalShares, pnl: +pnl.toFixed(2), exitReason: 'STOP', entryDate: p.entryDate, exitDate: todayET(), dryRun: true, createdAt: now });
+      exits++; continue;
+    }
+
+    // (d) live P&L + peak
+    const livePnl = isLong ? (px - avgCost) * totalShares : (avgCost - px) * totalShares;
+    const peak = Math.max(+p.peak || 0, livePnl);
+    if (changed || px !== p.currentPrice) {
+      await db.collection(COLL).updateOne({ _id: p._id }, { $set: { nextLot, totalShares, avgCost: +avgCost.toFixed(4), stop, atBE, currentPrice: px, livePnl: +livePnl.toFixed(2), peak: +peak.toFixed(2), updatedAt: new Date() } });
+    }
+  }
+  return { fills, exits, changed: fills > 0 || exits > 0, managed: positions.length };
+}
+
+export async function getEliteTrades(limit = 30) {
+  const db = await connectToDatabase();
+  if (!db) return [];
+  return db.collection(TRADES).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
 }

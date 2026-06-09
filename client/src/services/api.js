@@ -596,6 +596,16 @@ export async function resetEliteDryRun(opts = {}) {
   if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
   return r.json();
 }
+export async function manageEliteDryRun() {
+  const r = await apiFetch(`${API_BASE}/api/admin/elite-ai/manage`, { method: 'POST', headers: authHeaders() });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
+export async function fetchEliteTrades() {
+  const r = await apiFetch(`${API_BASE}/api/elite-ai/trades`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
 
 // PNTHR AI Kill — v1 ranked scores
 export async function fetchLatestAiKill() {

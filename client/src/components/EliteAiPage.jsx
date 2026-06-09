@@ -10,7 +10,7 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
+import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import styles from './AmbushPage.module.css';
@@ -131,6 +131,7 @@ function SectorStrip({ summary }) {
 export default function EliteAiPage() {
   const [doc, setDoc] = useState(null);
   const [ordersDoc, setOrdersDoc] = useState(null);   // weekly BL pool + 5D sector rank (display only)
+  const [sizing, setSizing] = useState(null);          // graduated-sizing tier
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -138,8 +139,8 @@ export default function EliteAiPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, o, p] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => [])]);
-      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []);
+      const [c, o, p, s] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => []), fetchEliteSizing().catch(() => null)]);
+      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []); setSizing(s);
     } catch (e) { setMsg(e.message); }
     setLoading(false);
   }, []);
@@ -162,9 +163,12 @@ export default function EliteAiPage() {
   const devourPnl = sumPnl(devour);
   const protectPnl = sumPnl(protect);
   const totalOpenPnl = devourPnl + protectPnl;
-  // paper-book heat vs the 15% NAV cap the engine gates on
-  const NAV = 100000;
-  const bookRisk = positions.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
+  // risk-at-stop per section + paper-book heat vs the 15% NAV cap the engine gates on
+  const NAV = sizing?.paperNav || 100000;
+  const sumRisk = (arr) => arr.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
+  const devourRisk = sumRisk(devour);
+  const protectRisk = sumRisk(protect);
+  const bookRisk = devourRisk + protectRisk;
   const heatPct = (bookRisk / NAV) * 100;
   const capacity = Math.max(0, NAV * 0.15 - bookRisk);
   const counts = { STALKING: stalking.length, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
@@ -193,6 +197,7 @@ export default function EliteAiPage() {
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', border: '1px solid #6d5bbf', borderRadius: 4, padding: '3px 8px' }}>DRY-RUN · PAPER</span>
+          {sizing && <span title={`Graduated sizing — paper equity $${(sizing.paperNav || 0).toLocaleString()}. Steps: 50% under $125K, 75% under $166K, 100% above. At 50% that caps L1 risk ~$150/name.`} style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', border: '1px solid #b07d1a', borderRadius: 4, padding: '3px 8px' }}>SIZING {sizing.sizingPct}%</span>}
           <button disabled={running} onClick={doRun} style={{ background: '#16a34a', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Run Dry-Run</button>
           <button disabled={running} onClick={doManage} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Tick (manage)</button>
           <button disabled={running} onClick={doReset} style={{ background: 'transparent', color: '#888', border: '1px solid #3a3a44', borderRadius: 5, padding: '5px 12px', cursor: 'pointer' }}>Reset paper book</button>
@@ -222,6 +227,21 @@ export default function EliteAiPage() {
             <div style={{ display: 'flex', gap: 12, fontSize: 12, fontFamily: 'monospace', alignItems: 'baseline', borderTop: '1px solid #2a2a33', paddingTop: 3, marginTop: 1 }}>
               <span style={{ color: '#ccc', width: 62, fontWeight: 700 }}>TOTAL</span>
               <b style={{ color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444' }}>{totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)}</b>
+            </div>
+          </div>
+
+          {/* RISK at stop — mirrors OPEN P&L: what the book loses if every stop hits */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, padding: '8px 16px', borderRadius: 8, background: '#16161c', border: '1px solid #2a2a33' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#f97316', marginBottom: 1 }}>RISK AT STOP</div>
+            {[['DEVOUR', devourRisk, '#22c55e'], ['PROTECT', protectRisk, '#3b82f6']].map(([label, val, c]) => (
+              <div key={label} style={{ display: 'flex', gap: 12, fontSize: 12, fontFamily: 'monospace', alignItems: 'baseline' }}>
+                <span style={{ color: c, width: 62 }}>{label}</span>
+                <b style={{ color: '#ddd' }}>{fmtUsd(val)}</b>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, fontFamily: 'monospace', alignItems: 'baseline', borderTop: '1px solid #2a2a33', paddingTop: 3, marginTop: 1 }}>
+              <span style={{ color: '#ccc', width: 62, fontWeight: 700 }}>TOTAL</span>
+              <b style={{ color: heatPct >= 15 ? '#dc2626' : '#ddd' }}>{fmtUsd(bookRisk)}</b>
             </div>
           </div>
         </div>

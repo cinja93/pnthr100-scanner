@@ -45,6 +45,9 @@ export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {})
 
   const existing = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   const held = new Set(existing.map(p => p.ticker));
+  // capital gates (mirror aiAutoExecute): 15% NAV heat cap + 20% buying-power reserve
+  let runningRisk = existing.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
+  let availBP = nav - existing.reduce((s, p) => s + (+p.avgCost || +p.entryPrice) * (+p.totalShares || 0), 0) - nav * 0.20;
   const created = [];
   const now = new Date(), today = todayET();
 
@@ -62,6 +65,10 @@ export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {})
     );
     if (!lotPlan[0]) continue;
 
+    // gates: 15% NAV heat + buying power for L1
+    const l1Risk = rps * lotPlan[0], l1Cost = lotPlan[0] * entry;
+    if ((runningRisk + l1Risk) / nav > 0.15 || l1Cost > availBP) continue;
+
     const pos = {
       ticker: o.ticker, direction, signal: o.signal,
       entryPrice: entry, originalEntry: entry, avgCost: entry,
@@ -78,6 +85,7 @@ export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {})
     await db.collection(COLL).insertOne(pos);
     held.add(o.ticker);
     created.push({ ticker: o.ticker, direction, l1Shares: lotPlan[0], totalShares: pos.targetShares, entry, stop });
+    runningRisk += l1Risk; availBP -= l1Cost;
   }
 
   return { created, totalOpen: existing.length + created.length, weekOf: doc?.weekOf || null, candidatesScanned: orders.length, minGrade };

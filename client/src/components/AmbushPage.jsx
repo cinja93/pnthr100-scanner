@@ -4,7 +4,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection, fetchAmbushReconcile } from '../services/api';
+import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection, fetchAmbushReconcile, fetchEliteScorecard } from '../services/api';
+import LongShortScorecard from './LongShortScorecard';
 import PageHeader from './PageHeader';
 import AiTickerChartModal from './AiTickerChartModal';
 import styles from './AmbushPage.module.css';
@@ -740,6 +741,7 @@ export default function AmbushPage() {
   const [showWatching, setShowWatching] = useState(true);
   const [projection, setProjection] = useState(null);
   const [reconcile, setReconcile] = useState(null); // IBKR-truth verification harness (pills + diag)
+  const [scorecard, setScorecard] = useState(null); // long-vs-short scorecard (shared with Elite AI)
   const refreshRef = useRef(null);
 
   const loadData = useCallback(async () => {
@@ -754,6 +756,7 @@ export default function AmbushPage() {
     }
     fetchAmbushProjection().then(setProjection).catch(() => {});
     fetchAmbushReconcile().then(setReconcile).catch(() => {});
+    fetchEliteScorecard().then(setScorecard).catch(() => {});
   }, []);
 
   // lookup of reconcile rows by ticker for the per-row pills
@@ -1288,6 +1291,8 @@ export default function AmbushPage() {
           </div>
         );
       })()}
+
+      <LongShortScorecard scorecard={scorecard} />
 
       {/* ═══ DEVOUR — live positions (the kill, stop still below entry) ═══ */}
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.ACTIVE }}>

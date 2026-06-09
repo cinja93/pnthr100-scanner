@@ -2,7 +2,7 @@
 // ── PNTHR Elite AI — automated funnel for the AI 300 Elite strategy ──────────
 //
 // The funnel (Ambush stair-step UX) wired to the AI-300 Elite brain:
-//   STALKING → HUNTING → ATTACK → DEVOUR → STILL HUNGRY → PROTECT
+//   STALKING → HUNTING → DEVOUR → PROTECT
 //
 // STALKING / HUNTING = weekly BL/SS candidates from the orders pipeline, chips
 // brightening by qualityGrade (GOOD → BETTER → BEST). DEVOUR / PROTECT = the
@@ -17,13 +17,12 @@ import LongShortScorecard from './LongShortScorecard';
 import AiTickerChartModal from './AiTickerChartModal';
 import styles from './AmbushPage.module.css';
 
+// MCE funnel — the 4 stages the engine actually has (no intraday tripwire / re-entry loop).
 const STAGES = [
-  { key: 'STALKING',     color: '#a78bfa', tip: 'Weekly BL / SS candidates watching for the daily trigger (grade GOOD/BETTER).' },
-  { key: 'HUNTING',      color: '#f59e0b', tip: 'Cleared — grade BEST, ready to fire at Monday open or on the daily 2-bar breakout.' },
-  { key: 'ATTACK',       color: '#f97316', tip: 'The pounce — entry fires (L1 market + stop + L2-L5 lot triggers).' },
-  { key: 'DEVOUR',       color: '#22c55e', tip: 'Live paper position pyramiding on the 5-lot ladder.' },
-  { key: 'STILL HUNGRY', color: '#e879f9', tip: 'Exited names hunting a re-entry on a fresh daily breakout.' },
-  { key: 'PROTECT',      color: '#3b82f6', tip: 'Stop ratcheted to break-even+ — the kill is secured.' },
+  { key: 'STALKING', color: '#a78bfa', tip: 'Active weekly BL names in the pool, waiting for a daily 2-bar high breakout.' },
+  { key: 'HUNTING',  color: '#f59e0b', tip: 'Broke the 2-bar high + confirmed by a green 60-min bar — ready to enter.' },
+  { key: 'DEVOUR',   color: '#22c55e', tip: 'Live paper position pyramiding on the 5-lot ladder.' },
+  { key: 'PROTECT',  color: '#3b82f6', tip: 'Stop ratcheted to break-even+ — the kill is secured.' },
 ];
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
 const PILL = { green: '#22c55e', yellow: '#f59e0b', red: '#ef4444', gray: '#555' };
@@ -177,7 +176,7 @@ export default function EliteAiPage() {
   const bookRisk = devourRisk + protectRisk;
   const heatPct = (bookRisk / NAV) * 100;
   const capacity = Math.max(0, NAV * 0.15 - bookRisk);
-  const counts = { STALKING: stalking.length, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
+  const counts = { STALKING: stalking.length, HUNTING: waiting.length, DEVOUR: devour.length, PROTECT: protect.length };
 
   const mceBox = (list) => (
     <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>

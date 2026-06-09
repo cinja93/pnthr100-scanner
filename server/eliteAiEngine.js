@@ -15,7 +15,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 import { connectToDatabase } from './database.js';
 import { getReentrySignals } from './reentrySignalService.js';
-import { getSectorName } from './ambush/ambushEngine.js';
+import { getSectorName, getSizingMultiplier, getSizingTierLabel } from './ambush/ambushEngine.js';
 import { LOT_OFFSETS } from './lotMath.js';
 
 const COLL = 'pnthr_elite_positions';
@@ -31,30 +31,38 @@ function todayET() {
 // carries its full entry plan: L1 trigger, weekly stop, RPS, and the 5-lot share
 // ladder. Null ownerId → not filtered by the live Command-Center book (Elite AI is
 // its own isolated paper account).
-export async function runEliteAiDryRun({ nav = 100000 } = {}) {
+export async function runEliteAiDryRun({ nav } = {}) {
   const db = await connectToDatabase();
   if (!db) return { error: 'NO_DB', created: [] };
 
-  const candidates = await getReentrySignals(null, nav);
+  // Graduated sizing: paper equity = $100k seed + realized P&L → 50 / 75 / 100% at the
+  // SAME $125K / $166K NAV steps as Ambush (getSizingMultiplier). Keeps risk-per-trade /
+  // NAV constant; at the current sub-$125K NAV that's 50% → ~$150 risk/name.
+  const realized = (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0);
+  const paperNav = nav || (100000 + realized);
+  const sizingMult = getSizingMultiplier(paperNav);
+  const sizingPct = Math.round(sizingMult * 100);
+
+  const candidates = await getReentrySignals(null, paperNav);
 
   const existing = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   const held = new Set(existing.map(p => p.ticker));
   // capital gates (mirror aiAutoExecute): 15% NAV heat cap + 20% buying-power reserve
   let runningRisk = existing.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
-  let availBP = nav - existing.reduce((s, p) => s + (+p.avgCost || +p.entryPrice) * (+p.totalShares || 0), 0) - nav * 0.20;
+  let availBP = paperNav - existing.reduce((s, p) => s + (+p.avgCost || +p.entryPrice) * (+p.totalShares || 0), 0) - paperNav * 0.20;
   const created = [];
   const now = new Date(), today = todayET();
 
   for (const c of candidates) {
     if (held.has(c.ticker)) continue;
     const entry = +c.entryTrigger, stop = +c.weeklyStop;
-    const lotPlan = (c.lotShares || []).map(n => +n || 0);
+    const lotPlan = (c.lotShares || []).map(n => Math.max(1, Math.round((+n || 0) * sizingMult)));  // graduated sizing
     const rps = +c.rps || (entry - stop);
     if (!(entry > 0) || !(stop > 0) || !lotPlan[0] || rps <= 0) continue;
 
     // gates: 15% NAV heat + buying power for L1
     const l1Risk = rps * lotPlan[0], l1Cost = lotPlan[0] * entry;
-    if ((runningRisk + l1Risk) / nav > 0.15 || l1Cost > availBP) continue;
+    if ((runningRisk + l1Risk) / paperNav > 0.15 || l1Cost > availBP) continue;
 
     const pos = {
       ticker: c.ticker, direction: 'LONG', signal: 'BL',          // MCE is long-only
@@ -64,7 +72,7 @@ export async function runEliteAiDryRun({ nav = 100000 } = {}) {
       totalShares: lotPlan[0], targetShares: lotPlan.reduce((s, v) => s + v, 0),
       lotPrices: [c.l1Price, c.l2Price, c.l3Price, c.l4Price, c.l5Price].map(x => (x != null ? +x : null)),
       sector: getSectorName(c.ticker) || null, sectorMult: 1,
-      rps, signalDate: c.signalDate || null,
+      rps, signalDate: c.signalDate || null, sizingPct,
       dailyTrigger: entry, weeklyTrigger: null,
       gapPct: null, qualityGrade: null,
       peak: 0, atBE: false, cycleNum: 0,
@@ -77,7 +85,15 @@ export async function runEliteAiDryRun({ nav = 100000 } = {}) {
     runningRisk += l1Risk; availBP -= l1Cost;
   }
 
-  return { created, totalOpen: existing.length + created.length, candidatesScanned: candidates.length, source: 'MCE' };
+  return { created, totalOpen: existing.length + created.length, candidatesScanned: candidates.length, source: 'MCE', paperNav, sizingPct };
+}
+
+// Current graduated-sizing tier for the paper book (paper equity = $100k + realized P&L).
+export async function getEliteSizing() {
+  const db = await connectToDatabase();
+  const realized = db ? (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0) : 0;
+  const paperNav = 100000 + realized;
+  return { paperNav, realized, sizingPct: Math.round(getSizingMultiplier(paperNav) * 100), tier: getSizingTierLabel(paperNav), tier1: 125000, tier2: 166000 };
 }
 
 // Independent rule-recompute verification — the paper analogue of Ambush's

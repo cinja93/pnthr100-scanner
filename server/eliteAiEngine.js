@@ -6,42 +6,36 @@
 // (pnthr_ambush_positions) or the Command Center (pnthr_portfolio). NO real
 // orders, NO IBKR, NO outbox. Pure paper.
 //
-// v1 (entry simulation): reads the AI Orders pipeline, and for each qualifying
-// BL/SS signal at/above the grade threshold, opens a PAPER position with the
-// full 5-lot pyramid plan + the order's ATR/2-bar stop. The Elite AI page then
-// renders these as ladder cards so you can watch the funnel produce positions
-// on paper before any account is wired.
-//
-// (v2 — next: a manage pass that fills L2-L5 as live price clears each trigger,
-//  ratchets the 2-bar stop, and closes on a stop hit.)
+// Entry: reads the MCE scan (getReentrySignals — the SAME source the ORDERS AI /
+// PNTHR MCE page and the live MCE auto-execute path use): active weekly BL +
+// top-100 TTM + daily 2-bar high breakout + bull sector. For each candidate it
+// opens a PAPER position with the candidate's own 5-lot share ladder + weekly
+// stop, so the paper book mirrors ORDERS AI name-for-name. The manage pass then
+// fills L2-L5 as live price clears each trigger, ratchets the stop, exits on a hit.
 // ────────────────────────────────────────────────────────────────────────────
 import { connectToDatabase } from './database.js';
-import { getLatestAiOrders } from './aiOrdersPipeline.js';
-import { computeLotTargetShares, LOT_OFFSETS } from './lotMath.js';
+import { getReentrySignals } from './reentrySignalService.js';
+import { getSectorName } from './ambush/ambushEngine.js';
+import { LOT_OFFSETS } from './lotMath.js';
 
 const COLL = 'pnthr_elite_positions';
 const TRADES = 'pnthr_elite_trades';
 const FMP = 'https://financialmodelingprep.com/api/v3';
-const GRADE_RANK = { GOOD: 0, BETTER: 1, BEST: 2 };
 
 function todayET() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
-// Open paper positions for qualifying signals (idempotent — skips names already held).
-// minGrade defaults to BEST (the live entry criterion); pass 'BETTER' to populate the
-// paper book more fully for visualization.
-export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {}) {
+// Open paper positions for the current MCE breakout candidates (idempotent — skips
+// names already in the paper book). Each candidate from getReentrySignals already
+// carries its full entry plan: L1 trigger, weekly stop, RPS, and the 5-lot share
+// ladder. Null ownerId → not filtered by the live Command-Center book (Elite AI is
+// its own isolated paper account).
+export async function runEliteAiDryRun({ nav = 100000 } = {}) {
   const db = await connectToDatabase();
   if (!db) return { error: 'NO_DB', created: [] };
 
-  const doc = await getLatestAiOrders();
-  const minRank = GRADE_RANK[minGrade] ?? 2;
-  const orders = (doc?.orders || []).filter(o =>
-    (o.signal === 'BL' || o.signal === 'SS') &&
-    (GRADE_RANK[o.qualityGrade] ?? 0) >= minRank &&
-    +o.currentPrice > 0 && +o.stopPrice > 0
-  );
+  const candidates = await getReentrySignals(null, nav);
 
   const existing = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   const held = new Set(existing.map(p => p.ticker));
@@ -51,44 +45,39 @@ export async function runEliteAiDryRun({ nav = 100000, minGrade = 'BEST' } = {})
   const created = [];
   const now = new Date(), today = todayET();
 
-  for (const o of orders) {
-    if (held.has(o.ticker)) continue;
-    const direction = o.signal === 'BL' ? 'LONG' : 'SHORT';
-    const entry = +o.currentPrice, stop = +o.stopPrice;
-    const rps = direction === 'LONG' ? entry - stop : stop - entry;
-    if (rps <= 0) continue;
-
-    // 5-lot pyramid plan, sized off the ATR/2-bar stop (10% ticker cap, sector mult)
-    const lotPlan = computeLotTargetShares(
-      { entryPrice: entry, originalStop: stop, stopPrice: stop, direction, sectorMult: +o.sectorMult || 1, isETF: false, fills: {} },
-      nav
-    );
-    if (!lotPlan[0]) continue;
+  for (const c of candidates) {
+    if (held.has(c.ticker)) continue;
+    const entry = +c.entryTrigger, stop = +c.weeklyStop;
+    const lotPlan = (c.lotShares || []).map(n => +n || 0);
+    const rps = +c.rps || (entry - stop);
+    if (!(entry > 0) || !(stop > 0) || !lotPlan[0] || rps <= 0) continue;
 
     // gates: 15% NAV heat + buying power for L1
     const l1Risk = rps * lotPlan[0], l1Cost = lotPlan[0] * entry;
     if ((runningRisk + l1Risk) / nav > 0.15 || l1Cost > availBP) continue;
 
     const pos = {
-      ticker: o.ticker, direction, signal: o.signal,
+      ticker: c.ticker, direction: 'LONG', signal: 'BL',          // MCE is long-only
       entryPrice: entry, originalEntry: entry, avgCost: entry,
       stopPrice: stop, originalStop: stop, stop,
-      lotPlan, nextLot: 1,                          // L1 paper-filled, L2-L5 pending
+      lotPlan, nextLot: 1,                                         // L1 paper-filled, L2-L5 pending
       totalShares: lotPlan[0], targetShares: lotPlan.reduce((s, v) => s + v, 0),
-      sector: o.sectorName || null, sectorId: o.sectorId || null, sectorMult: +o.sectorMult || 1,
-      dailyTrigger: null, weeklyTrigger: null,
-      gapPct: o.gapPct ?? null, qualityGrade: o.qualityGrade,
+      lotPrices: [c.l1Price, c.l2Price, c.l3Price, c.l4Price, c.l5Price].map(x => (x != null ? +x : null)),
+      sector: getSectorName(c.ticker) || null, sectorMult: 1,
+      rps, signalDate: c.signalDate || null,
+      dailyTrigger: entry, weeklyTrigger: null,
+      gapPct: null, qualityGrade: null,
       peak: 0, atBE: false, cycleNum: 0,
-      status: 'ACTIVE', dryRun: true, source: 'ELITE_DRYRUN',
+      status: 'ACTIVE', dryRun: true, source: 'ELITE_MCE_DRYRUN',
       entryDate: today, createdAt: now, updatedAt: now,
     };
     await db.collection(COLL).insertOne(pos);
-    held.add(o.ticker);
-    created.push({ ticker: o.ticker, direction, l1Shares: lotPlan[0], totalShares: pos.targetShares, entry, stop });
+    held.add(c.ticker);
+    created.push({ ticker: c.ticker, l1Shares: lotPlan[0], totalShares: pos.targetShares, entry, stop });
     runningRisk += l1Risk; availBP -= l1Cost;
   }
 
-  return { created, totalOpen: existing.length + created.length, weekOf: doc?.weekOf || null, candidatesScanned: orders.length, minGrade };
+  return { created, totalOpen: existing.length + created.length, candidatesScanned: candidates.length, source: 'MCE' };
 }
 
 // Independent rule-recompute verification — the paper analogue of Ambush's

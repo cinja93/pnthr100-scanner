@@ -6607,7 +6607,7 @@ setInterval(async () => {
   if (dow === 'Sat' || dow === 'Sun') return;
   eliteManageRunning = true;
   try {
-    const e = await runEliteAiDryRun({ minGrade: 'BEST' });   // auto-enter new BEST names (gated)
+    const e = await runEliteAiDryRun();                        // auto-enter new MCE breakout names (gated)
     const r = await manageEliteAiDryRun();                     // fill lots / ratchet / exit
     if ((e.created?.length || 0) || r.changed) console.log(`[Elite DryRun] ${e.created?.length || 0} new, ${r.fills} fill(s), ${r.exits} exit(s) / ${r.managed} positions`);
   } catch (e) { console.error('[Elite DryRun] tick failed:', e.message); }

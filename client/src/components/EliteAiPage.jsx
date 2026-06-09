@@ -10,7 +10,7 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchLatestAiOrders, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
+import { fetchReentrySignals, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import styles from './AmbushPage.module.css';
@@ -23,24 +23,12 @@ const STAGES = [
   { key: 'STILL HUNGRY', color: '#e879f9', tip: 'Exited names hunting a re-entry on a fresh daily breakout.' },
   { key: 'PROTECT',      color: '#3b82f6', tip: 'Stop ratcheted to break-even+ — the kill is secured.' },
 ];
-const GRADE_STYLE = { BEST: { op: 1.0, ring: '#f59e0b', glow: true }, BETTER: { op: 0.92, ring: '#a78bfa', glow: false }, GOOD: { op: 0.62, ring: '#6d5bbf', glow: false } };
 const LOT_OFFSETS = [0, 0.03, 0.06, 0.10, 0.14];
 const PILL = { green: '#22c55e', yellow: '#f59e0b', red: '#ef4444', gray: '#555' };
 const CHECK_LABEL = { direction: 'Dir', shares: 'Shares', stopLevel: 'Stop', cap: '10% cap', risk: 'Risk' };
 
 const fmt = (n, d = 2) => (n == null || isNaN(n)) ? '--' : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtUsd = (n) => (n == null || isNaN(n)) ? '--' : `$${fmt(n, 2)}`;
-
-function Chip({ o }) {
-  const isLong = o.signal === 'BL';
-  const g = GRADE_STYLE[o.qualityGrade] || GRADE_STYLE.GOOD;
-  return (
-    <span title={`${o.ticker} · ${isLong ? 'LONG' : 'SHORT'} · ${o.qualityGrade} · gap ${fmt(o.gapPct, 1)}% · ${o.sectorTier || ''}\nEntry ${fmtUsd(o.currentPrice)} · stop ${fmtUsd(o.stopPrice)}`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: isLong ? '#16a34a' : '#dc2626', color: '#fff', opacity: g.op, border: `1px solid ${g.ring}`, boxShadow: g.glow ? `0 0 7px ${g.ring}` : 'none' }}>
-      {o.ticker}<span style={{ fontSize: 9, opacity: 0.85 }}>{fmt(o.gapPct, 0)}%</span>
-    </span>
-  );
-}
 
 // DEVOUR ladder card — lays a paper position out as a price ladder (L1 anchor,
 // lots stacking toward the trend, stop on the risk side).
@@ -129,50 +117,49 @@ export default function EliteAiPage() {
 
   const load = useCallback(async () => {
     try {
-      const [d, p] = await Promise.all([fetchLatestAiOrders({}), fetchEliteAiPositions().catch(() => [])]);
-      setDoc(d); setPositions(Array.isArray(p) ? p : []);
+      const [c, p] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchEliteAiPositions().catch(() => [])]);
+      setDoc(c); setPositions(Array.isArray(p) ? p : []);
     } catch (e) { setMsg(e.message); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 60000); return () => clearInterval(id); }, [load]);
 
-  const doRun = async (minGrade) => { setRunning(true); setMsg(null); try { const r = await runEliteDryRun({ minGrade }); setMsg(`Dry-run (${minGrade}): opened ${r.created?.length || 0} paper position(s), ${r.totalOpen} open.`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
+  const doRun = async () => { setRunning(true); setMsg(null); try { const r = await runEliteDryRun({}); setMsg(`Dry-run: opened ${r.created?.length || 0} paper position(s), ${r.totalOpen} open.`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
   const doReset = async () => { setRunning(true); setMsg(null); try { const r = await resetEliteDryRun(); setMsg(`Reset: cleared ${r.deleted} paper position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
   const doManage = async () => { setRunning(true); setMsg(null); try { const r = await manageEliteDryRun(); setMsg(`Tick: ${r.fills} lot fill(s), ${r.exits} exit(s) across ${r.managed} position(s).`); await load(); } catch (e) { setMsg('Error: ' + e.message); } setRunning(false); };
 
-  const orders = (doc?.orders || []).filter(o => o.signal === 'BL' || o.signal === 'SS');
-  const stalking = orders.filter(o => o.qualityGrade !== 'BEST');
-  const hunting = orders.filter(o => o.qualityGrade === 'BEST');
-  const splitLS = (list) => ({ longs: list.filter(o => o.signal === 'BL'), shorts: list.filter(o => o.signal === 'SS') });
+  const candidates = doc?.signals || [];
+  const heldTickers = new Set(positions.map(p => (p.ticker || '').toUpperCase()));
+  const waiting = candidates.filter(c => !heldTickers.has((c.ticker || '').toUpperCase())); // breakout-ready, not yet in the book
   const devour = positions.filter(p => !p.atBE);
   const protect = positions.filter(p => p.atBE);
-  const counts = { STALKING: stalking.length, HUNTING: hunting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
+  const counts = { STALKING: 0, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
 
-  const candidateBox = (title, list, color) => {
-    const { longs, shorts } = splitLS(list);
-    return (
-      <div className={styles.section} style={{ borderLeftColor: color }}>
-        <div className={styles.sectionHeader}><span className={styles.sectionTitle}>{title}</span>
-          <div className={styles.sectionBadges}><span style={{ color: '#16a34a' }}>BL {longs.length}</span><span style={{ color: '#dc2626' }}>SS {shorts.length}</span></div></div>
-        {list.length === 0 ? <div className={styles.emptyState}>No candidates at this stage</div> : (
-          <div style={{ padding: '8px 10px' }}>
-            {longs.length > 0 && <div style={{ marginBottom: 6 }}><div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginBottom: 3 }}>BL LONGS</div>{longs.map(o => <Chip key={o.ticker} o={o} />)}</div>}
-            {shorts.length > 0 && <div><div style={{ fontSize: 10, color: '#dc2626', fontWeight: 700, marginBottom: 3 }}>SS SHORTS</div>{shorts.map(o => <Chip key={o.ticker} o={o} />)}</div>}
-          </div>)}
-      </div>
-    );
-  };
+  const mceBox = (list) => (
+    <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
+      <div className={styles.sectionHeader}><span className={styles.sectionTitle}>HUNTING — MCE breakout candidates (ready to enter)</span>
+        <div className={styles.sectionBadges}><span style={{ color: '#f59e0b' }}>{list.length} ready</span></div></div>
+      {list.length === 0 ? <div className={styles.emptyState}>No breakout candidates waiting — every confirmed name is already in the paper book below</div> : (
+        <div style={{ padding: '8px 10px' }}>
+          {list.map(c => (
+            <span key={c.ticker} title={`${c.ticker}  ${c.sectorName || ''}\nL1 trigger $${(+c.entryTrigger).toFixed(2)} | weekly stop $${(+c.weeklyStop).toFixed(2)} | ${(c.lotShares || [])[0] || 0} sh | RPS $${(+c.rps).toFixed(2)}\nweekly BL ${c.signalDate || ''}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#16a34a', color: '#fff', border: '1px solid #f59e0b' }}>
+              {c.ticker}<span style={{ fontSize: 9, opacity: 0.8 }}>${(+c.entryTrigger).toFixed(0)}</span>
+            </span>
+          ))}
+        </div>)}
+    </div>
+  );
 
   return (
     <AumShield block showDuration>
       <div style={{ padding: '0 4px' }}>
-        <PageHeader title="Elite AI" description="Automated funnel for the PNTHR AI 300 Elite strategy. STALKING/HUNTING = live weekly BL/SS candidates; DEVOUR = the isolated DRY-RUN paper engine (no orders, no IBKR)." />
+        <PageHeader title="Elite AI" description="Automated paper engine for the PNTHR AI 300 Elite (MCE) strategy — the same daily-breakout scan as ORDERS AI. HUNTING = breakout candidates ready to enter; DEVOUR = the isolated dry-run paper book (no orders, no IBKR)." />
 
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', border: '1px solid #6d5bbf', borderRadius: 4, padding: '3px 8px' }}>DRY-RUN · PAPER</span>
-          <button disabled={running} onClick={() => doRun('BEST')} style={{ background: '#16a34a', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Run Dry-Run (BEST)</button>
-          <button disabled={running} onClick={() => doRun('BETTER')} style={{ background: '#7c3aed', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>+ BETTER</button>
+          <button disabled={running} onClick={doRun} style={{ background: '#16a34a', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Run Dry-Run</button>
           <button disabled={running} onClick={doManage} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Tick (manage)</button>
           <button disabled={running} onClick={doReset} style={{ background: 'transparent', color: '#888', border: '1px solid #3a3a44', borderRadius: 5, padding: '5px 12px', cursor: 'pointer' }}>Reset paper book</button>
           {msg && <span style={{ fontSize: 12, color: '#9ae6b4' }}>{msg}</span>}
@@ -193,17 +180,16 @@ export default function EliteAiPage() {
 
         {loading && <div className={styles.emptyState}>Loading…</div>}
 
-        {!loading && doc && (
+        {!loading && (
           <>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Week of <b style={{ color: '#ccc' }}>{doc.weekOf}</b> · {orders.length} active BL/SS signals · grade brightens GOOD → BETTER → BEST</div>
-            {candidateBox('STALKING — weekly BL / SS candidates', stalking, '#a78bfa')}
-            {candidateBox('HUNTING — cleared (BEST, ready to fire)', hunting, '#f59e0b')}
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>{candidates.length} MCE breakout candidate{candidates.length === 1 ? '' : 's'} · {devour.length + protect.length} in the paper book · mirrors the ORDERS AI / PNTHR MCE scan (active weekly BL · top-100 TTM · daily 2-bar high breakout · bull sectors)</div>
+            {mceBox(waiting)}
 
             <div className={styles.section} style={{ borderLeftColor: '#22c55e' }}>
               <div className={styles.sectionHeader}><span className={styles.sectionTitle}>DEVOUR — live paper positions</span>
                 <div className={styles.sectionBadges}><span style={{ color: '#22c55e' }}>DEVOUR {devour.length}</span></div></div>
               {devour.length === 0
-                ? <div className={styles.emptyState}>No paper positions — click "Run Dry-Run" to open the current BEST-grade names on paper</div>
+                ? <div className={styles.emptyState}>No paper positions yet — the cron auto-enters the MCE breakout names during market hours, or click "Run Dry-Run" now</div>
                 : <div style={{ padding: '4px 8px' }}>{devour.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>}
             </div>
 

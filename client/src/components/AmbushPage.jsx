@@ -1371,11 +1371,19 @@ export default function AmbushPage() {
         )}
       </div>
 
-      {/* ═══ STALKING — Re-entry Watch ═══ */}
+      {/* ═══ ⑤ PROTECT — break-even-or-better, moved up so secured kills stay with the live book ═══ */}
+      {renderPositionsTable(
+        byState.PROTECT,
+        '⑤ PROTECT: Break-Even or Better',
+        STATE_COLORS.PROTECT,
+        "The kill is secured: the 2-bar trailing stop has ratcheted to break-even-or-better, so these positions can no longer turn into a loss. Same detail as DEVOUR — click a row for the lot plan and trailing status."
+      )}
+
+      {/* ═══ ⑥ STILL HUNGRY — Re-entry Watch ═══ */}
       <div className={styles.section} style={{ borderLeftColor: STATE_COLORS.STALKING }}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
-            ⑤ STILL HUNGRY: Re-Entry Watch
+            ⑥ STILL HUNGRY: Re-Entry Watch
             <InfoPopup text="The panther's still hungry: names that were exited or manually closed and are hunting another bite of the SAME stock. Re-entry needs price to hold above BOTH the Weekly Trigger and the Daily Trigger (green) plus a fresh 1-bar break — the columns below show those levels (green = eligible side, red = sold off past it). No cooldown: if the setup re-lines-up, it re-enters." wide />
           </span>
           <span className={styles.badge} style={{ background: STATE_COLORS.STALKING }}>{byState.STALKING.length}</span>
@@ -1431,14 +1439,6 @@ export default function AmbushPage() {
           </div>
         )}
       </div>
-
-      {/* ═══ ⑥ PROTECT — break-even-or-better (the kill secured) ═══ */}
-      {renderPositionsTable(
-        byState.PROTECT,
-        '⑥ PROTECT: Break-Even or Better',
-        STATE_COLORS.PROTECT,
-        "The kill is secured: the 2-bar trailing stop has ratcheted to break-even-or-better, so these positions can no longer turn into a loss. Same detail as DEVOUR — click a row for the lot plan and trailing status."
-      )}
 
       {/* ═══ RECENT TRADES ═══ */}
       {recentTrades.length > 0 && (

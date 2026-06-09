@@ -133,7 +133,10 @@ export default function EliteAiPage() {
   const waiting = candidates.filter(c => !heldTickers.has((c.ticker || '').toUpperCase())); // breakout-ready, not yet in the book
   const devour = positions.filter(p => !p.atBE);
   const protect = positions.filter(p => p.atBE);
-  const totalOpenPnl = positions.reduce((s, p) => s + (+p.livePnl || 0), 0);  // whole book; refreshes on each 60s poll
+  const sumPnl = (arr) => arr.reduce((s, p) => s + (+p.livePnl || 0), 0);   // refreshes on each 60s poll
+  const devourPnl = sumPnl(devour);
+  const protectPnl = sumPnl(protect);
+  const totalOpenPnl = devourPnl + protectPnl;
   const counts = { STALKING: 0, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
 
   const mceBox = (list) => (
@@ -177,6 +180,20 @@ export default function EliteAiPage() {
               {i < STAGES.length - 1 && <span style={{ color: '#555', fontSize: 18 }}>→</span>}
             </div>
           ))}
+          {/* per-section open-P&L summary — far right; refreshes on each 60s poll */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3, marginLeft: 'auto', padding: '8px 16px', borderRadius: 8, background: '#16161c', border: '1px solid #2a2a33' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#9a9aa6', marginBottom: 1 }}>{'OPEN P&L'}</div>
+            {[['DEVOUR', devourPnl, '#22c55e'], ['PROTECT', protectPnl, '#3b82f6']].map(([label, val, c]) => (
+              <div key={label} style={{ display: 'flex', gap: 12, fontSize: 12, fontFamily: 'monospace', alignItems: 'baseline' }}>
+                <span style={{ color: c, width: 62 }}>{label}</span>
+                <b style={{ color: val >= 0 ? '#22c55e' : '#ef4444' }}>{val >= 0 ? '+' : ''}{fmtUsd(val)}</b>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, fontFamily: 'monospace', alignItems: 'baseline', borderTop: '1px solid #2a2a33', paddingTop: 3, marginTop: 1 }}>
+              <span style={{ color: '#ccc', width: 62, fontWeight: 700 }}>TOTAL</span>
+              <b style={{ color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444' }}>{totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)}</b>
+            </div>
+          </div>
         </div>
 
         {loading && <div className={styles.emptyState}>Loading…</div>}
@@ -188,7 +205,7 @@ export default function EliteAiPage() {
 
             <div className={styles.section} style={{ borderLeftColor: '#22c55e' }}>
               <div className={styles.sectionHeader}><span className={styles.sectionTitle}>DEVOUR — live paper positions</span>
-                <div className={styles.sectionBadges}><span style={{ color: '#22c55e' }}>DEVOUR {devour.length}</span><span title="Total open paper P&L across the whole book — refreshes every 60s" style={{ fontSize: 13, fontWeight: 800, color: totalOpenPnl >= 0 ? '#22c55e' : '#ef4444', background: '#0e0e13', border: `1px solid ${totalOpenPnl >= 0 ? '#1f3a24' : '#4a2230'}`, borderRadius: 5, padding: '2px 9px' }}>{totalOpenPnl >= 0 ? '+' : ''}{fmtUsd(totalOpenPnl)} open</span></div></div>
+                <div className={styles.sectionBadges}><span style={{ color: '#22c55e' }}>DEVOUR {devour.length}</span><span title="Open paper P&L of the DEVOUR positions — refreshes every 60s" style={{ fontSize: 13, fontWeight: 800, color: devourPnl >= 0 ? '#22c55e' : '#ef4444', background: '#0e0e13', border: `1px solid ${devourPnl >= 0 ? '#1f3a24' : '#4a2230'}`, borderRadius: 5, padding: '2px 9px' }}>{devourPnl >= 0 ? '+' : ''}{fmtUsd(devourPnl)} open</span></div></div>
               {devour.length === 0
                 ? <div className={styles.emptyState}>No paper positions yet — the cron auto-enters the MCE breakout names during market hours, or click "Run Dry-Run" now</div>
                 : <div style={{ padding: '4px 8px' }}>{devour.map(p => <LadderCard key={p.ticker} pos={p} />)}</div>}

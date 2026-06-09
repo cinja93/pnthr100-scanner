@@ -611,6 +611,11 @@ export async function fetchEliteSizing() {
   if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
   return r.json();
 }
+export async function fetchEliteScorecard() {
+  const r = await apiFetch(`${API_BASE}/api/elite-ai/scorecard`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+  return r.json();
+}
 
 // PNTHR AI Kill — v1 ranked scores
 export async function fetchLatestAiKill() {

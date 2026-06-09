@@ -10,7 +10,7 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
+import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, fetchEliteScorecard, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import styles from './AmbushPage.module.css';
@@ -132,6 +132,7 @@ export default function EliteAiPage() {
   const [doc, setDoc] = useState(null);
   const [ordersDoc, setOrdersDoc] = useState(null);   // weekly BL pool + 5D sector rank (display only)
   const [sizing, setSizing] = useState(null);          // graduated-sizing tier
+  const [scorecard, setScorecard] = useState(null);    // long-vs-short validation
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -139,8 +140,8 @@ export default function EliteAiPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, o, p, s] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => []), fetchEliteSizing().catch(() => null)]);
-      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []); setSizing(s);
+      const [c, o, p, s, sc] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => []), fetchEliteSizing().catch(() => null), fetchEliteScorecard().catch(() => null)]);
+      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []); setSizing(s); setScorecard(sc);
     } catch (e) { setMsg(e.message); }
     setLoading(false);
   }, []);
@@ -263,6 +264,24 @@ export default function EliteAiPage() {
               <span style={{ color: '#888' }}>capacity <b style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmtUsd(capacity)}</b></span>
               <span style={{ color: '#888' }}>{positions.length} positions · $100k paper NAV</span>
             </div>
+
+            {/* LONG vs SHORT scorecard — validating the Ambush(short)/Elite(long) split on real data */}
+            {scorecard && (
+              <div style={{ margin: '0 0 12px' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#9a9aa6', letterSpacing: 0.5, marginBottom: 5 }}>LONG vs SHORT SCORECARD <span style={{ color: '#666', fontWeight: 400 }}>· validating the split on real data{scorecard.from ? ` · Ambush ${scorecard.from}→${scorecard.to}` : ''}</span></div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 250, padding: '9px 13px', borderRadius: 8, background: '#16161c', border: '1px solid #2a2a33', borderLeft: '3px solid #22c55e' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#22c55e', letterSpacing: 0.4, marginBottom: 4 }}>LONG · Elite AI (paper)</div>
+                    <div style={{ fontSize: 12, color: '#aaa', fontFamily: 'monospace' }}>open {scorecard.eliteOpen.n} · <b style={{ color: scorecard.eliteOpen.pnl >= 0 ? '#22c55e' : '#ef4444' }}>{scorecard.eliteOpen.pnl >= 0 ? '+' : ''}{fmtUsd(scorecard.eliteOpen.pnl)}</b>{scorecard.eliteClosed.n > 0 && <span> &nbsp;·&nbsp; closed {scorecard.eliteClosed.n} · win {scorecard.eliteClosed.wr}% · <b style={{ color: scorecard.eliteClosed.pnl >= 0 ? '#22c55e' : '#ef4444' }}>{fmtUsd(scorecard.eliteClosed.pnl)}</b></span>}</div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 250, padding: '9px 13px', borderRadius: 8, background: '#16161c', border: '1px solid #2a2a33', borderLeft: '3px solid #ef4444' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#ef4444', letterSpacing: 0.4, marginBottom: 4 }}>SHORT · Ambush (live)</div>
+                    <div style={{ fontSize: 12, color: '#aaa', fontFamily: 'monospace' }}>{scorecard.short.n} trades · win {scorecard.short.wr}% · <b style={{ color: scorecard.short.pnl >= 0 ? '#22c55e' : '#ef4444' }}>{scorecard.short.pnl >= 0 ? '+' : ''}{fmtUsd(scorecard.short.pnl)}</b></div>
+                  </div>
+                </div>
+                {scorecard.ambLong?.n > 0 && <div style={{ fontSize: 10, color: '#777', marginTop: 5 }}>Ambush longs (legacy, migrating to Elite): {scorecard.ambLong.n} · win {scorecard.ambLong.wr}% · {fmtUsd(scorecard.ambLong.pnl)}</div>}
+              </div>
+            )}
 
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>{candidates.length} MCE breakout candidate{candidates.length === 1 ? '' : 's'} · {devour.length + protect.length} in the paper book · mirrors the ORDERS AI / PNTHR MCE scan (active weekly BL · top-100 TTM · daily 2-bar high breakout · bull sectors)</div>
 

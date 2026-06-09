@@ -96,6 +96,23 @@ export async function getEliteSizing() {
   return { paperNav, realized, sizingPct: Math.round(getSizingMultiplier(paperNav) * 100), tier: getSizingTierLabel(paperNav), tier1: 125000, tier2: 166000 };
 }
 
+// LONG-vs-SHORT scorecard — validates the Ambush(short) / Elite(long) split on REAL data.
+// SHORT leg = Ambush live realized trades; LONG leg = Elite AI paper (realized + open).
+export async function getEliteScorecard() {
+  const db = await connectToDatabase();
+  if (!db) return null;
+  const st = (arr) => { const p = arr.reduce((s, t) => s + (+t.pnl || 0), 0); const w = arr.filter(t => (+t.pnl || 0) > 0).length; return { n: arr.length, wr: arr.length ? Math.round(w / arr.length * 100) : 0, pnl: Math.round(p) }; };
+  const amb = await db.collection('pnthr_ambush_trades').find({}, { projection: { direction: 1, pnl: 1, exitDate: 1 } }).toArray();
+  const isShort = t => /short|^ss$/i.test(String(t.direction || ''));
+  const short = st(amb.filter(isShort));
+  const ambLong = st(amb.filter(t => !isShort(t)));
+  const eliteClosed = st(await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray());
+  const ePos = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }, { projection: { livePnl: 1 } }).toArray();
+  const eliteOpen = { n: ePos.length, pnl: Math.round(ePos.reduce((s, p) => s + (+p.livePnl || 0), 0)) };
+  const dates = amb.map(t => t.exitDate).filter(Boolean).sort();
+  return { short, ambLong, eliteClosed, eliteOpen, from: dates[0] || null, to: dates[dates.length - 1] || null };
+}
+
 // Independent rule-recompute verification — the paper analogue of Ambush's
 // IBKR-truth reconcile. Recomputes what each value SHOULD be per the strategy
 // and flags drift. When live, the IBKR-position comparison plugs in here.

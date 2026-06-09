@@ -10,7 +10,7 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchReentrySignals, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
+import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import styles from './AmbushPage.module.css';
@@ -108,8 +108,29 @@ function LadderCard({ pos }) {
   );
 }
 
+// 5D Sector Rank strip (ported from ORDERS AI) — the GO / NO-GO regime that gates entries.
+function SectorStrip({ summary }) {
+  if (!summary || (!summary.go?.length && !summary.nogo?.length)) return null;
+  const row = (label, arr, color) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', alignItems: 'baseline' }}>
+      <span style={{ color, fontWeight: 700 }}>{label}</span>
+      {(arr || []).map(s => (
+        <span key={`${label}-${s.sectorId}`}><span style={{ color }}>{s.name}</span> <span style={{ color: '#888' }}>{((s.fiveDayReturn ?? 0) * 100).toFixed(2)}%</span></span>
+      ))}
+    </div>
+  );
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 14px', margin: '0 0 12px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6, fontSize: 11, fontFamily: 'monospace', color: '#ccc' }}>
+      <span style={{ color: '#fcf000', fontWeight: 700 }}>5D Sector Rank · {summary.asOf || '—'}</span>
+      {row('GO ▲', summary.go, '#16a34a')}
+      {row('NO GO ▼', summary.nogo, '#dc2626')}
+    </div>
+  );
+}
+
 export default function EliteAiPage() {
   const [doc, setDoc] = useState(null);
+  const [ordersDoc, setOrdersDoc] = useState(null);   // weekly BL pool + 5D sector rank (display only)
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -117,8 +138,8 @@ export default function EliteAiPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchEliteAiPositions().catch(() => [])]);
-      setDoc(c); setPositions(Array.isArray(p) ? p : []);
+      const [c, o, p] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => [])]);
+      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []);
     } catch (e) { setMsg(e.message); }
     setLoading(false);
   }, []);
@@ -131,13 +152,22 @@ export default function EliteAiPage() {
   const candidates = doc?.signals || [];
   const heldTickers = new Set(positions.map(p => (p.ticker || '').toUpperCase()));
   const waiting = candidates.filter(c => !heldTickers.has((c.ticker || '').toUpperCase())); // breakout-ready, not yet in the book
+  const huntingSet = new Set(waiting.map(c => (c.ticker || '').toUpperCase()));
+  // STALKING = the weekly BL pool still waiting: not yet breaking out (HUNTING) and not held
+  const blPool = (ordersDoc?.orders || []).filter(o => o.signal === 'BL');
+  const stalking = blPool.filter(o => { const t = (o.ticker || '').toUpperCase(); return !heldTickers.has(t) && !huntingSet.has(t); });
   const devour = positions.filter(p => !p.atBE);
   const protect = positions.filter(p => p.atBE);
   const sumPnl = (arr) => arr.reduce((s, p) => s + (+p.livePnl || 0), 0);   // refreshes on each 60s poll
   const devourPnl = sumPnl(devour);
   const protectPnl = sumPnl(protect);
   const totalOpenPnl = devourPnl + protectPnl;
-  const counts = { STALKING: 0, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
+  // paper-book heat vs the 15% NAV cap the engine gates on
+  const NAV = 100000;
+  const bookRisk = positions.reduce((s, p) => s + Math.abs((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice)) * (+p.totalShares || 0), 0);
+  const heatPct = (bookRisk / NAV) * 100;
+  const capacity = Math.max(0, NAV * 0.15 - bookRisk);
+  const counts = { STALKING: stalking.length, HUNTING: waiting.length, ATTACK: 0, DEVOUR: devour.length, 'STILL HUNGRY': 0, PROTECT: protect.length };
 
   const mceBox = (list) => (
     <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
@@ -200,7 +230,37 @@ export default function EliteAiPage() {
 
         {!loading && (
           <>
+            <SectorStrip summary={ordersDoc?.summary} />
+
+            {/* paper-book heat bar (ported from ORDERS AI, pointed at the paper book) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '8px 12px', margin: '0 0 12px', background: '#16161c', border: '1px solid #2a2a33', borderRadius: 6, fontSize: 12 }}>
+              <span style={{ color: '#f97316', fontWeight: 700, letterSpacing: '0.06em', fontSize: 11 }}>PAPER HEAT</span>
+              <div style={{ flex: 1, minWidth: 140, maxWidth: 320, height: 8, background: '#0e0e13', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, (heatPct / 15) * 100)}%`, height: '100%', background: heatPct >= 15 ? '#dc2626' : heatPct >= 10 ? '#f97316' : '#16a34a' }} />
+              </div>
+              <span style={{ color: heatPct >= 15 ? '#dc2626' : '#ccc', fontWeight: 700, fontFamily: 'monospace' }}>{heatPct.toFixed(1)}% / 15%</span>
+              <span style={{ color: '#888' }}>risk <b style={{ color: '#ddd', fontFamily: 'monospace' }}>{fmtUsd(bookRisk)}</b></span>
+              <span style={{ color: '#888' }}>capacity <b style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmtUsd(capacity)}</b></span>
+              <span style={{ color: '#888' }}>{positions.length} positions · $100k paper NAV</span>
+            </div>
+
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>{candidates.length} MCE breakout candidate{candidates.length === 1 ? '' : 's'} · {devour.length + protect.length} in the paper book · mirrors the ORDERS AI / PNTHR MCE scan (active weekly BL · top-100 TTM · daily 2-bar high breakout · bull sectors)</div>
+
+            {/* STALKING — the broad weekly BL pool still waiting for a breakout */}
+            <div className={styles.section} style={{ borderLeftColor: '#a78bfa' }}>
+              <div className={styles.sectionHeader}><span className={styles.sectionTitle}>STALKING — weekly BL pool (watching for a breakout)</span>
+                <div className={styles.sectionBadges}><span style={{ color: '#a78bfa' }}>{stalking.length} watching</span></div></div>
+              {stalking.length === 0 ? <div className={styles.emptyState}>No names in the weekly BL pool waiting (or orders still loading)</div> : (
+                <div style={{ padding: '8px 10px' }}>
+                  {stalking.map(o => (
+                    <span key={o.ticker} title={`${o.ticker}  ${o.sectorName || ''}${o.qualityGrade ? '  ·  ' + o.qualityGrade : ''}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', margin: 3, borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'monospace', background: '#221f33', color: '#cdb6ff', border: '1px solid #6d5bbf' }}>
+                      {o.ticker}
+                    </span>
+                  ))}
+                </div>)}
+            </div>
+
             {mceBox(waiting)}
 
             <div className={styles.section} style={{ borderLeftColor: '#22c55e' }}>

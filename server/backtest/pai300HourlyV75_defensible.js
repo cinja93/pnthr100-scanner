@@ -98,6 +98,29 @@ function getWeekOf(dateStr) {
   const m = new Date(d); m.setDate(d.getDate() + daysToMon);
   return m.toISOString().split('T')[0];
 }
+// SIGNAL_LAG_WEEKS=0 (default) = signal active from its OWN signal week (as-built).
+// SIGNAL_LAG_WEEKS=1 = signal only tradeable the Monday AFTER its signal week — i.e.
+// it acts on weekly signals only through the LAST COMPLETED week, exactly what the
+// live engine can see (no intra-signal-week look-ahead). Audit toggle (2026-06-08).
+// STRICT=1 — THE GUARDRAIL. One switch forces every look-ahead-free rule ON: closed-period
+// signals (SIGNAL_LAG_WEEKS) + next-bar-open fills for close-dependent triggers (REENTRY_NEXTOPEN)
+// + the post-breakout new-entry fill. STRICT = the DEFENSIBLE number; non-STRICT = an upper bound
+// that may contain look-ahead. The §0 sanity gate FLAGS any non-STRICT run. (See
+// server/backtest/BACKTEST_EXECUTION_RULES.md — locked 2026-06-08.)
+const STRICT = process.env.STRICT === '1';
+const SIGNAL_LAG_WEEKS = STRICT ? 1 : (+(process.env.SIGNAL_LAG_WEEKS) || 0);
+// ENTRY_HOURS="10:00,11:00" — only allow entries in these clock hours (winner-mining: the open
+// trends, midday chops). null = all hours. Exits/management are NOT restricted. (2026-06-08)
+const ENTRY_HOURS = process.env.ENTRY_HOURS ? new Set(process.env.ENTRY_HOURS.split(',')) : null;
+function effWeek(dateStr) {
+  let w = getWeekOf(dateStr);
+  if (SIGNAL_LAG_WEEKS > 0) {
+    const d = new Date(w + 'T12:00:00');
+    d.setDate(d.getDate() - 7 * SIGNAL_LAG_WEEKS);
+    w = d.toISOString().split('T')[0];
+  }
+  return w;
+}
 function extractTime(dateStr) { const p = dateStr.split(' '); return p.length > 1 ? p[1].slice(0, 5) : '00:00'; }
 function applySlip(price, adverse) { const s = price * (SLIPPAGE_BPS / 10000); return adverse ? +(price + s).toFixed(4) : +(price - s).toFixed(4); }
 function entrySlip(price, dir) { return dir === 'LONG' ? applySlip(price, true) : applySlip(price, false); }
@@ -230,17 +253,116 @@ async function main() {
   const signalsCarn = buildSignals(true);
   console.log(`  ${Object.keys(signalsAI).length} tickers with signals`);
 
+  // ── REAL-TIME GATE (audit 2026-06-08) ─────────────────────────────────────────
+  // REALTIME_GATE=1 replaces the "wait for the CONFIRMED weekly BL/SS" gate (which
+  // live can't see until the week closes) with a LOOK-AHEAD-FREE real-time detection
+  // of the SAME setup: the sector EMA + 2-week high/low from COMPLETED weeks only,
+  // and the LIVE bar. A name turns LONG-eligible the moment price breaks the 2-week
+  // high while the completed-week EMA is rising and price holds above it — i.e. it can
+  // enter DURING the breakout week (legitimately), instead of a week late. This is the
+  // honest way to chase the look-ahead's early-entry edge. Default off (no change).
+  const REALTIME_GATE = process.env.REALTIME_GATE === '1';
+  // Refinement knobs (audit 2026-06-08):
+  //   RT_GAP_MIN — price must be ≥ this fraction PAST the EMA (daylight gap; 0.003 = 0.3%).
+  //   RT_GAP_MAX — price must be ≤ this fraction past the EMA (skip over-extended chases; 0.25 = 1.25×).
+  //   RT_SLOPE   — completed-week EMA must be rising/falling by ≥ this fraction (trend-strength filter).
+  const RT_GAP_MIN = +(process.env.RT_GAP_MIN) || 0;
+  const RT_GAP_MAX = (process.env.RT_GAP_MAX != null && process.env.RT_GAP_MAX !== '') ? +process.env.RT_GAP_MAX : 9.99;
+  const RT_SLOPE   = +(process.env.RT_SLOPE) || 0;
+  // REENTRY_NEXTOPEN=1 — executable green re-entry: the "green close above the prior high"
+  // is only KNOWN at the bar's close, so you can't fill at the prior high mid-bar (that
+  // cherry-picks bars that closed green). Honest fill = the NEXT bar's open. (Scott 2026-06-08.)
+  const REENTRY_NEXTOPEN = STRICT || process.env.REENTRY_NEXTOPEN === '1';
+  // REENTRY_ATCLOSE=1 — gentler honest model: fill at the confirming bar's CLOSE (same-bar
+  // stop, no next-bar dependency). Triangulates whether the −100% is the look-ahead itself
+  // or a next-bar/stop artifact. (Scott 2026-06-08.)
+  const REENTRY_ATCLOSE = process.env.REENTRY_ATCLOSE === '1';
+  const weeklyCtx = {};
+  for (const ticker of Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t])) {
+    const bars = weeklyBarsByTicker[ticker]; if (!bars || bars.length < 35) continue;
+    const sectorId = AI_TICKER_META[ticker]?.sectorId;
+    const period = SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30;
+    const closes = bars.map(b => b.close); const k = 2 / (period + 1);
+    const ema = new Array(bars.length).fill(null);
+    let seed = 0; for (let i = 0; i < period; i++) seed += closes[i]; seed /= period;
+    ema[period - 1] = seed; let e = seed;
+    for (let i = period; i < closes.length; i++) { e = closes[i] * k + e * (1 - k); ema[i] = e; }
+    weeklyCtx[ticker] = { weeks: bars, ema };
+  }
+  // index of the last week STRICTLY BEFORE date's week (completed-weeks-only, no look-ahead)
+  function lastCompletedIdx(ctx, date) {
+    const W = getWeekOf(date);
+    for (let j = ctx.weeks.length - 1; j >= 0; j--) if (ctx.weeks[j].time < W) return j;
+    return -1;
+  }
+  function realtimeDir(ticker, date, bar) {
+    const ctx = weeklyCtx[ticker]; if (!ctx) return null;
+    const i = lastCompletedIdx(ctx, date);
+    if (i < 2 || ctx.ema[i] == null || ctx.ema[i - 1] == null) return null;
+    const ema = ctx.ema[i], emaPrev = ctx.ema[i - 1];
+    const twoWeekHigh = Math.max(ctx.weeks[i].high, ctx.weeks[i - 1].high);
+    const twoWeekLow  = Math.min(ctx.weeks[i].low,  ctx.weeks[i - 1].low);
+    if (ema > emaPrev * (1 + RT_SLOPE) && bar.high >= twoWeekHigh + 0.01
+        && bar.close >= ema * (1 + RT_GAP_MIN) && bar.close <= ema * (1 + RT_GAP_MAX)) return 'LONG';
+    if (ema < emaPrev * (1 - RT_SLOPE) && bar.low  <= twoWeekLow  - 0.01
+        && bar.close <= ema * (1 - RT_GAP_MIN) && bar.close >= ema * (1 - RT_GAP_MAX)) return 'SHORT';
+    return null;
+  }
+  function realtimeActive(ticker, date, price, dir) {
+    const ctx = weeklyCtx[ticker]; if (!ctx) return false;
+    const i = lastCompletedIdx(ctx, date);
+    if (i < 1 || ctx.ema[i] == null) return false;
+    return dir === 'LONG' ? price > ctx.ema[i] : price < ctx.ema[i];
+  }
+  // Breakout-CONFIRMATION level = the 2-week (completed) high/low. A new entry can't fill
+  // BELOW this — the trade isn't authorized until price ACTUALLY clears it. (Scott 2026-06-08:
+  // real entry is POST the breakout, not before.) Removes the intrabar look-ahead where the
+  // gate read the bar's full high but the fill happened at a lower, earlier level.
+  function realtimeBreak(ticker, date, dir) {
+    const ctx = weeklyCtx[ticker]; if (!ctx) return null;
+    const i = lastCompletedIdx(ctx, date);
+    if (i < 1) return null;
+    const twoWeekHigh = Math.max(ctx.weeks[i].high, ctx.weeks[i - 1].high);
+    const twoWeekLow  = Math.min(ctx.weeks[i].low,  ctx.weeks[i - 1].low);
+    return dir === 'LONG' ? +(twoWeekHigh + 0.01).toFixed(2) : +(twoWeekLow - 0.01).toFixed(2);
+  }
+  // Per-trade EXECUTABLE pre-trade features (winner-mining; FEATURES=1 writes a CSV). All use
+  // ONLY completed-week data + the entry price, so every feature is knowable BEFORE the trade.
+  function tradeFeatures(ticker, date, ep, dir) {
+    const f = { emaRoc1:'', emaRoc4:'', emaRoc8:'', priceMom4:'', priceMom8:'', priceMom12:'', distEma:'', sector5d:'' };
+    const ctx = weeklyCtx[ticker];
+    if (ctx) {
+      const i = lastCompletedIdx(ctx, date), e = ctx.ema, w = ctx.weeks;
+      if (i >= 12 && e[i] != null && e[i-1] != null) {
+        f.emaRoc1 = (((e[i]-e[i-1])/e[i-1])*100).toFixed(2);
+        if (e[i-4]  != null) f.emaRoc4 = (((e[i]-e[i-4])/e[i-4])*100).toFixed(2);
+        if (e[i-8]  != null) f.emaRoc8 = (((e[i]-e[i-8])/e[i-8])*100).toFixed(2);
+        if (w[i-4])  f.priceMom4  = (((w[i].close-w[i-4].close)/w[i-4].close)*100).toFixed(2);
+        if (w[i-8])  f.priceMom8  = (((w[i].close-w[i-8].close)/w[i-8].close)*100).toFixed(2);
+        if (w[i-12]) f.priceMom12 = (((w[i].close-w[i-12].close)/w[i-12].close)*100).toFixed(2);
+        f.distEma = (((ep - e[i])/e[i])*100).toFixed(2);
+      }
+    }
+    const sid = AI_TICKER_META[ticker]?.sectorId;
+    if (sid != null) { const s5 = sectorFiveDay(sid, date); if (s5 != null) f.sector5d = (+s5).toFixed(2); }
+    return f;
+  }
+
   function countTradingDays(fromDate, toDate) {
     const a = tradingDates.indexOf(fromDate), b = tradingDates.indexOf(toDate);
     if (a < 0 || b < 0) return Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000 * 5 / 7));
     return Math.max(1, b - a);
   }
 
+  // Scott's 'greenlive' proxy diagnostic (2026-06-08): how often does "green at the break tick"
+  // actually become a green close? Reset per-run inside the --greenlive battery, read after.
+  let glElig = 0, glClosedGreen = 0, glClosedHeld = 0;
+
   // ── [3] THE PARAMETERIZED SIMULATION CORE ─────────────────────────────────────
   function runSim(cfg) {
     const SIG = cfg.carnivoreSignals ? signalsCarn : signalsAI;
-    const isActiveBL = (t, d) => { const s = SIG[t]; if (!s) return false; const w = getWeekOf(d); for (const p of s.activeBLPeriods) if (w >= p.from && w <= p.to) return true; return false; };
-    const isActiveSS = (t, d) => { const s = SIG[t]; if (!s) return false; const w = getWeekOf(d); for (const p of s.activeSSPeriods) if (w >= p.from && w <= p.to) return true; return false; };
+    const isActiveBL = (t, d) => { const s = SIG[t]; if (!s) return false; const w = effWeek(d); for (const p of s.activeBLPeriods) if (w >= p.from && w <= p.to) return true; return false; };
+    const isActiveSS = (t, d) => { const s = SIG[t]; if (!s) return false; const w = effWeek(d); for (const p of s.activeSSPeriods) if (w >= p.from && w <= p.to) return true; return false; };
     const signalActive = (t, d, dir) => dir === 'LONG' ? isActiveBL(t, d) : isActiveSS(t, d);
 
     let cash = NAV_INITIAL, banked = 0;
@@ -274,7 +396,7 @@ async function main() {
         cash += proceeds;
       }
       if (pnl < worstSingleTrade) worstSingleTrade = pnl;
-      exits.push({ pnl, date, hour, ticker, type, direction: pos.direction, shares, avgCost: +pos.avgCost.toFixed(4), originalEntry: +(pos.originalEntry || pos.avgCost).toFixed(4), exitPrice: +exitPriceSlipped.toFixed(4), entryDate: pos.entryDate, isReentry: !!pos.isReentry, cycleNum: pos.cycleNum });
+      exits.push({ pnl, date, hour, ticker, type, direction: pos.direction, shares, avgCost: +pos.avgCost.toFixed(4), originalEntry: +(pos.originalEntry || pos.avgCost).toFixed(4), exitPrice: +exitPriceSlipped.toFixed(4), entryDate: pos.entryDate, isReentry: !!pos.isReentry, cycleNum: pos.cycleNum, entryHour: pos.entryHour, win: pnl > 0, R: (pos.riskEntry > 0 ? +(pnl / pos.riskEntry).toFixed(3) : 0), feat: pos.feat || {} });
       return pnl;
     }
 
@@ -358,13 +480,14 @@ async function main() {
             const bars = dayBars[ticker]; if (!bars || slot >= bars.length) continue;
             const bar = bars[slot], prevBar = bars[slot - 1];
             if (extractTime(bar.date) < FIRST_HOUR_END) continue;
+            if (ENTRY_HOURS && !ENTRY_HOURS.has(extractTime(bar.date))) continue;
 
             // Re-entry disabled: clear waiting when the weekly cycle ends so the name can re-new.
-            if (!cfg.reentryEnabled && waiting[ticker]) { if (!signalActive(ticker, date, waiting[ticker].direction)) delete waiting[ticker]; continue; }
+            if (!cfg.reentryEnabled && waiting[ticker]) { if (!(REALTIME_GATE ? realtimeActive(ticker, date, bar.close, waiting[ticker].direction) : signalActive(ticker, date, waiting[ticker].direction))) delete waiting[ticker]; continue; }
             const w = waiting[ticker];
-            const dir = w ? w.direction : (isActiveBL(ticker, date) ? 'LONG' : (isActiveSS(ticker, date) ? 'SHORT' : null));
+            const dir = w ? w.direction : (REALTIME_GATE ? realtimeDir(ticker, date, bar) : (isActiveBL(ticker, date) ? 'LONG' : (isActiveSS(ticker, date) ? 'SHORT' : null)));
             if (!dir) continue;
-            if (!signalActive(ticker, date, dir)) { delete waiting[ticker]; continue; }
+            if (!(REALTIME_GATE ? realtimeActive(ticker, date, bar.close, dir) : signalActive(ticker, date, dir))) { delete waiting[ticker]; continue; }
             if (cfg.sectorFilter && !sectorOk(ticker, date, dir)) continue;
             const isLong = dir === 'LONG';
             const hourlyLevel = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2);
@@ -379,11 +502,34 @@ async function main() {
               if (cfg.reentryTrigger === 'green') {
                 triggered = isLong ? (bar.close > bar.open && bar.high > prevBar.high && bar.close > prevBar.high)
                                    : (bar.close < bar.open && bar.low < prevBar.low && bar.close < prevBar.low);
+              } else if (cfg.reentryTrigger === 'greenlive') {
+                // Scott's EXECUTABLE green-now proxy (2026-06-08): the bar broke the prior bar's
+                // high intrabar AND the break price sits above this bar's open ("green so far" at
+                // the break tick) → enter the next tick at the break level. No look-ahead — uses
+                // only bar.open (known mid-bar) + the prior completed bar. Unlike 'green' it fills
+                // on EVERY qualifying touch; it CANNOT discard the ones that later close red.
+                triggered = isLong ? (bar.high >= hourlyLevel && hourlyLevel > bar.open)
+                                   : (bar.low  <= hourlyLevel && hourlyLevel < bar.open);
+                if (triggered) { // DIAGNOSTIC ONLY (not used to trade): did the bar actually finish green / hold the break?
+                  glElig++;
+                  if (isLong ? (bar.close > bar.open)      : (bar.close < bar.open))      glClosedGreen++;
+                  if (isLong ? (bar.close > prevBar.high)  : (bar.close < prevBar.low))   glClosedHeld++;
+                }
               } else {
                 triggered = isLong ? bar.high >= hourlyLevel : bar.low <= hourlyLevel;
               }
               if (!triggered) continue;
-              const ep = entrySlip(addFill(hourlyLevel, bar.open, dir), dir);
+              let ep;
+              if (REENTRY_NEXTOPEN && cfg.reentryTrigger === 'green') {
+                // green confirms at THIS bar's CLOSE → earliest executable fill is the NEXT bar's open
+                const nb = bars[slot + 1];
+                if (!nb) continue;                 // last bar of the session → can't enter executably
+                ep = entrySlip(nb.open, dir);
+              } else if (REENTRY_ATCLOSE && cfg.reentryTrigger === 'green') {
+                ep = entrySlip(bar.close, dir);     // act at the confirming bar's close (same-bar)
+              } else {
+                ep = entrySlip(addFill(hourlyLevel, bar.open, dir), dir);
+              }
               if (cfg.reentryFrozenDaily && (isLong ? ep < w.frozenDaily : ep > w.frozenDaily)) continue;
               let stop;
               if (cfg.reentryStopMode === 'firsthour') {
@@ -400,14 +546,17 @@ async function main() {
                 stop = isLong ? +(bar.low - 0.01).toFixed(2) : +(bar.high + 0.01).toFixed(2);
               }
               const rps = isLong ? ep - stop : stop - ep; if (rps <= 0.01) continue;
-              candidates.push({ ticker, dir, ep, stop, rps, isReentry: true, frozenDaily: w.frozenDaily, cycleNum: w.cycleNum, exitGi: w.exitGi });
+              candidates.push({ ticker, dir, ep, stop, rps, isReentry: true, frozenDaily: w.frozenDaily, cycleNum: w.cycleNum, exitGi: w.exitGi, feat: tradeFeatures(ticker, date, ep, dir), entryHour: extractTime(bar.date) });
             } else {
               // ── NEW ENTRY ───────────────────────────────────────────────────
               const triggered = isLong ? bar.high >= hourlyLevel : bar.low <= hourlyLevel;
               if (!triggered) continue;
               const two = priorTwoDaily(ticker, date); if (!two) continue;
               const dailyLevel = isLong ? +(Math.max(two.prev1.high, two.prev2.high) + 0.01).toFixed(2) : +(Math.min(two.prev1.low, two.prev2.low) - 0.01).toFixed(2);
-              const entryLevel = isLong ? Math.max(dailyLevel, hourlyLevel) : Math.min(dailyLevel, hourlyLevel);
+              let entryLevel = isLong ? Math.max(dailyLevel, hourlyLevel) : Math.min(dailyLevel, hourlyLevel);
+              // POST-breakout entry: under the real-time gate, can't fill until price clears the
+              // 2-week-high confirmation level (no entering before the breakout is real).
+              if (REALTIME_GATE) { const brk = realtimeBreak(ticker, date, dir); if (brk == null) continue; entryLevel = isLong ? Math.max(entryLevel, brk) : Math.min(entryLevel, brk); }
               const reached = isLong ? bar.high >= entryLevel : bar.low <= entryLevel; if (!reached) continue;
               const ep = entrySlip(addFill(entryLevel, bar.open, dir), dir);
               const fhl = firstHourLow[ticker], fhh = firstHourHigh[ticker];
@@ -415,14 +564,14 @@ async function main() {
               if (!isLong && (fhh == null || fhh <= ep)) continue;
               const stop = isLong ? +(fhl - COMMISSION_PER_SHARE).toFixed(2) : +(fhh + COMMISSION_PER_SHARE).toFixed(2);
               const rps = isLong ? ep - stop : stop - ep; if (rps <= 0.01) continue;
-              candidates.push({ ticker, dir, ep, stop, rps, isReentry: false, frozenDaily: dailyLevel, cycleNum: 0 });
+              candidates.push({ ticker, dir, ep, stop, rps, isReentry: false, frozenDaily: dailyLevel, cycleNum: 0, feat: tradeFeatures(ticker, date, ep, dir), entryHour: extractTime(bar.date) });
             }
           }
 
           candidates.sort((a, b) => b.rps - a.rps);
           for (const cand of candidates) {
             if (positions[cand.ticker]) continue;
-            const { ticker, dir, ep, stop, rps, isReentry, frozenDaily, cycleNum, exitGi } = cand;
+            const { ticker, dir, ep, stop, rps, isReentry, frozenDaily, cycleNum, exitGi, feat, entryHour } = cand;
             const entryBar = dayBars[ticker][slot]; const nav = workingNav();
             let totalShares = Math.min(Math.floor(MAX_LOSS / rps), Math.floor((nav * VITALITY_PCT) / rps), Math.floor((nav * TICKER_CAP_PCT) / ep));
             totalShares = Math.floor(totalShares * sizeMult);
@@ -434,7 +583,7 @@ async function main() {
             const c = comm(l1, ep); const cost = l1 * ep + c;
             if (cash < cost) { skippedNoCash++; continue; }
             totalComm += c; cash -= cost;
-            positions[ticker] = { ticker, direction: dir, entryDate: date, entrySlot: slot, entryGi: entryBar._gi, avgCost: ep, originalEntry: ep, totalShares: l1, lotPlan, stop, initRps: rps, trailOn: false, nextLot: 1, isReentry, frozenDaily, cycleNum };
+            positions[ticker] = { ticker, direction: dir, entryDate: date, entrySlot: slot, entryGi: entryBar._gi, avgCost: ep, originalEntry: ep, totalShares: l1, lotPlan, stop, initRps: rps, trailOn: false, nextLot: 1, isReentry, frozenDaily, cycleNum, feat, entryHour, riskEntry: +(rps * l1).toFixed(2) };
             delete waiting[ticker];
             if (isReentry) { totalReentries++; const gap = entryBar._gi - (exitGi ?? -999); if (gap === 0) sameBarReentry++; else if (gap === 1) nextBarReentry++; } else totalNewEntries++;
             if (dir === 'LONG') totalLongEntries++; else totalShortEntries++;
@@ -589,6 +738,43 @@ async function main() {
     process.exit(0);
   }
 
+  // ── GREENLIVE: test Scott's executable "green-now" re-entry proxy ──────────────
+  // Identical V7.5 base (frozen daily + real BULL/BEAR sector filter + AI signals + tight
+  // entry-bar stop). Re-entry trigger only varies: green-CLOSE (the look-ahead +789% engine)
+  // vs green-NOW (Scott's executable: broke the prior bar AND green at the break tick, fill at
+  // the break level) vs any-color (the honest resting stop that fills on every touch). Then it
+  // measures Scott's core assumption directly: how often does green-at-the-break become a green close?
+  if (process.argv.includes('--greenlive')) {
+    const cells = [
+      { ...SPEC, reentryTrigger: 'green',     reentryStopMode: 'entrybar', label: 'green CLOSE  (look-ahead — the +789% engine)' },
+      { ...SPEC, reentryTrigger: 'greenlive', reentryStopMode: 'entrybar', label: "green NOW    (Scott's executable proxy)" },
+      { ...SPEC, reentryTrigger: 'any',       reentryStopMode: 'entrybar', label: 'any color   (honest resting stop, fills all)' },
+    ];
+    console.log('\n[GREENLIVE] V7.5 base; re-entry = green-CLOSE (look-ahead) vs green-NOW (executable) vs any-color\n');
+    const f = (v) => (v >= 0 ? '+' : '') + v.toFixed(0) + '%';
+    const fm = (v) => '$' + (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v).toLocaleString());
+    console.log('  ' + 're-entry rule'.padEnd(46) + 'NetRet'.padStart(9) + 'NetCAGR'.padStart(9) + 'PF'.padStart(7) + 'WR'.padStart(6) + 'Trades'.padStart(9) + 'EndNet'.padStart(11));
+    console.log('  ' + '-'.repeat(97));
+    let glDiag = null;
+    for (const cfg of cells) {
+      glElig = 0; glClosedGreen = 0; glClosedHeld = 0;
+      const R = runSim(cfg); const gm = curveMetrics(R.grossCurve, 'equity');
+      const { netCurve } = applyFeeEngine(R.grossCurve, FILET_TIER); const nm = curveMetrics(netCurve, 'netEquity');
+      const ts = tradeStats(R.exits);
+      if (cfg.reentryTrigger === 'greenlive') glDiag = { glElig, glClosedGreen, glClosedHeld };
+      console.log('  ' + cfg.label.padEnd(46) + f(nm.totalReturn).padStart(9) + f(nm.cagr).padStart(9) + (ts.pf === Infinity ? '∞' : ts.pf.toFixed(2)).padStart(7) + (ts.wr.toFixed(0) + '%').padStart(6) + R.exits.length.toLocaleString().padStart(9) + fm(nm.ending).padStart(11));
+    }
+    if (glDiag && glDiag.glElig > 0) {
+      console.log('\n  ASSUMPTION CHECK — "price > open right now  ⇒  the bar will close green":');
+      console.log(`     Of ${glDiag.glElig.toLocaleString()} green-NOW break signals, ${(100*glDiag.glClosedGreen/glDiag.glElig).toFixed(1)}% actually closed green;`);
+      console.log(`     only ${(100*glDiag.glClosedHeld/glDiag.glElig).toFixed(1)}% closed green AND held above the breakout (the move you were betting on).`);
+    }
+    console.log('\n  Read: green-NOW is executable (no look-ahead) but lands with any-color, NOT green-CLOSE.');
+    console.log('  The green CLOSE is unknowable at entry; the "green now" guess is wrong too often to pay for itself.\n');
+    console.log(RULE + '\n');
+    process.exit(0);
+  }
+
   // ── VALIDATE 2: full court-defensible report on V7.4+cap vs V7.5+green ─────────
   if (process.argv.includes('--validate2')) {
     const CFG_A = { ...SPEC, label: 'V7.4 + 10% cap (green re-entry, WIDE stop, no daily/sector gate)', carnivoreSignals: true, reentryTrigger: 'green', reentryStopMode: 'runlow', reentryFrozenDaily: false, sectorFilter: false };
@@ -662,7 +848,7 @@ async function main() {
   const ACTIVE_CFG = V74_HONEST
     ? { ...SPEC, label: 'V7.4 rules — HONEST intraday', carnivoreSignals: true, reentryTrigger: (process.env.RETRIG || 'green'), reentryStopMode: 'runlow', reentryFrozenDaily: false, sectorFilter: false }
     : V75_GREEN
-    ? { ...SPEC, label: 'V7.5 + green-confirmed re-entry', reentryTrigger: 'green' }
+    ? { ...SPEC, label: 'V7.5 + green-confirmed re-entry', reentryTrigger: 'green', ...(process.env.RT_NO_SECTOR === '1' ? { sectorFilter: false } : {}) }
     : SPEC;
   const cfgName = V74_HONEST ? "V7.4's rules (honest intraday)" : V75_GREEN ? 'V7.5 + green-confirmed re-entry' : 'the canonical literal-spec';
   console.log(`\n[3] Running ${cfgName}${CLOCKHOUR ? ' on :00 TWS clock-hour bars' : ''} simulation...\n`);
@@ -716,12 +902,16 @@ async function main() {
   sanity.push({ name: 'Fees roughly halve gross return', val: `gross +${grossM.totalReturn.toFixed(0)}% → net +${netM.totalReturn.toFixed(0)}%`, pass: netM.totalReturn <= grossM.totalReturn * 0.75 });
   sanity.push({ name: 'Working capital stays ~$1M–$2M', val: 'peak working $' + (peakWorkingNav / 1e6).toFixed(2) + 'M', pass: peakWorkingNav <= 2_200_000 });
   sanity.push({ name: 'Not a catastrophic wipeout (≥ 25% of start)', val: 'total value $' + Math.round(grossM.ending).toLocaleString(), pass: grossM.ending >= NAV_INITIAL * 0.25 });
+  sanity.push({ name: 'STRICT executable mode (no look-ahead) — REQUIRED to trust the number', val: STRICT ? 'STRICT=1' : 'OFF — upper bound only, run STRICT=1', pass: STRICT });
   const allPass = sanity.every(s => s.pass);
 
   const fmt$ = v => '$' + Math.round(v).toLocaleString(); const pad = (s, n) => String(s).padStart(n);
   console.log('\n' + RULE);
   const TITLE = (V74_HONEST ? 'V7.4 RULES — HONEST INTRADAY' : V75_GREEN ? 'V7.5 + GREEN RE-ENTRY' : 'AMBUSH V7.5 — DEFENSIBLE') + (CLOCKHOUR ? ' · :00 TWS BARS' : '') + ' (court-defensible)';
   console.log('  ' + TITLE + '  (' + btStart + ' → ' + btEnd + ', ' + grossM.years.toFixed(2) + ' years)');
+  console.log('  ' + (STRICT
+    ? '✅ STRICT EXECUTABLE MODE — defensible: closed-period signals + next-bar-open fills (no look-ahead).'
+    : '⚠️  NON-EXECUTABLE / UPPER BOUND — may contain look-ahead. Run STRICT=1 for the defensible number.'));
   console.log(RULE);
   console.log('\n  ┌─ HEADLINE (total value = banked + working) ────────────────────────────────┐');
   console.log(`     Total value (GROSS):  ${fmt$(grossM.ending)}   = banked ${fmt$(banked)} + working ${fmt$(cash)}`);
@@ -804,6 +994,14 @@ async function main() {
     const tHead = ['ExitDate', 'Hour', 'Ticker', 'Direction', 'Reentry', 'Shares', 'AvgCost', 'ExitPrice', 'ExitType', 'PnL', 'EntryDate'];
     const tRows = sortedExits.map(e => [e.date, e.hour || '', e.ticker, e.direction, e.isReentry ? 'Y' : 'N', e.shares, e.avgCost, e.exitPrice, e.type, e.pnl, e.entryDate].join(','));
     fs.writeFileSync(path.join(dl, `PNTHR_Ambush_${TAG}_ClosedTrades.csv`), [tHead.join(','), ...tRows].join('\n'));
+    // FEATURES=1 — per-trade EXECUTABLE pre-trade features + outcome, for winner-mining.
+    if (process.env.FEATURES === '1') {
+      const fc = ['emaRoc1','emaRoc4','emaRoc8','priceMom4','priceMom8','priceMom12','distEma','sector5d'];
+      const fHead = ['EntryDate','Ticker','Dir','Reentry','Cycle','Hour','PnL','Win','R', ...fc];
+      const fRows = sortedExits.map(e => [e.entryDate, e.ticker, e.direction, e.isReentry?'Y':'N', e.cycleNum, e.entryHour||'', e.pnl, e.win?1:0, e.R, ...fc.map(c => (e.feat && e.feat[c] != null && e.feat[c] !== '') ? e.feat[c] : '')].join(','));
+      fs.writeFileSync(path.join(dl, `PNTHR_Ambush_${TAG}_Features.csv`), [fHead.join(','), ...fRows].join('\n'));
+      console.log(`  Wrote ~/Downloads: PNTHR_Ambush_${TAG}_Features.csv (${fRows.length} trades)`);
+    }
     const nByDate = {}; for (const n of netCurve) nByDate[n.date] = n.netEquity;
     const cHead = ['Date', 'Positions', 'Cash', 'Deployed', 'Working', 'Banked', 'TotalValueGross', 'TotalValueNet'];
     const cRows = dailyLedger.map(d => [d.date, d.positions, d.cash, d.deployed, d.working, d.banked, d.totalValue, nByDate[d.date] ?? ''].join(','));

@@ -620,7 +620,6 @@ export function AumTracker({ projection }) {
   const [tableView, setTableView] = useState(null);
   if (!projection?.current) return null;
   const { current, projected, actual, anchor } = projection;
-  const onTrack = (current.onTrackPct ?? 0) >= 0;
   const box = (label, value, color, onClick) => (
     <div onClick={onClick} title="Click for the full table" style={{ cursor: 'pointer', background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 14px', minWidth: 175 }}>
       <div style={{ color: '#888', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -655,6 +654,26 @@ export function AumTracker({ projection }) {
     </div>
   );
   const rowLabel = (t) => <div style={{ color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginTop: 12 }}>{t}</div>;
+  // ON TRACK / BEHIND pill for a given % (vs backtest).
+  const trackBadge = (pct, suffix = '') => {
+    const ok = (pct ?? 0) >= 0;
+    return (
+      <span style={{
+        fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6, textAlign: 'center',
+        color: ok ? '#22c55e' : '#ef4444',
+        background: (ok ? '#22c55e' : '#ef4444') + '1a',
+        border: `1px solid ${(ok ? '#22c55e' : '#ef4444')}44`,
+      }}>
+        {ok ? 'ON TRACK' : 'BEHIND'} {pct >= 0 ? '+' : ''}{pct}% vs backtest{suffix}
+      </span>
+    );
+  };
+  // Outlined "bundle" wrapper grouping a Projected box + its on-track badge.
+  const bundle = (children) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: '1px solid #25405f', borderRadius: 10, padding: 10, background: '#0d0d0d' }}>
+      {children}
+    </div>
+  );
   return (
     <div style={{ position: 'relative', marginBottom: 12 }}>
       <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 10, padding: '14px 16px', boxShadow: '0 0 0 1px rgba(59,130,246,0.08)' }}>
@@ -672,27 +691,25 @@ export function AumTracker({ projection }) {
         </div>
         {/* the 2 boxes — upper right, click for table */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-          {box(current.projectedAumGross != null ? 'Projected AUM (Net)' : 'Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
-          {current.projectedAumGross != null && box('Projected AUM (Gross)', current.projectedAumGross, '#60a5fa', () => setTableView('projectedGross'))}
-          {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
-          <span style={{
-            fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
-            color: onTrack ? '#22c55e' : '#ef4444',
-            background: (onTrack ? '#22c55e' : '#ef4444') + '1a',
-            border: `1px solid ${(onTrack ? '#22c55e' : '#ef4444')}44`,
-          }}>
-            {onTrack ? 'ON TRACK' : 'BEHIND'} {current.onTrackPct >= 0 ? '+' : ''}{current.onTrackPct}% vs backtest{current.onTrackPctGross != null ? ' (net)' : ''}
-          </span>
-          {current.onTrackPctGross != null && (() => { const g = (current.onTrackPctGross ?? 0) >= 0; return (
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
-              color: g ? '#22c55e' : '#ef4444',
-              background: (g ? '#22c55e' : '#ef4444') + '1a',
-              border: `1px solid ${(g ? '#22c55e' : '#ef4444')}44`,
-            }}>
-              {g ? 'ON TRACK' : 'BEHIND'} {current.onTrackPctGross >= 0 ? '+' : ''}{current.onTrackPctGross}% vs backtest (gross)
-            </span>
-          ); })()}
+          {current.projectedAumGross != null ? (
+            <>
+              {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
+              {bundle(<>
+                {box('Projected AUM (Net)', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
+                {trackBadge(current.onTrackPct, ' (net)')}
+              </>)}
+              {bundle(<>
+                {box('Projected AUM (Gross)', current.projectedAumGross, '#60a5fa', () => setTableView('projectedGross'))}
+                {trackBadge(current.onTrackPctGross, ' (gross)')}
+              </>)}
+            </>
+          ) : (
+            <>
+              {box('Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
+              {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
+              {trackBadge(current.onTrackPct)}
+            </>
+          )}
         </div>
       </div>
 

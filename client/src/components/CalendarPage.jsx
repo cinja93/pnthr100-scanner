@@ -313,6 +313,7 @@ export default function CalendarPage() {
         <AiTickerChartModal
           tickers={chartStocks.map(s => s.ticker || s)}
           initialIndex={chartIndex}
+          earnings={earnings}
           onClose={() => setChartIndex(null)}
         />
       )}

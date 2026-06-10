@@ -177,7 +177,7 @@ function useDrawingTools(chartRef, containerRef, priceSeriesRef) {
 function ChartPanel({
   title, period, fallback, bars, signals, chartType,
   currentSignal, pnthrStop, weeklyStop,
-  ticker, entryPrice, nextEntryTrigger, mceTrigger,
+  ticker, entryPrice, nextEntryTrigger, mceTrigger, earningsDate,
 }) {
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
@@ -220,16 +220,31 @@ function ChartPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, entryPrice, pnthrStop, currentSignal]);
 
+  // Earnings-week shading (restored from the old light chart): within 0-5 days
+  // of the ticker's earnings date, paint the chart the old pale-yellow LIGHT
+  // theme so it reads instantly as "earnings week" (matches the prior look).
+  const earningsWindow = (() => {
+    if (!earningsDate) return false;
+    const [ey, em, ed] = String(earningsDate).split('-').map(Number);
+    if (!ey || !em || !ed) return false;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const daysAway = Math.round((new Date(ey, em - 1, ed) - today) / 86400000);
+    return daysAway >= 0 && daysAway <= 5;
+  })();
+  const theme = earningsWindow
+    ? { bg: '#fffde7', text: '#212121', grid: '#f0f0f0', border: '#d4d4d4' }
+    : { bg: '#0c0c0c', text: '#d4d4d4', grid: '#1a1a1a', border: '#333' };
+
   // ── Chart render ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || !bars || bars.length === 0) return;
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false, fontSize: 10 },
-      grid: { vertLines: { color: '#1a1a1a' }, horzLines: { color: '#1a1a1a' } },
-      rightPriceScale: { borderColor: '#333' },
-      timeScale: { borderColor: '#333', timeVisible: title === 'Daily', barSpacing: barSpacingRef.current },
+      layout: { background: { color: theme.bg }, textColor: theme.text, attributionLogo: false, fontSize: 10 },
+      grid: { vertLines: { color: theme.grid }, horzLines: { color: theme.grid } },
+      rightPriceScale: { borderColor: theme.border },
+      timeScale: { borderColor: theme.border, timeVisible: title === 'Daily', barSpacing: barSpacingRef.current },
       crosshair: { mode: 1 },
     });
     chartRef.current = chart;
@@ -363,7 +378,7 @@ function ChartPanel({
       priceLineRef.current = null;
       markersRef.current = null;
     };
-  }, [bars, signals, chartType, title, pnthrStop, nextEntryTrigger, mceTrigger]);
+  }, [bars, signals, chartType, title, pnthrStop, nextEntryTrigger, mceTrigger, earningsDate]);
 
   // Update the dashed stop line live when SIZE IT's adjustable stop changes.
   // The line is a LineSeries pinned to the last 5 bars at a constant Y value;
@@ -708,6 +723,13 @@ function ChartPanel({
           </div>
         )}
         <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+        {earningsWindow && (
+          <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
+            background: '#fff59d', color: '#5d4037', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
+            padding: '2px 10px', borderRadius: 4, border: '1px solid #f9a825', zIndex: 5, pointerEvents: 'none' }}>
+            EARNINGS WEEK
+          </div>
+        )}
       </div>
     </div>
   );
@@ -777,7 +799,7 @@ function getPegTooltip(peg) {
   return `PEG: ${peg.toFixed(2)} — ${reading}`;
 }
 
-export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, onClose }) {
+export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, earnings = {}, onClose }) {
   const tickerList = tickers && tickers.length > 0 ? tickers : (ticker ? [ticker] : []);
   const [currentIdx, setCurrentIdx] = useState(Math.min(Math.max(0, initialIndex), Math.max(0, tickerList.length - 1)));
   const activeTicker = tickerList[currentIdx];
@@ -1001,6 +1023,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 entryPrice={data.currentPrice}
                 nextEntryTrigger={data.daily.nextEntryTrigger ?? null}
                 mceTrigger={data.daily.mceTrigger ?? null}
+                earningsDate={earnings[activeTicker] ?? null}
               />
               <ChartPanel
                 title="Weekly"
@@ -1014,6 +1037,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 weeklyStop={data.weekly.pnthrStop}
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
+                earningsDate={earnings[activeTicker] ?? null}
               />
             </>
           )}

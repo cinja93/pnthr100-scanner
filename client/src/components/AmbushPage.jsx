@@ -511,8 +511,8 @@ function mondayOf(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 function AumTableModal({ view, projection, onClose }) {
-  const isProj = view === 'projected';
-  const series = isProj ? (projection.projected || []) : (projection.actual || []);
+  const isProj = view === 'projected' || view === 'projectedGross';
+  const series = view === 'projectedGross' ? (projection.projectedGross || []) : isProj ? (projection.projected || []) : (projection.actual || []);
   // Projected: one row per WEEK (first trading day of each week). Actual: every snapshot.
   let rows = series;
   if (isProj) {
@@ -524,7 +524,7 @@ function AumTableModal({ view, projection, onClose }) {
       <div onClick={e => e.stopPropagation()} style={{ background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 10, width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #222' }}>
           <div style={{ color: isProj ? '#3b82f6' : '#22c55e', fontWeight: 700, fontSize: 14 }}>
-            {isProj ? 'Projected AUM — week by week' : 'Actual AUM — daily history'}
+            {view === 'projectedGross' ? 'Projected AUM (Gross) — week by week' : isProj ? 'Projected AUM — week by week' : 'Actual AUM — daily history'}
           </div>
           <span onClick={onClose} style={{ cursor: 'pointer', color: '#888', fontSize: 20, lineHeight: 1 }}>×</span>
         </div>
@@ -629,6 +629,32 @@ export function AumTracker({ projection }) {
       <div style={{ color, fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{fmtAum(value)}</div>
     </div>
   );
+  // One row of hedge-fund metric cards for a given metrics object (Net or Gross).
+  const metricTiles = (m, kind) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+      {[
+        [`${kind} Total Return`, (m.netReturnPct >= 0 ? '+' : '') + Math.round(m.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((m.startNav || 100000) / 1000) + 'K start'],
+        [`${kind} CAGR`, (m.cagrPct >= 0 ? '+' : '') + m.cagrPct + '%', '#22c55e'],
+        ['Sharpe', m.sharpe, '#e6e6e6'],
+        ['Sortino', m.sortino, '#22c55e'],
+        ['Profit Factor', m.profitFactor + 'x', '#22c55e'],
+        ['Calmar', m.calmar, '#e6e6e6'],
+        ['Recovery Factor', m.recoveryFactor + 'x', '#e6e6e6'],
+        ['Positive Months', m.positiveMonthsPct + '%', '#22c55e'],
+        ['Win Rate', m.winRatePct + '%', '#e6e6e6', m.payoff + 'x payoff'],
+        ['Total Closed', Math.round(m.totalClosed).toLocaleString(), '#e6e6e6'],
+        ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
+        ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
+      ].map(([label, value, color, sub], i) => (
+        <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 12px', minWidth: 96, flex: '1 1 auto' }}>
+          <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
+          <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
+          {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+  const rowLabel = (t) => <div style={{ color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginTop: 12 }}>{t}</div>;
   return (
     <div style={{ position: 'relative', marginBottom: 12 }}>
       <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 10, padding: '14px 16px', boxShadow: '0 0 0 1px rgba(59,130,246,0.08)' }}>
@@ -646,7 +672,8 @@ export function AumTracker({ projection }) {
         </div>
         {/* the 2 boxes — upper right, click for table */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-          {box('Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
+          {box(current.projectedAumGross != null ? 'Projected AUM (Net)' : 'Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
+          {current.projectedAumGross != null && box('Projected AUM (Gross)', current.projectedAumGross, '#60a5fa', () => setTableView('projectedGross'))}
           {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
           <span style={{
             fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
@@ -654,35 +681,33 @@ export function AumTracker({ projection }) {
             background: (onTrack ? '#22c55e' : '#ef4444') + '1a',
             border: `1px solid ${(onTrack ? '#22c55e' : '#ef4444')}44`,
           }}>
-            {onTrack ? 'ON TRACK' : 'BEHIND'} {current.onTrackPct >= 0 ? '+' : ''}{current.onTrackPct}% vs backtest
+            {onTrack ? 'ON TRACK' : 'BEHIND'} {current.onTrackPct >= 0 ? '+' : ''}{current.onTrackPct}% vs backtest{current.onTrackPctGross != null ? ' (net)' : ''}
           </span>
+          {current.onTrackPctGross != null && (() => { const g = (current.onTrackPctGross ?? 0) >= 0; return (
+            <span style={{
+              fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 6,
+              color: g ? '#22c55e' : '#ef4444',
+              background: (g ? '#22c55e' : '#ef4444') + '1a',
+              border: `1px solid ${(g ? '#22c55e' : '#ef4444')}44`,
+            }}>
+              {g ? 'ON TRACK' : 'BEHIND'} {current.onTrackPctGross >= 0 ? '+' : ''}{current.onTrackPctGross}% vs backtest (gross)
+            </span>
+          ); })()}
         </div>
       </div>
 
-      {/* Hedge-fund metric cards from the backtest (GRAD BASELINE) */}
+      {/* Hedge-fund metric cards from the backtest — NET row + GROSS row (if present) */}
       {projection.metrics && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-          {[
-            ['Net Total Return', (projection.metrics.netReturnPct >= 0 ? '+' : '') + Math.round(projection.metrics.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((projection.metrics.startNav || 100000) / 1000) + 'K start'],
-            ['Net CAGR', (projection.metrics.cagrPct >= 0 ? '+' : '') + projection.metrics.cagrPct + '%', '#22c55e'],
-            ['Sharpe', projection.metrics.sharpe, '#e6e6e6'],
-            ['Sortino', projection.metrics.sortino, '#22c55e'],
-            ['Profit Factor', projection.metrics.profitFactor + 'x', '#22c55e'],
-            ['Calmar', projection.metrics.calmar, '#e6e6e6'],
-            ['Recovery Factor', projection.metrics.recoveryFactor + 'x', '#e6e6e6'],
-            ['Positive Months', projection.metrics.positiveMonthsPct + '%', '#22c55e'],
-            ['Win Rate', projection.metrics.winRatePct + '%', '#e6e6e6', projection.metrics.payoff + 'x payoff'],
-            ['Total Closed', Math.round(projection.metrics.totalClosed).toLocaleString(), '#e6e6e6'],
-            ['Ending Equity', fmtAum(projection.metrics.endingEquity), '#22c55e'],
-            ['Alpha vs S&P', (projection.metrics.alphaDollar >= 0 ? '+' : '') + fmtAum(projection.metrics.alphaDollar), '#22c55e'],
-          ].map(([label, value, color, sub], i) => (
-            <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 12px', minWidth: 96, flex: '1 1 auto' }}>
-              <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
-              <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
-              {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
-            </div>
-          ))}
-        </div>
+        <>
+          {projection.metricsGross && rowLabel('NET (after fund fees)')}
+          {metricTiles(projection.metrics, 'Net')}
+          {projection.metricsGross && (
+            <>
+              {rowLabel('GROSS (before fund fees)')}
+              {metricTiles(projection.metricsGross, 'Gross')}
+            </>
+          )}
+        </>
       )}
       </div>
 

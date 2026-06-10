@@ -126,11 +126,19 @@ async function main() {
 
   const factors = netCurve.map((d, i) => ({ i, date: d.date, factor: +(d.netEquity / startNav).toFixed(6) }));
 
+  // ── GROSS (before fund fees) — straight from the simulator's daily NAV curve ──
+  const mG = computeMetrics(gross, 'equity');
+  const grossReturnPct = mG.totalReturn;
+  const grossAlphaPct = grossReturnPct - spyReturnPct;
+  const grossRecovery = mG.maxDdDollar < 0 ? (mG.last - startNav) / Math.abs(mG.maxDdDollar) : 0;
+  const factorsGross = gross.map((d, i) => ({ i, date: d.date, factor: +(d.equity / startNav).toFixed(6) }));
+
   const out = {
-    generatedFrom: 'ai300MceSimulator.js (gated baseline: PAI300 36W regime + sector rotation) + PPM v6.9 Filet fee engine, NET of fund fees. HYPOTHETICAL / survivorship-flattered (AI-300 index back-cast) — internal tracker, not a track record.',
-    version: 'elite-1.0.0',
+    generatedFrom: 'ai300MceSimulator.js (gated baseline: PAI300 36W regime + sector rotation) + PPM v6.9 Filet fee engine. metrics = NET of fund fees; metricsGross = GROSS. HYPOTHETICAL / survivorship-flattered (AI-300 index back-cast) — internal tracker, not a track record.',
+    version: 'elite-1.1.0',
     backtestStartNav: startNav,
     backtestEndNav: Math.round(m.last),
+    backtestEndNavGross: Math.round(mG.last),
     tradingDays: factors.length,
     metrics: {
       netReturnPct: +netReturnPct.toFixed(1),
@@ -151,7 +159,27 @@ async function main() {
       spyReturnPct: +spyReturnPct.toFixed(1),
       startNav,
     },
+    metricsGross: {
+      netReturnPct: +grossReturnPct.toFixed(1),
+      cagrPct: +mG.cagr.toFixed(1),
+      sharpe: +mG.sharpe.toFixed(2),
+      sortino: +mG.sortino.toFixed(1),
+      profitFactor: +profitFactor.toFixed(1),
+      calmar: +mG.calmar.toFixed(2),
+      recoveryFactor: +grossRecovery.toFixed(1),
+      positiveMonthsPct: +(mG.pos / (mG.tot || 1) * 100).toFixed(1),
+      winRatePct: Math.round(winRatePct),
+      payoff: +payoff.toFixed(1),
+      maxDDPct: +Math.abs(mG.maxDdPct).toFixed(2),
+      totalClosed: closed.length,
+      endingEquity: Math.round(mG.last),
+      alphaDollar: Math.round(grossAlphaPct / 100 * startNav),
+      alphaPct: Math.round(grossAlphaPct),
+      spyReturnPct: +spyReturnPct.toFixed(1),
+      startNav,
+    },
     factors,
+    factorsGross,
   };
 
   const outPath = path.resolve(__dirname, '../data/eliteProjectionBaseline.json');

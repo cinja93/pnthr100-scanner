@@ -282,6 +282,7 @@ export async function getEliteProjection() {
   if (!db) return null;
   const proj = loadEliteProjection();
   const factors = proj.factors || [];
+  const factorsGross = proj.factorsGross || [];
 
   // Actual AUM = the REAL account NAV (same source as the Ambush panel) — we ride the
   // real AUM forward at the Elite backtest growth rate, NOT the notional paper book.
@@ -312,10 +313,13 @@ export async function getEliteProjection() {
   const dates = N ? [startDate] : [];
   { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
   const projected = factors.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
+  const projectedGross = factorsGross.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
 
   const elapsed = Math.min(_weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
   const projectedToday = +(startAum * (factors[elapsed]?.factor || 1)).toFixed(0);
   const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
+  const projectedTodayGross = +(startAum * (factorsGross[elapsed]?.factor || 1)).toFixed(0);
+  const onTrackPctGross = projectedTodayGross > 0 ? +(((actualNav / projectedTodayGross) - 1) * 100).toFixed(1) : 0;
 
   const cagrPct = proj.metrics?.cagrPct || 0;
   const dailyCagr = cagrPct > 0 ? Math.pow(1 + cagrPct / 100, 1 / 252) : 1;
@@ -328,11 +332,13 @@ export async function getEliteProjection() {
 
   return {
     anchor: { startDate, startAum: +startAum.toFixed(0) },
-    current: { date: todayISO, projectedAum: projectedToday, actualAum: +actualNav.toFixed(0), onTrackPct },
+    current: { date: todayISO, projectedAum: projectedToday, projectedAumGross: projectedTodayGross, actualAum: +actualNav.toFixed(0), onTrackPct, onTrackPctGross },
     projected,
+    projectedGross,
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
     forward,
     metrics: proj.metrics || null,
-    meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
+    metricsGross: proj.metricsGross || null,
+    meta: { backtestEndNav: proj.backtestEndNav, backtestEndNavGross: proj.backtestEndNavGross, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
   };
 }

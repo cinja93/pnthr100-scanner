@@ -615,7 +615,7 @@ function ForwardProjection({ forward }) {
   );
 }
 
-function AumTracker({ projection }) {
+export function AumTracker({ projection }) {
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
   if (!projection?.current) return null;
@@ -663,7 +663,7 @@ function AumTracker({ projection }) {
       {projection.metrics && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
           {[
-            ['Net Total Return', (projection.metrics.netReturnPct >= 0 ? '+' : '') + Math.round(projection.metrics.netReturnPct).toLocaleString() + '%', '#22c55e', '$83K start'],
+            ['Net Total Return', (projection.metrics.netReturnPct >= 0 ? '+' : '') + Math.round(projection.metrics.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((projection.metrics.startNav || 100000) / 1000) + 'K start'],
             ['Net CAGR', (projection.metrics.cagrPct >= 0 ? '+' : '') + projection.metrics.cagrPct + '%', '#22c55e'],
             ['Sharpe', projection.metrics.sharpe, '#e6e6e6'],
             ['Sortino', projection.metrics.sortino, '#22c55e'],

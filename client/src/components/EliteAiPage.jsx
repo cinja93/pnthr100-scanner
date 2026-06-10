@@ -10,11 +10,12 @@
 // Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
-import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, fetchEliteScorecard, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
+import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, fetchEliteScorecard, fetchEliteProjection, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
 import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import LongShortScorecard from './LongShortScorecard';
 import AiTickerChartModal from './AiTickerChartModal';
+import { AumTracker } from './AmbushPage';
 import styles from './AmbushPage.module.css';
 
 // MCE funnel — the 4 stages the engine actually has (no intraday tripwire / re-entry loop).
@@ -134,6 +135,7 @@ export default function EliteAiPage() {
   const [ordersDoc, setOrdersDoc] = useState(null);   // weekly BL pool + 5D sector rank (display only)
   const [sizing, setSizing] = useState(null);          // graduated-sizing tier
   const [scorecard, setScorecard] = useState(null);    // long-vs-short validation
+  const [projection, setProjection] = useState(null);  // projected-vs-actual AUM (backtest)
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -143,8 +145,8 @@ export default function EliteAiPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, o, p, s, sc] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => []), fetchEliteSizing().catch(() => null), fetchEliteScorecard().catch(() => null)]);
-      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []); setSizing(s); setScorecard(sc);
+      const [c, o, p, s, sc, pr] = await Promise.all([fetchReentrySignals().catch(() => ({ signals: [] })), fetchLatestAiOrders({}).catch(() => null), fetchEliteAiPositions().catch(() => []), fetchEliteSizing().catch(() => null), fetchEliteScorecard().catch(() => null), fetchEliteProjection().catch(() => null)]);
+      setDoc(c); setOrdersDoc(o); setPositions(Array.isArray(p) ? p : []); setSizing(s); setScorecard(sc); setProjection(pr);
     } catch (e) { setMsg(e.message); }
     setLoading(false);
   }, []);
@@ -198,6 +200,9 @@ export default function EliteAiPage() {
     <AumShield block showDuration>
       <div style={{ padding: '0 4px' }}>
         <PageHeader title="Elite AI" description="Automated paper engine for the PNTHR AI 300 Elite (MCE) strategy — the same daily-breakout scan as ORDERS AI. HUNTING = breakout candidates ready to enter; DEVOUR = the isolated dry-run paper book (no orders, no IBKR)." />
+
+        {/* ═══ PROJECTED vs ACTUAL AUM (backtest, hypothetical) ═══ */}
+        <AumTracker projection={projection} />
 
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>

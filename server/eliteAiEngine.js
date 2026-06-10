@@ -13,6 +13,7 @@
 // stop, so the paper book mirrors ORDERS AI name-for-name. The manage pass then
 // fills L2-L5 as live price clears each trigger, ratchets the stop, exits on a hit.
 // ────────────────────────────────────────────────────────────────────────────
+import fs from 'fs';
 import { connectToDatabase } from './database.js';
 import { getReentrySignals } from './reentrySignalService.js';
 import { getSectorName, getSizingMultiplier, getSizingTierLabel } from './ambush/ambushEngine.js';
@@ -230,4 +231,104 @@ export async function getEliteTrades(limit = 30) {
   const db = await connectToDatabase();
   if (!db) return [];
   return db.collection(TRADES).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
+}
+
+// ── PROJECTED vs ACTUAL AUM (mirrors the Ambush projection, Elite numbers) ──────
+// Backtest baseline = eliteProjectionBaseline.json (MCE gated baseline, NET of fund
+// fees). HYPOTHETICAL / survivorship-flattered — internal tracker, not a track record.
+const _eliteProjPath = new URL('./data/eliteProjectionBaseline.json', import.meta.url).pathname;
+let _eliteProj = null;
+function loadEliteProjection() {
+  if (!_eliteProj) {
+    try { _eliteProj = JSON.parse(fs.readFileSync(_eliteProjPath, 'utf8')); }
+    catch { _eliteProj = { factors: [], backtestStartNav: 100000, backtestEndNav: 0, metrics: null }; }
+  }
+  return _eliteProj;
+}
+function _etDateStr(d = new Date()) {
+  const p = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)) p[type] = value;
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function _weekdaysBetween(a, b) {
+  if (!b || b <= a) return 0;
+  const e = new Date(b + 'T12:00:00'), d = new Date(a + 'T12:00:00'); let n = 0;
+  while (d < e) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
+const _FWD_WD_THRESHOLD = 2_000_000, _FWD_WD_AMOUNT = 1_000_000;
+const _FWD_HORIZONS = [
+  { label: '6 mo', years: 0.5, days: 126 }, { label: '1 yr', years: 1, days: 252 },
+  { label: '18 mo', years: 1.5, days: 378 }, { label: '2 yr', years: 2, days: 504 },
+  { label: '3 yr', years: 3, days: 756 }, { label: '5 yr', years: 5, days: 1260 },
+  { label: '10 yr', years: 10, days: 2520 },
+];
+function _simulateForward(startBalance, factors, elapsed, dailyCagrRate, horizons) {
+  const N = factors.length, maxDays = horizons[horizons.length - 1].days;
+  const byDay = new Map(horizons.map(h => [h.days, h]));
+  let balance = startBalance, banked = 0; const snaps = {};
+  for (let k = 1; k <= maxDays; k++) {
+    if (balance >= _FWD_WD_THRESHOLD) { balance -= _FWD_WD_AMOUNT; banked += _FWD_WD_AMOUNT; }
+    const srcIdx = elapsed + k;
+    let ratio = (srcIdx < N && factors[srcIdx - 1]?.factor > 0) ? factors[srcIdx].factor / factors[srcIdx - 1].factor : dailyCagrRate;
+    if (ratio > 0 && isFinite(ratio)) balance *= ratio;
+    if (byDay.has(k)) snaps[k] = { balance: Math.round(balance), banked, total: Math.round(balance + banked), extrapolated: (elapsed + k) >= N };
+  }
+  return snaps;
+}
+
+export async function getEliteProjection() {
+  const db = await connectToDatabase();
+  if (!db) return null;
+  const proj = loadEliteProjection();
+  const factors = proj.factors || [];
+
+  // Elite ACTUAL = paper book equity = $100k seed + realized + open unrealized.
+  const realized = (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0);
+  const openPnl = (await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }, { projection: { livePnl: 1 } }).toArray()).reduce((s, p) => s + (+p.livePnl || 0), 0);
+  const actualNav = 100000 + realized + openPnl;
+  const todayISO = _etDateStr();
+
+  // Anchor: lock start date + AUM on first call (mirrors Ambush).
+  const cfgColl = db.collection('pnthr_elite_config');
+  const cfg = (await cfgColl.findOne({ key: 'elite_config' })) || {};
+  let startDate = cfg.projectionStartDate, startAum = cfg.projectionStartAum;
+  if (!startDate || !startAum) {
+    startDate = todayISO; startAum = actualNav;
+    await cfgColl.updateOne({ key: 'elite_config' }, { $set: { key: 'elite_config', projectionStartDate: startDate, projectionStartAum: startAum } }, { upsert: true });
+  }
+
+  // Record today's actual snapshot, then read the series.
+  if (actualNav > 0) {
+    await db.collection('pnthr_elite_aum_daily').updateOne({ date: todayISO }, { $set: { date: todayISO, actualAum: +actualNav.toFixed(2), updatedAt: new Date() } }, { upsert: true });
+  }
+  const actualSeries = await db.collection('pnthr_elite_aum_daily').find({}, { projection: { _id: 0, date: 1, actualAum: 1 } }).sort({ date: 1 }).toArray();
+
+  const N = factors.length;
+  const dates = N ? [startDate] : [];
+  { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
+  const projected = factors.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
+
+  const elapsed = Math.min(_weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
+  const projectedToday = +(startAum * (factors[elapsed]?.factor || 1)).toFixed(0);
+  const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
+
+  const cagrPct = proj.metrics?.cagrPct || 0;
+  const dailyCagr = cagrPct > 0 ? Math.pow(1 + cagrPct / 100, 1 / 252) : 1;
+  const projFwd = N ? _simulateForward(projectedToday, factors, elapsed, dailyCagr, _FWD_HORIZONS) : {};
+  const actFwd = N ? _simulateForward(actualNav, factors, elapsed, dailyCagr, _FWD_HORIZONS) : {};
+  const forward = {
+    cagrPct, withdrawalRule: { threshold: _FWD_WD_THRESHOLD, amount: _FWD_WD_AMOUNT },
+    horizons: _FWD_HORIZONS.map(h => ({ label: h.label, years: h.years, days: h.days, projected: projFwd[h.days] || null, actual: actFwd[h.days] || null, extrapolated: (actFwd[h.days]?.extrapolated) || false })),
+  };
+
+  return {
+    anchor: { startDate, startAum: +startAum.toFixed(0) },
+    current: { date: todayISO, projectedAum: projectedToday, actualAum: +actualNav.toFixed(0), onTrackPct },
+    projected,
+    actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+    forward,
+    metrics: proj.metrics || null,
+    meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)' },
+  };
 }

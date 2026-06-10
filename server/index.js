@@ -38,7 +38,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalance
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
-import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard } from './eliteAiEngine.js';
+import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2594,6 +2594,10 @@ app.get('/api/elite-ai/sizing', authenticateJWT, async (req, res) => {
 });
 app.get('/api/elite-ai/scorecard', authenticateJWT, async (req, res) => {
   try { res.json(await getEliteScorecard()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
+  try { res.json(await getEliteProjection()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 

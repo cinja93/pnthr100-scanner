@@ -14,7 +14,7 @@
 // fills L2-L5 as live price clears each trigger, ratchets the stop, exits on a hit.
 // ────────────────────────────────────────────────────────────────────────────
 import fs from 'fs';
-import { connectToDatabase } from './database.js';
+import { connectToDatabase, getUserProfile } from './database.js';
 import { getReentrySignals } from './reentrySignalService.js';
 import { getSectorName, getSizingMultiplier, getSizingTierLabel } from './ambush/ambushEngine.js';
 import { LOT_OFFSETS } from './lotMath.js';
@@ -283,10 +283,14 @@ export async function getEliteProjection() {
   const proj = loadEliteProjection();
   const factors = proj.factors || [];
 
-  // Elite ACTUAL = paper book equity = $100k seed + realized + open unrealized.
-  const realized = (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0);
-  const openPnl = (await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }, { projection: { livePnl: 1 } }).toArray()).reduce((s, p) => s + (+p.livePnl || 0), 0);
-  const actualNav = 100000 + realized + openPnl;
+  // Actual AUM = the REAL account NAV (same source as the Ambush panel) — we ride the
+  // real AUM forward at the Elite backtest growth rate, NOT the notional paper book.
+  let actualNav = 83000;
+  try {
+    const ambCfg = await db.collection('pnthr_ambush_config').findOne({});
+    if (ambCfg?.nav > 0) actualNav = ambCfg.nav;
+    if (ambCfg?.ownerId) { const p = await getUserProfile(ambCfg.ownerId); if (p?.accountSize > 0) actualNav = p.accountSize; }
+  } catch { /* fall back to default */ }
   const todayISO = _etDateStr();
 
   // Anchor: lock start date + AUM on first call (mirrors Ambush).

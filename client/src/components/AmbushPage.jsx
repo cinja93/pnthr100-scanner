@@ -713,19 +713,21 @@ export function AumTracker({ projection }) {
         </div>
       </div>
 
-      {/* Hedge-fund metric cards from the backtest — NET row + GROSS row (if present) */}
-      {projection.metrics && (
+      {/* Hedge-fund metric cards — NET row (green box) + GROSS row (red box) when gross present */}
+      {projection.metrics && (projection.metricsGross ? (
         <>
-          {projection.metricsGross && rowLabel('NET (after fund fees)')}
-          {metricTiles(projection.metrics, 'Net')}
-          {projection.metricsGross && (
-            <>
-              {rowLabel('GROSS (before fund fees)')}
-              {metricTiles(projection.metricsGross, 'Gross')}
-            </>
-          )}
+          <div style={{ border: '1px solid #22c55e', borderRadius: 10, padding: '0 10px 10px', marginTop: 12 }}>
+            {rowLabel('NET (after fund fees)')}
+            {metricTiles(projection.metrics, 'Net')}
+          </div>
+          <div style={{ border: '1px solid #ef4444', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
+            {rowLabel('GROSS (before fund fees)')}
+            {metricTiles(projection.metricsGross, 'Gross')}
+          </div>
         </>
-      )}
+      ) : (
+        metricTiles(projection.metrics, 'Net')
+      ))}
       </div>
 
       <ForwardProjection forward={projection.forward} />

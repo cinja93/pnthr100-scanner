@@ -674,11 +674,24 @@ export function AumTracker({ projection }) {
       {children}
     </div>
   );
+  // The projected-vs-actual line chart (rendered once, placed per layout below).
+  const chartBlock = showChart && (
+    <>
+      <div style={{ marginTop: 10 }}>
+        <AumChart projected={projected} actual={actual} />
+      </div>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
+        <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
+        <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
+      </div>
+    </>
+  );
+  const hasGross = current.projectedAumGross != null;
   return (
     <div style={{ position: 'relative', marginBottom: 12 }}>
       <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 10, padding: '14px 16px', boxShadow: '0 0 0 1px rgba(59,130,246,0.08)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
+        <div style={{ flex: hasGross ? 1 : undefined, minWidth: 0 }}>
           <div style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
             PROJECTED vs ACTUAL AUM <span style={{ color: '#555', fontWeight: 400 }}>· backtest, pure compounding</span>
           </div>
@@ -688,6 +701,7 @@ export function AumTracker({ projection }) {
           <button onClick={() => setShowChart(s => !s)} style={{ marginTop: 8, background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
             {showChart ? '▲ Hide chart' : '▼ Show chart'}
           </button>
+          {hasGross && chartBlock}
         </div>
         {/* the 2 boxes — upper right, click for table */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: current.projectedAumGross != null ? 'stretch' : 'flex-end', width: current.projectedAumGross != null ? 320 : undefined }}>
@@ -732,17 +746,7 @@ export function AumTracker({ projection }) {
 
       <ForwardProjection forward={projection.forward} />
 
-      {showChart && (
-        <>
-          <div style={{ marginTop: 10 }}>
-            <AumChart projected={projected} actual={actual} />
-          </div>
-          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
-            <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
-            <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
-          </div>
-        </>
-      )}
+      {!hasGross && chartBlock}
       {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}
     </div>
   );

@@ -744,6 +744,14 @@ class PNTHRBridge(EWrapper, EClient):
                 'availableFunds':    _float('AvailableFunds'),
             },
             'positions': list(self.positions_dict.values()),
+            # positionsConfirmed: True only when this snapshot's position list is
+            # TRUSTWORTHY — either positions are present, or reqPositions has COMPLETED
+            # (positionEnd -> positions_ready set) confirming the account is genuinely
+            # FLAT. The push gate below already refuses to send an unconfirmed-empty
+            # snapshot; this flag carries that same guarantee into the stored doc so the
+            # Ambush engine can safely trust a 0-position snapshot (genuinely flat) and
+            # never mistake a mid-reconnect blank for "the whole book went flat".
+            'positionsConfirmed': bool(self.positions_dict) or self.positions_ready.is_set(),
             'stopOrders': list(self.open_orders.values()),
             'executions': self.executions,
         }

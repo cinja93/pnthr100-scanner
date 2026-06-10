@@ -654,6 +654,7 @@ async function _runAmbushTickInner() {
   const ibkrStopSharesByTicker = {}; // ticker -> { action -> total shares resting on that side }
   const ibkrStopListByTicker = {};   // ticker -> [{ permId, action, price, shares, ref }] (every resting stop)
   let ibkrSnapAgeMin = Infinity;
+  let snapPositionsConfirmed = false; // bridge asserts this snapshot's position list is trustworthy (positionEnd reached, or positions present)
   try {
     const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: config.ownerId });
     if (snap?.positions) for (const p of snap.positions) {
@@ -683,27 +684,43 @@ async function _runAmbushTickInner() {
       }
     }
     if (snap?.syncedAt) ibkrSnapAgeMin = (Date.now() - new Date(snap.syncedAt).getTime()) / 60000;
+    // The bridge only writes positionsConfirmed=true when reqPositions completed
+    // (positionEnd) or positions are present — and it REFUSES to push an
+    // unconfirmed-empty snapshot at all. So this flag is the authoritative signal
+    // that a 0-position snapshot is a GENUINELY FLAT account, not a mid-sync blank.
+    snapPositionsConfirmed = snap?.positionsConfirmed === true;
   } catch (e) {
     console.warn(`[Ambush] reconcile guard: could not load IBKR snapshot (${e.message}) — exits will use engine share count`);
   }
 
-  // ── EMPTY-SNAPSHOT SAFETY GUARD (2026-06-04, root-cause fix) ──────────────────
+  // ── EMPTY-SNAPSHOT SAFETY GUARD (2026-06-04 root-cause; 2026-06-10 confirmed-flat fix) ──
   // A fresh-but-EMPTY snapshot (bridge connected but reqPositions returned nothing — e.g.
   // right after a TWS reconnect/reboot) reports ZERO positions and ZERO stops. Without this
   // guard the engine reads that as "the whole book went flat" and CATASTROPHICALLY mismanages
   // it: phantom-clears every ACTIVE position to STALKING (dropping its stop), reverts FILLING
   // entries while IBKR actually holds them unmanaged (INTU short 8 with no engine stop), and
   // — because it sees 0 stop orders — re-PLACES a protective stop on every name that already
-  // has one (the DUPLICATE stops). 50 positions do not all close in one tick, so an empty
-  // snapshot while the engine holds ANY position can ONLY be a failed sync. Mark it stale so
-  // every "snapshot fresh (<=10m)" guard below short-circuits: NO phantom-clear, NO FILLING
-  // revert, NO exit, NO adopt, NO duplicate-stop placement. The book is PRESERVED exactly as
-  // is (existing IBKR stops untouched) until a real snapshot returns.
+  // has one (the DUPLICATE stops). Mark it stale so every "snapshot fresh (<=10m)" guard
+  // below short-circuits: NO phantom-clear, NO FILLING revert, NO exit, NO adopt, NO
+  // duplicate-stop placement. The book is PRESERVED exactly as is until a real snapshot returns.
+  //
+  // 2026-06-10 FIX: the original guard fired on EVERY 0-position snapshot while the engine
+  // held anything, assuming "positions can't all close in one tick." That is FALSE once the
+  // book winds down to its last name (STEM): when that name legitimately stops out, the
+  // account is genuinely flat (0 positions) and the guard froze the engine FOREVER — the
+  // final position stayed ACTIVE, its resting lot-add order was never cancelled (naked-short
+  // risk), and ALL new entries were blocked ("snapshot stale"). The true signal is the
+  // bridge's positionsConfirmed flag: the bridge sets it only when reqPositions COMPLETED
+  // (positionEnd) or positions are present, and it REFUSES to push an unconfirmed-empty
+  // snapshot at all (see pnthr-ibkr-bridge.py push gate). So a CONFIRMED 0-position snapshot
+  // is a real flat account → let the tick proceed (reconcile the last name, cancel its
+  // orphan order, resume entries). Only an UNCONFIRMED empty snapshot (old/foreign writer,
+  // or a flag-less pre-fix snapshot) is treated as a failed sync — cascade protection intact.
   {
     const snapPosCount = Object.keys(ibkrSharesByTicker).length;
     const engineHeld = allPositions.filter(p => (+p.totalShares || 0) !== 0).length;
-    if (snapPosCount === 0 && engineHeld > 0) {
-      console.error(`[Ambush] ⛔ EMPTY-SNAPSHOT GUARD: IBKR snapshot has 0 positions but the engine holds ${engineHeld} — failed sync (bridge reconnect?). Treating snapshot as STALE this tick: no reconcile/exit/adopt/stop-placement; existing IBKR stops preserved. Bridge position feed needs to recover.`);
+    if (snapPosCount === 0 && engineHeld > 0 && !snapPositionsConfirmed) {
+      console.error(`[Ambush] ⛔ EMPTY-SNAPSHOT GUARD: IBKR snapshot has 0 positions (UNCONFIRMED) but the engine holds ${engineHeld} — failed sync (bridge reconnect?). Treating snapshot as STALE this tick: no reconcile/exit/adopt/stop-placement; existing IBKR stops preserved. Bridge position feed needs to recover.`);
       ibkrSnapAgeMin = Infinity;
     }
   }

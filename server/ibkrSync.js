@@ -1035,7 +1035,7 @@ export async function ibkrSync(req, res) {
     if (!db) return res.status(503).json({ error: 'DB unavailable' });
 
     const userId = req.user.userId; // stamped from JWT — cannot be spoofed
-    const { timestamp, accountId, account, positions, stopOrders, executions } = req.body;
+    const { timestamp, accountId, account, positions, stopOrders, executions, positionsConfirmed } = req.body;
 
     if (!account || !Array.isArray(positions)) {
       return res.status(400).json({ error: 'account and positions[] required' });
@@ -1079,6 +1079,12 @@ export async function ibkrSync(req, res) {
         $set: {
           ownerId:            userId,
           positions,
+          // positionsConfirmed: is this position list TRUSTWORTHY? True when the
+          // bridge confirmed it (reqPositions completed via positionEnd) OR positions
+          // are present. A snapshot with positions is confirmed by definition. The
+          // Ambush empty-snapshot guard trusts a 0-position snapshot ONLY when this is
+          // true, so a mid-reconnect blank can never be read as "the book went flat".
+          positionsConfirmed: positionsConfirmed === true || (Array.isArray(positions) && positions.length > 0),
           stopOrders:         dedupedStopOrders,
           stopOrdersSyncedAt: syncedAt,
           latestExecutions:   Array.isArray(executions) ? executions : [],

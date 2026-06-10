@@ -669,8 +669,8 @@ export function AumTracker({ projection }) {
     );
   };
   // Outlined "bundle" wrapper grouping a Projected box + its on-track badge.
-  const bundle = (children) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: '1px solid #25405f', borderRadius: 10, padding: 10, background: '#0d0d0d' }}>
+  const bundle = (children, color = '#25405f') => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: `1px solid ${color}`, borderRadius: 10, padding: 10, background: '#0d0d0d' }}>
       {children}
     </div>
   );
@@ -690,18 +690,18 @@ export function AumTracker({ projection }) {
           </button>
         </div>
         {/* the 2 boxes — upper right, click for table */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: current.projectedAumGross != null ? 'stretch' : 'flex-end', width: current.projectedAumGross != null ? 320 : undefined }}>
           {current.projectedAumGross != null ? (
             <>
-              {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
+              {bundle(box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual')), '#2a2a2a')}
               {bundle(<>
                 {box('Projected AUM (Net)', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
                 {trackBadge(current.onTrackPct, ' (net)')}
-              </>)}
+              </>, '#22c55e')}
               {bundle(<>
                 {box('Projected AUM (Gross)', current.projectedAumGross, '#60a5fa', () => setTableView('projectedGross'))}
                 {trackBadge(current.onTrackPctGross, ' (gross)')}
-              </>)}
+              </>, '#ef4444')}
             </>
           ) : (
             <>

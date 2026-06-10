@@ -232,8 +232,8 @@ function ChartPanel({
     return daysAway >= 0 && daysAway <= 5;
   })();
   const theme = earningsWindow
-    ? { bg: '#fffde7', text: '#212121', grid: '#f0f0f0', border: '#d4d4d4' }
-    : { bg: '#0c0c0c', text: '#d4d4d4', grid: '#1a1a1a', border: '#333' };
+    ? { bg: '#fffde7', text: '#212121', grid: '#f0f0f0', border: '#d4d4d4', ema: '#1e3a8a' }
+    : { bg: '#0c0c0c', text: '#d4d4d4', grid: '#1a1a1a', border: '#333', ema: '#fcf000' };
 
   // ── Chart render ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -264,7 +264,7 @@ function ChartPanel({
     priceSeriesRef.current = priceSeries;
 
     const ema = chart.addSeries(LineSeries, {
-      color: '#fcf000', lineWidth: 2,
+      color: theme.ema, lineWidth: 2,
       priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
     });
 
@@ -724,9 +724,9 @@ function ChartPanel({
         )}
         <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
         {earningsWindow && (
-          <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
-            background: '#fff59d', color: '#5d4037', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
-            padding: '2px 10px', borderRadius: 4, border: '1px solid #f9a825', zIndex: 5, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+            background: '#fff59d', color: '#5d4037', fontSize: 20, fontWeight: 800, letterSpacing: '0.08em',
+            padding: '4px 20px', borderRadius: 6, border: '2px solid #f9a825', zIndex: 5, pointerEvents: 'none' }}>
             EARNINGS WEEK
           </div>
         )}

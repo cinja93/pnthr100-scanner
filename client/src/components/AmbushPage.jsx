@@ -629,8 +629,8 @@ export function AumTracker({ projection }) {
     </div>
   );
   // One row of hedge-fund metric cards for a given metrics object (Net or Gross).
-  const metricTiles = (m, kind) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+  const metricTiles = (m, kind, oneLine = false) => (
+    <div style={{ display: 'flex', flexWrap: oneLine ? 'nowrap' : 'wrap', gap: 8, marginTop: 6 }}>
       {[
         [`${kind} Total Return`, (m.netReturnPct >= 0 ? '+' : '') + Math.round(m.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((m.startNav || 100000) / 1000) + 'K start'],
         [`${kind} CAGR`, (m.cagrPct >= 0 ? '+' : '') + m.cagrPct + '%', '#22c55e'],
@@ -645,7 +645,7 @@ export function AumTracker({ projection }) {
         ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
         ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
       ].map(([label, value, color, sub], i) => (
-        <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 12px', minWidth: 96, flex: '1 1 auto' }}>
+        <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 10px', minWidth: oneLine ? 0 : 96, flex: oneLine ? '1 1 0' : '1 1 auto', overflow: 'hidden' }}>
           <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
           <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
           {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
@@ -718,11 +718,11 @@ export function AumTracker({ projection }) {
         <>
           <div style={{ border: '1px solid #22c55e', borderRadius: 10, padding: '0 10px 10px', marginTop: 12 }}>
             {rowLabel('NET (after fund fees)')}
-            {metricTiles(projection.metrics, 'Net')}
+            {metricTiles(projection.metrics, 'Net', true)}
           </div>
           <div style={{ border: '1px solid #ef4444', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
             {rowLabel('GROSS (before fund fees)')}
-            {metricTiles(projection.metricsGross, 'Gross')}
+            {metricTiles(projection.metricsGross, 'Gross', true)}
           </div>
         </>
       ) : (

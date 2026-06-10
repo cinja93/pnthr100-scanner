@@ -902,6 +902,9 @@ async function _runAmbushTickInner() {
   // HUNTING = candidates that have cleared their prior 2-day-high trigger today
   // (populated in Phase C). Read-only display field; does not affect any trade logic.
   let huntingList = [];
+  // Names that cleared the daily 2-day trigger THIS tick (with the frozen trigger),
+  // fed into the persisted HUNTING throughput view below.
+  let newlyClearedToday = [];
 
   // 4. Fetch live prices: IBKR for held, FMP quotes for non-held + candidates
   const livePrices = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
@@ -1924,18 +1927,20 @@ async function _runAmbushTickInner() {
       const priorData = priorDayData[ticker];
       if (!priorData || priorData.highs.length === 0) continue;
 
+      let dailyTrig;
       if (direction === 'LONG') {
-        const trigger = Math.max(...priorData.highs) + 0.01;
-        if (price < trigger) continue; // today's price hasn't broken above trigger
+        dailyTrig = +(Math.max(...priorData.highs) + 0.01).toFixed(2);
+        if (price < dailyTrig) continue; // today's price hasn't broken above trigger
       } else {
-        const trigger = Math.min(...priorData.lows) - 0.01;
-        if (price > trigger) continue; // today's price hasn't broken below trigger
+        dailyTrig = +(Math.min(...priorData.lows) - 0.01).toFixed(2);
+        if (price > dailyTrig) continue; // today's price hasn't broken below trigger
       }
 
-      breakoutCandidates.push({ ticker, direction });
+      breakoutCandidates.push({ ticker, direction, dailyTrigger: dailyTrig });
     }
     // HUNTING (read-only): surface the daily-cleared candidates to the dashboard.
     huntingList = breakoutCandidates.map(c => ({ ticker: c.ticker, direction: c.direction }));
+    newlyClearedToday = breakoutCandidates.map(c => ({ ticker: c.ticker, direction: c.direction, trigger: c.dailyTrigger }));
 
     // Step 2: V7.6 — for the narrow candidate set, fetch FMP 30-min bars and build :00
     // CLOCK-HOUR bars (matching TWS and the backtest), then check the N=1 breakout on those.
@@ -2097,6 +2102,60 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // ── HUNTING THROUGHPUT (2026-06-10, Scott) ───────────────────────────────────
+  // Persist every name that cleared the daily 2-day trigger AT ANY POINT today so
+  // the HUNTING box shows the day's funnel flow, not just the instant-cleared few.
+  // The trigger is FROZEN at first clear (matches the frozen-daily-trigger rule).
+  // Each tick we refresh current price + a SIGNED hold distance (holdPct, + = beyond
+  // the trigger in the signal direction, - = pulled back to the wrong side). The
+  // dashboard paints: solid = holding beyond the 0.05% zone, flashing = within the
+  // zone, dim = pulled back past the trigger. Current held positions are folded in
+  // (they obviously passed the gate) so the box also reflects the live book. Read-
+  // only display; affects NO trade logic. Keyed by date → resets each day; collection-
+  // backed so it survives restarts within the day.
+  let dailyClearsView = [];
+  try {
+    const dcColl = db.collection('pnthr_ambush_daily_clears');
+    const dcDoc = await dcColl.findOne({ ownerId: config.ownerId, date: today });
+    const clears = dcDoc?.clears || {};
+    const nowIso = new Date().toISOString();
+    const heldSet = new Set();
+    for (const p of allPositions) if ((+p.totalShares || 0) !== 0) heldSet.add((p.ticker || '').toUpperCase());
+    // 1) record freshly-cleared names (freeze the trigger the first time today)
+    for (const c of newlyClearedToday) {
+      const t = (c.ticker || '').toUpperCase();
+      if (!t || c.trigger == null) continue;
+      if (!clears[t]) clears[t] = { ticker: t, direction: c.direction, trigger: +c.trigger, firstClearedAt: nowIso };
+    }
+    // 2) fold in current held positions so the live book is always visible
+    for (const p of allPositions) {
+      if ((+p.totalShares || 0) === 0) continue;
+      const t = (p.ticker || '').toUpperCase();
+      if (!t || clears[t] || p.dailyTrigger == null) continue;
+      clears[t] = { ticker: t, direction: p.direction, trigger: +p.dailyTrigger, firstClearedAt: p.entryDate || today };
+    }
+    // 3) refresh price + signed hold distance for every recorded name; build the view
+    for (const t of Object.keys(clears)) {
+      const rec = clears[t];
+      const price = livePrices[t];
+      if (typeof price === 'number' && price > 0 && rec.trigger > 0) {
+        rec.price = +price;
+        rec.holdPct = rec.direction === 'LONG'
+          ? +(((price - rec.trigger) / rec.trigger).toFixed(5))
+          : +(((rec.trigger - price) / rec.trigger).toFixed(5));
+        rec.updatedAt = nowIso;
+      }
+      dailyClearsView.push({ ticker: t, direction: rec.direction, trigger: rec.trigger, price: rec.price ?? null, holdPct: rec.holdPct ?? null, held: heldSet.has(t) });
+    }
+    await dcColl.updateOne(
+      { ownerId: config.ownerId, date: today },
+      { $set: { ownerId: config.ownerId, date: today, clears, updatedAt: new Date() } },
+      { upsert: true }
+    );
+  } catch (e) {
+    console.warn(`[Ambush] HUNTING throughput update failed: ${e.message}`);
+  }
+
   // ═══ Update config with last run info ═══
   const result = {
     date: today,
@@ -2113,6 +2172,7 @@ async function _runAmbushTickInner() {
     errors,
     watching,
     hunting: huntingList,
+    dailyClears: dailyClearsView,
     positions: {
       active: activePositions.length,
       attack: allPositions.filter(p => p.state === STATES.ATTACK).length,

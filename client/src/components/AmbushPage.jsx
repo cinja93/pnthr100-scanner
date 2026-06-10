@@ -819,6 +819,12 @@ export default function AmbushPage() {
   const watching = lastResult.watching || { longs: [], shorts: [] };
   const hunting = lastResult.hunting || []; // daily-cleared candidates (HUNTING stage)
   const huntingSet = new Set(hunting.map(h => h.ticker));
+  // Persisted day's daily-trigger clears (throughput view): every name that took out
+  // its 2-day trigger at any point today, with current signed distance (holdPct) to
+  // its FROZEN trigger. Drives the flash/solid/dim coloring in the HUNTING box.
+  const dailyClears = lastResult.dailyClears || [];
+  const dailyClearMap = {};
+  for (const d of dailyClears) if (d && d.ticker) dailyClearMap[d.ticker.toUpperCase()] = d;
 
   // ── Per-stage funnel chip coloring (Scott 2026-06-05) ────────────────────────
   // Each box colors its OWN gate; direction = green(long)/red(short):
@@ -829,6 +835,7 @@ export default function AmbushPage() {
   //                   day); AMBER while armed but not yet fired.
   const todayET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const NEAR_PCT = 0.005; // within 0.5% of the hourly trigger → AMBER "approaching" precursor
+  const DAILY_ZONE = 0.0005; // within 0.05% of the daily trigger → "in the zone" (flashing)
   const posByTicker = {};
   for (const p of positions) posByTicker[(p.ticker || '').toUpperCase()] = p;
   // nearPct per armed name (how close to its hourly trigger), from the engine.
@@ -1160,7 +1167,9 @@ export default function AmbushPage() {
       )}
 
       {/* ═══ DIRECTIONAL CONFLICT — position opposite its signal (Scott 2026-06-05) ═══ */}
-      <style>{`@keyframes pnthrConflictFlash { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(251,191,36,0); } 50% { opacity: 0.5; box-shadow: 0 0 9px 2px rgba(251,191,36,0.9); } }`}</style>
+      <style>{`@keyframes pnthrConflictFlash { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(251,191,36,0); } 50% { opacity: 0.5; box-shadow: 0 0 9px 2px rgba(251,191,36,0.9); } }
+@keyframes pnthrDailyFlashLong { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0); } 50% { opacity: 0.4; box-shadow: 0 0 11px 2px rgba(34,197,94,0.9); } }
+@keyframes pnthrDailyFlashShort { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239,68,68,0); } 50% { opacity: 0.4; box-shadow: 0 0 11px 2px rgba(239,68,68,0.9); } }`}</style>
       {dirConflicts.length > 0 && (
         <div style={{ margin: '0 0 12px', padding: '10px 14px', background: '#2a1c0a', border: '2px solid #fbbf24', borderRadius: 8, animation: 'pnthrConflictFlash 1.1s ease-in-out infinite' }}>
           <div style={{ fontWeight: 800, color: '#fbbf24', letterSpacing: 0.4, marginBottom: 4 }}>⚠ DIRECTIONAL CONFLICT — {dirConflicts.length} NEED ATTENTION</div>
@@ -1201,31 +1210,50 @@ export default function AmbushPage() {
       {/* ═══ ② DAILY — daily trigger fired (green) / waiting (grey) ═══ */}
       {(() => {
         const longs = watching.longs, shorts = watching.shorts;
-        // "Fired daily" = the daily trigger cleared TODAY — currently armed-at-daily
-        // (huntingSet) OR already progressed (held / entered today). Matches the lit
-        // chips so the badge can't read 0 while names are clearly in play.
-        const fired = (it) => {
-          const p = posByTicker[(it.ticker || '').toUpperCase()];
-          return huntingSet.has(it.ticker) || !!(p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0 || p.entryDate === todayET));
-        };
+        // THROUGHPUT (2026-06-10, Scott): a name "cleared today" if it's in the
+        // persisted dailyClears set (took out its 2-day trigger at ANY point today).
+        // It stays here all day; its look tracks current price vs the FROZEN trigger:
+        //   solid  = holding beyond the 0.05% zone in its direction
+        //   flash  = within 0.05% of the trigger (in the zone)
+        //   dim    = pulled back past the trigger to the wrong side (breakout lost)
+        const cleared = (it) => !!dailyClearMap[(it.ticker || '').toUpperCase()];
         const dailyChip = (it, isLong) => {
-          const e = funnelStyle(it.ticker, isLong, 'daily');
+          const t = (it.ticker || '').toUpperCase();
+          const dc = dailyClearMap[t];
+          const p = posByTicker[t];
+          const isHeld = !!(p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0));
+          const baseC = isLong ? '#22c55e' : '#ef4444';
+          const faint = { bg: isLong ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)', border: '#2a2a2a', text: '#6b6b6b' };
+          const dim   = { bg: isLong ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)', border: isLong ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)', text: isLong ? 'rgba(134,239,172,0.75)' : 'rgba(252,165,165,0.75)' };
+          const solid = { bg: baseC, border: baseC, text: '#000' };
+          let e, flash = false;
+          if (!dc) {
+            e = isHeld ? { ...solid, label: 'in a position' } : { ...faint, label: 'daily not cleared today' };
+          } else {
+            const hp = dc.holdPct;
+            if (hp == null)             e = { ...solid, label: 'daily cleared today' };
+            else if (hp > DAILY_ZONE)   e = { ...solid, label: `holding the breakout (+${(hp * 100).toFixed(2)}% past trigger)` };
+            else if (hp >= -DAILY_ZONE) { e = { ...solid, label: `in the trigger zone (${(hp * 100).toFixed(2)}% from trigger)` }; flash = true; }
+            else                        e = { ...dim, label: `pulled back past the trigger (${(hp * 100).toFixed(2)}%)` };
+          }
+          const style = { ...engChipStyle(e) };
+          if (flash) style.animation = `${isLong ? 'pnthrDailyFlashLong' : 'pnthrDailyFlashShort'} 1s ease-in-out infinite`;
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title={`${e.label} · click for charts`} style={engChipStyle(e)}>
-              {it.ticker}{e.held ? ' •' : ''}
+            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title={`${e.label} · click for charts`} style={style}>
+              {it.ticker}{isHeld ? ' •' : ''}
             </span>
           );
         };
-        const lFired = longs.filter(fired).length, sFired = shorts.filter(fired).length;
+        const lFired = longs.filter(cleared).length, sFired = shorts.filter(cleared).length;
         return (
           <div className={styles.section} style={{ borderLeftColor: '#f59e0b' }}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>
                 ② HUNTING: Cleared the Daily Trigger
-                <InfoPopup text="The same weekly names, now checked against the daily 2-day-high breakout. LIGHT green/red = the daily trigger cleared today (price took out the prior 2-day high). FAINT = still waiting on the daily. SOLID + • = a live position (already through every gate). Direction sets the color: green long, red short." wide />
+                <InfoPopup text="Throughput view: every name that took out its prior 2-day trigger at ANY point today, kept here all day. SOLID green/red = holding beyond the trigger (more than 0.05% in its direction). FLASHING = sitting in the trigger zone (within 0.05%). DIM = triggered earlier today but pulled back past the trigger. FAINT = hasn't cleared today. • = a live position. Green = long, red = short." wide />
               </span>
               <div className={styles.sectionBadges}>
-                <span style={{ color: '#22c55e' }}>FIRED {lFired + sFired}</span>
+                <span style={{ color: '#22c55e' }}>CLEARED {lFired + sFired}</span>
                 <span style={{ color: '#888' }}>WAITING {longs.length + shorts.length - lFired - sFired}</span>
               </div>
             </div>
@@ -1234,11 +1262,11 @@ export default function AmbushPage() {
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, padding: '10px 14px' }}>
                 <div style={{ minWidth: 220 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONGS · {lFired}/{longs.length} fired daily</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', marginBottom: 8 }}>LONGS · {lFired}/{longs.length} cleared today</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{longs.length ? longs.map(it => dailyChip(it, true)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
                 <div style={{ minWidth: 220 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORTS · {sFired}/{shorts.length} fired daily</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>SHORTS · {sFired}/{shorts.length} cleared today</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{shorts.length ? shorts.map(it => dailyChip(it, false)) : <span style={{ color: '#555', fontSize: 12 }}>none</span>}</div>
                 </div>
               </div>

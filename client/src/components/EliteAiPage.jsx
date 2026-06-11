@@ -15,7 +15,7 @@ import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import LongShortScorecard from './LongShortScorecard';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker, ForwardProjection } from './AmbushPage';
+import { AumTracker } from './AmbushPage';
 import styles from './AmbushPage.module.css';
 
 // MCE funnel — the 4 stages the engine actually has (no intraday tripwire / re-entry loop).
@@ -201,11 +201,9 @@ export default function EliteAiPage() {
       <div style={{ padding: '0 4px' }}>
         <PageHeader title="Elite AI" description="Automated paper engine for the PNTHR AI 300 Elite (MCE) strategy — the same daily-breakout scan as ORDERS AI. HUNTING = breakout candidates ready to enter; DEVOUR = the isolated dry-run paper book (no orders, no IBKR)." />
 
-        {/* ═══ PROJECTED vs ACTUAL AUM (backtest, hypothetical) ═══ */}
+        {/* ═══ PROJECTED vs ACTUAL AUM + PNTHR GOALS (backtest, hypothetical) ═══ */}
+        {/* AumTracker renders the AUM panel AND the PNTHR GOALS panel internally — one render. */}
         <AumTracker projection={projection} />
-
-        {/* ═══ PNTHR GOALS — ride today's real AUM forward at the Elite backtest CAGR ═══ */}
-        <ForwardProjection forward={projection?.forward} />
 
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>

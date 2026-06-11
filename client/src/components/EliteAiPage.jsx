@@ -15,7 +15,7 @@ import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import LongShortScorecard from './LongShortScorecard';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker } from './AmbushPage';
+import { AumTracker, ForwardProjection } from './AmbushPage';
 import styles from './AmbushPage.module.css';
 
 // MCE funnel — the 4 stages the engine actually has (no intraday tripwire / re-entry loop).
@@ -203,6 +203,9 @@ export default function EliteAiPage() {
 
         {/* ═══ PROJECTED vs ACTUAL AUM (backtest, hypothetical) ═══ */}
         <AumTracker projection={projection} />
+
+        {/* ═══ PNTHR GOALS — ride today's real AUM forward at the Elite backtest CAGR ═══ */}
+        <ForwardProjection forward={projection?.forward} />
 
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>

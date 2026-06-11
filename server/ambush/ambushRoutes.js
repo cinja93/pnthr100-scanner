@@ -82,20 +82,17 @@ function simulateForward(startBalance, factors, elapsed, dailyCagrRate, horizons
   for (let k = 1; k <= maxDays; k++) {
     // start-of-day withdrawal check (matches backtest order: bank, then trade)
     if (balance >= FWD_WD_THRESHOLD) { balance -= FWD_WD_AMOUNT; banked += FWD_WD_AMOUNT; }
-    const srcIdx = elapsed + k;
-    let ratio;
-    if (srcIdx < N && factors[srcIdx - 1]?.factor > 0) {
-      ratio = factors[srcIdx].factor / factors[srcIdx - 1].factor; // real backtest day
-    } else {
-      ratio = dailyCagrRate;                                        // beyond backtest
-    }
-    if (ratio > 0 && isFinite(ratio)) balance *= ratio;
+    // Ride forward at the backtest CAGR (smooth daily compounding). The raw backtest
+    // PATH opens slow/flat (Ambush's lumpy start, Elite's ~1.5yr EMA warmup), which made
+    // the near horizons read wrong (6mo barely moving); the CAGR is the meaningful
+    // "where today's real AUM goes" at this fund's backtested rate.
+    if (dailyCagrRate > 0 && isFinite(dailyCagrRate)) balance *= dailyCagrRate;
     if (byDay.has(k)) {
       snaps[k] = {
         balance: Math.round(balance),
         banked,
         total: Math.round(balance + banked),
-        extrapolated: (elapsed + k) >= N,
+        extrapolated: (elapsed + k) >= N, // beyond the ~3.5yr backtest window
       };
     }
   }

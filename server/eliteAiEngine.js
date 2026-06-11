@@ -269,9 +269,9 @@ function _simulateForward(startBalance, factors, elapsed, dailyCagrRate, horizon
   let balance = startBalance, banked = 0; const snaps = {};
   for (let k = 1; k <= maxDays; k++) {
     if (balance >= _FWD_WD_THRESHOLD) { balance -= _FWD_WD_AMOUNT; banked += _FWD_WD_AMOUNT; }
-    const srcIdx = elapsed + k;
-    let ratio = (srcIdx < N && factors[srcIdx - 1]?.factor > 0) ? factors[srcIdx].factor / factors[srcIdx - 1].factor : dailyCagrRate;
-    if (ratio > 0 && isFinite(ratio)) balance *= ratio;
+    // Ride forward at the Elite backtest CAGR (smooth) — NOT the raw factor path, which
+    // opens with the ~1.5yr EMA warmup (would show the near horizons nearly flat).
+    if (dailyCagrRate > 0 && isFinite(dailyCagrRate)) balance *= dailyCagrRate;
     if (byDay.has(k)) snaps[k] = { balance: Math.round(balance), banked, total: Math.round(balance + banked), extrapolated: (elapsed + k) >= N };
   }
   return snaps;

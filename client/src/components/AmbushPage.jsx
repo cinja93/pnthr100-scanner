@@ -559,7 +559,7 @@ function AumTableModal({ view, projection, onClose }) {
 
 // Forward projection: today's real AUM ridden forward at the backtest growth,
 // with the live $2M -> bank $1M withdrawal rule. Shows working balance + banked.
-function ForwardProjection({ forward }) {
+export function ForwardProjection({ forward }) {
   if (!forward?.horizons?.length) return null;
   const rule = forward.withdrawalRule || {};
   return (
@@ -573,7 +573,7 @@ function ForwardProjection({ forward }) {
       </div>
       <div style={{ color: '#666', fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>
         Live withdrawal rule applied: once the working balance reaches {fmtAum(rule.threshold)}, bank {fmtAum(rule.amount)} and trade off the rest. Banked profit is locked in and yours.
-        {forward.cagrPct ? ` Growth = backtest path, then ${forward.cagrPct}% CAGR beyond ~3.5 yrs.` : ''}
+        {forward.cagrPct ? ` Growth rides today's AUM at the backtested ${forward.cagrPct}% CAGR.` : ''}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 10, minWidth: 560 }}>

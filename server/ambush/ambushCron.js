@@ -62,6 +62,10 @@ const FMP_API_KEY = process.env.FMP_API_KEY;
 // and ALL bar logic on :00 clock-hour bars (Phase D new-entry, first hour → 10:00).
 const AMBUSH_REGIME_GATE = false;
 const AMBUSH_BE75_SNAP   = false;
+// HARD RULE (Scott 2026-06-11): the automated system never SHORTS a stock under $10 —
+// too low a price, too volatile. Blocks new short entries AND short re-entries below
+// this price; longs are unaffected. Existing positions ride out their normal exits.
+const MIN_SHORT_PRICE = 10;
 
 // ── Log a broker-stop exit (2026-06-05) ──────────────────────────────────────
 // When a position's IBKR-resting protective stop FIRES, it fills at the broker
@@ -1661,6 +1665,12 @@ async function _runAmbushTickInner() {
 
         const isLong = pend.direction === 'LONG';
 
+        // HARD RULE: never re-short a sub-$10 stock (too low / too volatile). Longs unaffected.
+        if (!isLong && price < MIN_SHORT_PRICE) {
+          actions.push({ type: 'SKIPPED_LOW_PRICE_SHORT', ticker: pend.ticker, price });
+          continue;
+        }
+
         // RECONCILE-BEFORE-ACT (entry): only enter if a FRESH IBKR snapshot confirms we
         // are FLAT in this ticker. If IBKR already holds it (any side) or the snapshot is
         // stale (can't verify), do NOT enter on top — skip this tick.
@@ -1935,6 +1945,9 @@ async function _runAmbushTickInner() {
         else if (isActiveSS(ctx, ticker, today)) direction = 'SHORT';
       }
       if (!direction) continue;
+
+      // HARD RULE: never short a sub-$10 stock (too low / too volatile). Longs unaffected.
+      if (direction === 'SHORT' && price < MIN_SHORT_PRICE) continue;
 
       // V7.6: directional BULL/BEAR sector filter (needs the direction, so it runs here).
       if (!getSectorOk(ctx, ticker, today, direction)) continue;

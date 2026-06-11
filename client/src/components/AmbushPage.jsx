@@ -1092,7 +1092,7 @@ export default function AmbushPage() {
 
       {config.noReopenExisting && (
         <div style={{ margin: '0 0 10px', padding: '8px 14px', background: '#3a2708', border: '2px solid #f59e0b', borderRadius: 8, color: '#fbbf24', fontWeight: 700, fontSize: 13 }}>
-          🟠 NO-REOPEN MODE — the engine takes NEW positions only. Names you exit (manual closes) will NOT re-open. Click "NO REOPEN: ON" to resume re-entries.
+          🟠 NO-REOPEN MODE — names you MANUALLY close (in TWS) will NOT re-open. Stop-outs and brand-new entries still work normally. Click "NO REOPEN: ON" to turn it off.
         </div>
       )}
 
@@ -1124,8 +1124,8 @@ export default function AmbushPage() {
           <button
             onClick={handleNoReopen}
             title={config.noReopenExisting
-              ? 'NO-REOPEN is ON — the engine takes NEW positions only; names you exit (manual closes) will NOT re-open. Click to allow re-opens again.'
-              : 'Click to STOP the engine re-opening positions you close (manual closes stay closed). NEW positions are still allowed.'}
+              ? 'NO-REOPEN is ON — names you MANUALLY close (in TWS) will NOT re-open. Stop-outs and brand-new names are unaffected. Click to turn off.'
+              : 'Turn ON so names you MANUALLY close (in TWS) do NOT re-open. Stop-outs and new entries keep working normally.'}
             style={{
               background: config.noReopenExisting ? '#b45309' : '#1a1a1a',
               color: config.noReopenExisting ? '#fff' : '#bbb',

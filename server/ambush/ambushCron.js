@@ -1064,13 +1064,15 @@ async function _runAmbushTickInner() {
       const newestActivity = stamps.length ? Math.max(...stamps) : 0;
       if (newestActivity && (Date.now() - newestActivity) < 90000) continue; // too fresh — await sync
       const engineShares = pos.totalShares;
-      // Log the REAL broker-stop exit before clearing the record (entry data still
-      // intact on `pos`). The IBKR-resting stop fired on its own → this is the path
-      // that previously dropped the trade from the log (WIX +$4 2026-06-05).
-      const exitLog = await logReconciledExit(db, pos, today, 'STOP_FIRED_IBKR', config.ownerId);
-      // Cancel leftover orders (the on-deck lot-trigger that the broker-fired exit
-      // left resting — PEGA SELL STP 33.77 / AAOI BUY STP 208.83 on 2026-06-05).
+      // MANUAL vs STOP detection (Scott's NO-REOPEN feature): cancel any PNTHR protective
+      // stop still resting on the now-flat ticker. If one was STILL RESTING (leftover > 0),
+      // the stop did NOT fire — the trader closed the position BY HAND. A fired stop is gone
+      // from the snapshot (leftover 0). Cancel first so the exitType + tag are accurate.
       const leftover = await cancelLeftoverStops(db, pos.ticker, ibkrStopListByTicker[pos.ticker]);
+      const wasManual = !!(leftover && leftover > 0);
+      // Log the REAL exit before clearing the record (entry data still intact on `pos`).
+      // (Previously this path dropped the trade from the log — WIX +$4 2026-06-05.)
+      const exitLog = await logReconciledExit(db, pos, today, wasManual ? 'MANUAL_CLOSE_IBKR' : 'STOP_FIRED_IBKR', config.ownerId);
       await upsertAmbushPosition(db, pos.ticker, {
         state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
         entryPrice: null, avgCost: null, totalShares: 0, lotPlan: null, nextLot: 0, stop: null, lotFills: null,
@@ -1078,10 +1080,11 @@ async function _runAmbushTickInner() {
         prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
         cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePriceAt: now,
         reconciledFlat: `IBKR_FLAT_AUTO_${today}`,
+        exitWasManual: wasManual, // NO-REOPEN guard reads this in Phase B/C
       });
-      pos.state = STATES.STALKING; pos.totalShares = 0; // reflect in-memory so Phase A skips it
-      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0, loggedPnl: exitLog?.pnl, exitEstimated: exitLog?.estimated || undefined, leftoverCancelled: leftover || undefined });
-      console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${engineShares}sh -> FLAT (IBKR flat, snapshot ${ibkrSnapAgeMin.toFixed(0)}m). Phantom cleared.`);
+      pos.state = STATES.STALKING; pos.totalShares = 0; pos.exitWasManual = wasManual; // reflect in-memory
+      actions.push({ type: 'AUTO_RECONCILE_FLAT', ticker: pos.ticker, engineShares, ibkrShares: ibSh ?? 0, loggedPnl: exitLog?.pnl, exitEstimated: exitLog?.estimated || undefined, leftoverCancelled: leftover || undefined, manual: wasManual || undefined });
+      console.log(`[Ambush] AUTO-RECONCILE: ${pos.ticker} ${pos.direction} ${engineShares}sh -> FLAT (IBKR flat, snapshot ${ibkrSnapAgeMin.toFixed(0)}m, ${wasManual ? 'MANUAL close — stop was still resting' : 'stop fired'}).`);
     }
   }
 
@@ -1328,6 +1331,7 @@ async function _runAmbushTickInner() {
             prevBarLow: null, prevBarHigh: null, syntheticBar: null, prevSyntheticBar: null,
             cycleNum: (pos.cycleNum || 0) + 1, todayDate: today, livePrice: price, livePriceAt: now,
             reconciledFlat: `IBKR_${ibkrSh ?? 0}_AT_${exitType}_${today}`,
+            exitWasManual: false, // engine was mid-exit; not a clean manual close
           });
           actions.push({ type: 'RECONCILE_SKIP_EXIT', ticker: pos.ticker, engineShares: pos.totalShares, ibkrShares: ibkrSh ?? 0, reason: exitType, loggedPnl: guardExitLog?.pnl });
           exited = true;
@@ -1360,6 +1364,7 @@ async function _runAmbushTickInner() {
         await logAmbushTrade(db, trade);
         await upsertAmbushPosition(db, pos.ticker, {
           state: STATES.STALKING, direction: pos.direction, originalEntry: pos.originalEntry,
+          exitWasManual: false, // engine-initiated exit (2-bar/1H stop) — NOT a manual close
           runningLow: isLong ? price : (pos.runningLow || pos.syntheticBar?.low || price),
           runningHigh: isLong ? (pos.runningHigh || pos.syntheticBar?.high || price) : price,
           cycleNum: (pos.cycleNum || 0) + 1,
@@ -1626,16 +1631,21 @@ async function _runAmbushTickInner() {
   // During first hour, skip re-entries (need first-hour data first). Skip the open
   // blackout and the post-bell window (inEntryBlackout) — but re-entries fire right up
   // to the 4:00 close, same as new entries.
-  // NO-REOPEN guard (Scott): when config.noReopenExisting is on, the engine still takes
-  // NEW positions (Phase D) but does NOT re-open names that exited — so manual closes stay
-  // closed. Skip the re-entry executor entirely.
-  if (!isFirstHour && !inEntryBlackout && !config.noReopenExisting) {
+  if (!isFirstHour && !inEntryBlackout) {
     const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
 
     for (const pend of attackPositions) {
       try {
         const price = livePrices[pend.ticker];
         if (!price) continue;
+
+        // NO-REOPEN (Scott): when the mode is on, do NOT re-open a name the trader
+        // MANUALLY closed (tagged exitWasManual at reconcile). Stop-outs + new names
+        // are unaffected — only hand-closed names are held out.
+        if (config.noReopenExisting && pend.exitWasManual) {
+          actions.push({ type: 'SKIPPED_NOREOPEN_MANUAL', ticker: pend.ticker });
+          continue;
+        }
 
         // Count ACTIVE/PROTECT from already-loaded positions + actions taken this tick
         const newEntriesThisTick = actions.filter(a => a.type === 'NEW_ENTRY' || a.type === 'RE_ENTRY').length;
@@ -1847,16 +1857,17 @@ async function _runAmbushTickInner() {
         }
         const breakoutLevel = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2); // for the log
 
-        if (breakoutDetected && !config.noReopenExisting) {
+        // NO-REOPEN (Scott): don't re-arm a name the trader MANUALLY closed while the
+        // mode is on (tagged exitWasManual). Stop-outs + new names re-arm normally.
+        if (breakoutDetected && !(config.noReopenExisting && stalk.exitWasManual)) {
           // Transition STALKING -> ATTACK; Phase B fills at the live price next tick.
-          // (NO-REOPEN guard: while config.noReopenExisting is on, exited names never
-          // re-arm, so manual closes stay closed — only NEW names enter.)
           // Capture the GREEN entry bar's low/high so Phase B can set the tight V7.6
           // re-entry stop = the entry bar's low (long) / high (short).
           await upsertAmbushPosition(db, stalk.ticker, {
             state: STATES.ATTACK,
             direction: stalk.direction,
             originalEntry: stalk.originalEntry,
+            exitWasManual: stalk.exitWasManual || false, // carry the manual-close tag (NO-REOPEN guard in Phase B)
             runningLow: stalk.runningLow || prevBar.low,
             runningHigh: stalk.runningHigh || prevBar.high,
             entryBarLow: prevBar.low,    // V7.6: the green confirming bar = the re-entry "entry bar"

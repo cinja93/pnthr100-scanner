@@ -1149,15 +1149,25 @@ async function _runAmbushTickInner() {
       if (prot.length < 2 || totalProt <= sz) continue;             // one stop, or no over-cover -> fine
       // tightest first: a short covers at the LOWEST buy-stop; a long exits at the HIGHEST sell-stop
       prot.sort((a, b) => isLong ? (b.price - a.price) : (a.price - b.price));
-      let kept = 0, cancelled = 0;
+      let kept = 0, cancelled = 0, manualFlagged = 0;
       for (const s of prot) {
         if (kept < sz) { kept += Math.abs(+s.shares || 0); continue; }  // keep tightest coverage up to the position
-        await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: t, permId: s.permId, reason: 'OVER_COVER_DUP' });
-        cancelled++;
+        // PNTHR-placed excess → the engine can cancel it. MANUAL (hand-placed in TWS) excess →
+        // IBKR returns it as orderId=0 and the bridge CANNOT cancel it; pretending to (a futile
+        // CANCEL_ORDER) is misleading, so FLAG it for a TWS cancel instead. This is the honest
+        // boundary of what the engine can fix at source vs what only the trader can.
+        if ((s.ref || '') === 'PNTHR' && s.permId) {
+          await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: t, permId: s.permId, reason: 'OVER_COVER_DUP' });
+          cancelled++;
+        } else {
+          actions.push({ type: 'MANUAL_OVERCOVER_NEEDS_TWS', ticker: t, side: protAction, price: s.price, shares: s.shares });
+          console.warn(`[Ambush] OVER-COVER ${t}: a MANUAL ${protAction} ${s.shares}@${s.price} over-covers the ${sz}sh ${pos.direction} — engine CANNOT cancel a hand-placed order (IBKR orderId=0). Cancel it in TWS.`);
+          manualFlagged++;
+        }
       }
-      if (cancelled) {
-        actions.push({ type: 'OVERCOVER_SWEEP', ticker: t, cancelled, side: protAction, sz });
-        console.log(`[Ambush] OVER-COVER GUARD ${t}: cancelled ${cancelled} extra ${protAction} stop(s) on held ${pos.direction} ${sz}sh (protective stops summed ${totalProt} > ${sz} -> would over-cover and flip).`);
+      if (cancelled || manualFlagged) {
+        actions.push({ type: 'OVERCOVER_SWEEP', ticker: t, cancelled, manualFlagged, side: protAction, sz });
+        console.log(`[Ambush] OVER-COVER GUARD ${t}: held ${pos.direction} ${sz}sh, protective ${protAction} stops summed ${totalProt} > ${sz} -> cancelled ${cancelled} PNTHR, flagged ${manualFlagged} manual for TWS.`);
       }
     }
   }

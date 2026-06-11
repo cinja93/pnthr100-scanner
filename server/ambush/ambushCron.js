@@ -222,8 +222,8 @@ async function fetchIbkrPrices(db, ownerId) {
 // Used for non-held tickers (STALKING, ATTACK, MCE candidates).
 
 async function fetchFmpBatchQuotes(tickers) {
-  const prices = {};
-  if (!tickers.length || !FMP_API_KEY) return prices;
+  const prices = {}, changes = {};
+  if (!tickers.length || !FMP_API_KEY) return { prices, changes };
 
   const batchSize = 50;
   for (let i = 0; i < tickers.length; i += batchSize) {
@@ -238,6 +238,7 @@ async function fetchFmpBatchQuotes(tickers) {
         for (const q of data) {
           if (q.symbol && typeof q.price === 'number' && q.price > 0) {
             prices[q.symbol] = +q.price.toFixed(4);
+            if (typeof q.changesPercentage === 'number') changes[q.symbol] = q.changesPercentage; // today's 1-day % (heat-map signal)
           }
         }
       }
@@ -246,7 +247,7 @@ async function fetchFmpBatchQuotes(tickers) {
     }
   }
 
-  return prices;
+  return { prices, changes };
 }
 
 // ── Data Source: Combined Live Prices ──────────────────────────────────────
@@ -266,11 +267,13 @@ async function fetchLivePrices(db, positions, candidateTickers, ownerId) {
   }
 
   // 3. FMP batch quote for non-IBKR tickers
-  const fmpPrices = needFmp.size > 0 ? await fetchFmpBatchQuotes([...needFmp]) : {};
+  const { prices: fmpPrices, changes: fmpChanges } = needFmp.size > 0
+    ? await fetchFmpBatchQuotes([...needFmp])
+    : { prices: {}, changes: {} };
 
-  // 4. Merge: IBKR takes priority
+  // 4. Merge: IBKR takes priority for price; dayChange (today's %) is the heat-map gate signal.
   const merged = { ...fmpPrices, ...ibkrPrices };
-  return merged;
+  return { prices: merged, dayChange: fmpChanges };
 }
 
 // ── Data Source: Prior-Day Data (per-day incremental cache, for the 2-day trigger) ──
@@ -911,7 +914,8 @@ async function _runAmbushTickInner() {
   let newlyClearedToday = [];
 
   // 4. Fetch live prices: IBKR for held, FMP quotes for non-held + candidates
-  const livePrices = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
+  const { prices: livePrices, dayChange } = await fetchLivePrices(db, allPositions, mceCandidates, config.ownerId);
+  ctx.dayChange = dayChange;   // per-ticker today % move (FMP) for the heat-map entry gate (getSectorOk)
   const priceCount = Object.keys(livePrices).length;
   console.log(`[Ambush] Live prices: ${priceCount} tickers (${allPositions.length} positions + ${mceCandidates.length} candidates)`);
 

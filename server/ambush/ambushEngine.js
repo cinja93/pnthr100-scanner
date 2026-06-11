@@ -297,24 +297,16 @@ export function getRegime(ctx, ticker, dateStr) {
 }
 
 export function getSectorOk(ctx, ticker, dateStr, direction) {
-  // V7.6: real directional BULL/BEAR sector filter by the sector's 5-day return.
-  //   LONG is allowed only in a BULL sector (5-day return ≥ 0);
-  //   SHORT is allowed only in a BEAR sector (5-day return < 0).
-  // (This replaces the old `tier !== 'AVOID'` check, which was a no-op — the sector
-  // engine writes GO/NEUTRAL/NO_GO, never 'AVOID', so every sector used to pass.)
-  // Only gates ENTRIES/re-entries, never exits, so missing sector data safely skips a
-  // new entry rather than ever blocking a protective exit.
-  const sectorId = AI_TICKER_META[ticker]?.sectorId;
-  if (!sectorId) return false; // unknown sector → not eligible (no blind entries)
-  const map = ctx.aiSectorFiveDayByDate;
-  if (!map) return false;
-  const dates = Object.keys(map).sort();
-  let best = null;
-  for (const d of dates) { if (d <= dateStr) best = d; else break; }
-  if (!best) return false;
-  const r = map[best]?.[sectorId];
-  if (r === undefined || r === null) return false; // no 5-day data → skip the entry
-  return direction === 'LONG' ? r >= 0 : r < 0;
+  // HEAT-MAP GATE (Scott 2026-06-11): gate ENTRIES on the ticker's TODAY move (FMP
+  // changesPercentage — the live green/red the heat map shows), NOT the lagging 5-day
+  // sector return. The 5-day was EOD-stale + a week behind: on 2026-06-11 the AI names were
+  // ripping +5-12% TODAY (money flooding back in) but the 5-day still read ~ -12% from the
+  // prior week's selloff, so EVERY long got vetoed (hunting = 0) — the exact reversal Ambush
+  // exists to catch. Now LONG enters a GREEN name (today's move ≥ 0), SHORT enters a RED name
+  // (today's move < 0), exactly what the heat map shows. Only gates entries/re-entries.
+  const d = ctx.dayChange?.[ticker];
+  if (d == null) return direction === 'LONG';   // no live quote: allow the long breakout, skip a blind short
+  return direction === 'LONG' ? d >= 0 : d < 0;
 }
 
 export function isActiveBL(ctx, ticker, dateStr) {

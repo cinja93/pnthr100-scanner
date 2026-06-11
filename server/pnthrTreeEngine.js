@@ -166,9 +166,9 @@ export async function runPnthrTreeTick(db) {
       });
       actions.push({ type: 'PAPER_ENTRY', ticker: t, shares, price, stop });
     } else if (cfg.mode === 'live') {
-      // reconcile-before-act: only enter if a FRESH IBKR snapshot confirms flat (handled bridge-side too)
-      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: t, shares, refPrice: price, source: 'TREE_52WH' });
-      await enqueueAmbushOrder(db, 'PLACE_STOP', { ticker: t, action: 'SELL', stopPrice: stop, shares, source: 'TREE_52WH' });
+      // Bridge BUY_ENTRY places the market buy AND the protective stop in one command (Ambush shape).
+      // Requires the bridge running + draining the outbox, and the Ambush engine OFF (no reconcile contention).
+      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: t, shares, price, direction: 'LONG', stopPrice: stop, source: 'TREE_52WH' });
       actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: t, shares, price, stop });
     }
   }

@@ -190,7 +190,20 @@ export async function runPnthrTreeTick(db) {
       }
     }
   }
-  // (live: the broker-resting stops handle exits; a weekly stop-raise sweep is the next layer)
+  // LIVE manage: trail each held position's stop UP to its current 2-week low (broker-resting stop fires the exit)
+  if (cfg.mode === 'live') {
+    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+    for (const p of (snap.positions || [])) {
+      const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
+      if (!AI_META[t] || !(sh > 0)) continue;
+      const newStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null; if (!newStop) continue;
+      const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
+      if (newStop > cur + 0.01) {
+        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: newStop, shares: sh, reason: 'TREE_TRAIL' });
+        actions.push({ type: 'LIVE_TRAIL', ticker: t, newStop, from: cur });
+      }
+    }
+  }
 
   await db.collection(CFG).updateOne({}, { $set: { lastTick: new Date(), lastActions: actions.slice(0, 50) } }, { upsert: true });
   return { mode: cfg.mode, actions };

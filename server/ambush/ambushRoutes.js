@@ -194,6 +194,9 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       if (req.body.enabled !== undefined) updates.enabled = !!req.body.enabled;
       if (req.body.nav !== undefined) updates.nav = +req.body.nav;
       if (req.body.maxPositions !== undefined) updates.maxPositions = +req.body.maxPositions;
+      // NO-REOPEN safety: when on, the engine takes NEW positions but never re-opens
+      // names that exited (so manual closes stay closed). See ambushCron Phase B/C.
+      if (req.body.noReopenExisting !== undefined) updates.noReopenExisting = !!req.body.noReopenExisting;
       // Store admin's userId for outbox ownerId (bridge filters by this)
       if (req.user?.userId) updates.ownerId = req.user.userId;
 

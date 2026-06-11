@@ -1626,7 +1626,10 @@ async function _runAmbushTickInner() {
   // During first hour, skip re-entries (need first-hour data first). Skip the open
   // blackout and the post-bell window (inEntryBlackout) — but re-entries fire right up
   // to the 4:00 close, same as new entries.
-  if (!isFirstHour && !inEntryBlackout) {
+  // NO-REOPEN guard (Scott): when config.noReopenExisting is on, the engine still takes
+  // NEW positions (Phase D) but does NOT re-open names that exited — so manual closes stay
+  // closed. Skip the re-entry executor entirely.
+  if (!isFirstHour && !inEntryBlackout && !config.noReopenExisting) {
     const attackPositions = allPositions.filter(p => p.state === STATES.ATTACK);
 
     for (const pend of attackPositions) {
@@ -1844,8 +1847,10 @@ async function _runAmbushTickInner() {
         }
         const breakoutLevel = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2); // for the log
 
-        if (breakoutDetected) {
+        if (breakoutDetected && !config.noReopenExisting) {
           // Transition STALKING -> ATTACK; Phase B fills at the live price next tick.
+          // (NO-REOPEN guard: while config.noReopenExisting is on, exited names never
+          // re-arm, so manual closes stay closed — only NEW names enter.)
           // Capture the GREEN entry bar's low/high so Phase B can set the tight V7.6
           // re-entry stop = the entry bar's low (long) / high (short).
           await upsertAmbushPosition(db, stalk.ticker, {

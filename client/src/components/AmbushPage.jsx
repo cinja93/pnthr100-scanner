@@ -833,6 +833,14 @@ export default function AmbushPage() {
     } catch (err) { alert('Toggle failed: ' + err.message); }
   };
 
+  const handleNoReopen = async () => {
+    if (!data?.config) return;
+    try {
+      await updateAmbushConfig({ noReopenExisting: !data.config.noReopenExisting });
+      await loadData();
+    } catch (err) { alert('No-Reopen toggle failed: ' + err.message); }
+  };
+
   const handleManualTick = async () => {
     setTickRunning(true);
     try {
@@ -1082,6 +1090,12 @@ export default function AmbushPage() {
     <div className={styles.page}>
       <PageHeader title="PNTHR AMBUSH V7.6" />
 
+      {config.noReopenExisting && (
+        <div style={{ margin: '0 0 10px', padding: '8px 14px', background: '#3a2708', border: '2px solid #f59e0b', borderRadius: 8, color: '#fbbf24', fontWeight: 700, fontSize: 13 }}>
+          🟠 NO-REOPEN MODE — the engine takes NEW positions only. Names you exit (manual closes) will NOT re-open. Click "NO REOPEN: ON" to resume re-entries.
+        </div>
+      )}
+
       {/* ═══ STATUS BAR ═══ */}
       <div className={styles.statusBar}>
         <div className={styles.statusTop}>
@@ -1105,6 +1119,24 @@ export default function AmbushPage() {
           >
             <span style={{ fontSize: 9 }}>{config.enabled ? '🟢' : '🔴'}</span>
             {config.enabled ? 'LIVE' : 'OFF — CLICK TO GO LIVE'}
+          </button>
+
+          <button
+            onClick={handleNoReopen}
+            title={config.noReopenExisting
+              ? 'NO-REOPEN is ON — the engine takes NEW positions only; names you exit (manual closes) will NOT re-open. Click to allow re-opens again.'
+              : 'Click to STOP the engine re-opening positions you close (manual closes stay closed). NEW positions are still allowed.'}
+            style={{
+              background: config.noReopenExisting ? '#b45309' : '#1a1a1a',
+              color: config.noReopenExisting ? '#fff' : '#bbb',
+              border: `2px solid ${config.noReopenExisting ? '#f59e0b' : '#3a3a3a'}`,
+              boxShadow: config.noReopenExisting ? '0 0 10px rgba(245,158,11,0.6)' : 'none',
+              fontWeight: 800, letterSpacing: '0.04em', borderRadius: 6, padding: '6px 12px',
+              fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 9 }}>{config.noReopenExisting ? '🟠' : '⚪'}</span>
+            {config.noReopenExisting ? 'NO REOPEN: ON' : 'NO REOPEN EXISTING'}
           </button>
 
           <div className={styles.statusGroup}>

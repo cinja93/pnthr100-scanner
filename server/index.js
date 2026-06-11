@@ -39,6 +39,7 @@ import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstitu
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
+import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
@@ -2603,6 +2604,24 @@ app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
 });
 app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {
   try { res.json(await getNewHighsLows()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── PNTHR TREE — 52-week-high momentum engine (off | paper | live) ──────────
+app.get('/api/pnthr-tree', authenticateJWT, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await getPnthrTreeState(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-tree/mode', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await setPnthrTreeMode(db, (req.body || {}).mode)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-tree/reset', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await resetPnthrTreePaper(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-tree/tick', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await runPnthrTreeTick(db)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6333,6 +6352,19 @@ cron.schedule('0 14 * * 5', async () => {
 // Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
 // ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 let dailyOrdersRunning = false;
+// PNTHR Tree — 52wk-high engine tick (every 2 min during US market hours; no-ops when mode='off')
+let pnthrTreeTickRunning = false;
+cron.schedule('*/2 13-20 * * 1-5', async () => {
+  if (pnthrTreeTickRunning) return;
+  pnthrTreeTickRunning = true;
+  try {
+    const db = await connectToDatabase();
+    const r = await runPnthrTreeTick(db);
+    if (r.actions && r.actions.length) console.log('[PNTHR Tree] ' + r.mode + ' tick:', JSON.stringify(r.actions.slice(0, 10)));
+  } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
+  finally { pnthrTreeTickRunning = false; }
+});
+
 cron.schedule('40 16 * * 1-5', async () => {
   if (dailyOrdersRunning) return;
   if (await isAmbushModeActive()) { console.log('[Orders] Daily update skipped — AMBUSH MODE active'); return; }

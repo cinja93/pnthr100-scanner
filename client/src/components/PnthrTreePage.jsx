@@ -1,0 +1,158 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch, authHeaders, API_BASE } from '../services/api';
+
+// PNTHR Tree — 52-week-high momentum cockpit.
+// Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).
+// Modes: OFF · PAPER TRADE · AUTO-EXECUTE.  Auto requires confirmation (real orders).
+
+const TREE_CAGR = 45.6;   // 1× no-pyramid backtest CAGR (conservative; 2× ≈ +104%). Hypothetical / survivorship-flattered.
+const fmt = (n) => '$' + Math.round(n).toLocaleString();
+
+function ModeButton({ label, active, color, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '8px 16px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+      border: `1px solid ${active ? color : '#333'}`, background: active ? color : '#161616',
+      color: active ? '#000' : '#aaa', letterSpacing: '0.04em',
+    }}>{label}</button>
+  );
+}
+
+function Badge({ f, onClick }) {
+  // stalking = outline; approaching = flashing outline; attack = filled
+  const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, margin: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' };
+  let style;
+  if (f.state === 'attack') style = { ...base, background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 700 };
+  else if (f.state === 'approaching') style = { ...base, background: 'transparent', border: '1px solid #22c55e', color: '#22c55e', animation: 'treeflash 1s ease-in-out infinite' };
+  else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
+  return (
+    <span style={style} onClick={onClick} title={`${f.ticker} · ${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high`}>
+      <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
+      {f.state === 'attack' && f.shares > 0 && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5 }}>{f.shares}sh</span>}
+    </span>
+  );
+}
+
+function DevourCard({ p }) {
+  const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
+  return (
+    <div style={{ background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, fontSize: 16 }}>{p.ticker} <span style={{ color: '#22c55e', fontSize: 11 }}>LONG</span></span>
+        <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: 8, fontSize: 12, fontFamily: 'monospace', color: '#ccc' }}>
+        <span>Shares <b style={{ color: '#fff' }}>{p.shares || p.totalShares}</b></span>
+        <span>Last <b style={{ color: '#fff' }}>${p.last?.toFixed(2)}</b></span>
+        <span>Avg <b style={{ color: '#fff' }}>${(p.avgCost || p.entryPrice)?.toFixed(2)}</b></span>
+        <span>Stop <b style={{ color: '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
+      </div>
+    </div>
+  );
+}
+
+export default function PnthrTreePage() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await apiFetch(`${API_BASE}/api/pnthr-tree`, { headers: authHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json()); setErr(null);
+    } catch (e) { setErr(e.message); }
+  }, []);
+
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+
+  const setMode = async (mode) => {
+    if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 52-week high. Make sure Ambush & Elite are OFF (one engine per account). Proceed?')) return;
+    setBusy(true);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/mode`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const mode = data?.mode || 'off';
+  const funnel = data?.funnel || [];
+  const positions = data?.positions || [];
+  const attack = funnel.filter(f => f.state === 'attack' && !f.held);
+  const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
+  const stalking = funnel.filter(f => f.state === 'stalking' && !f.held);
+  const nav = data?.nav || 0;
+
+  return (
+    <div style={{ padding: '20px 26px', color: '#e6e6e6' }}>
+      <style>{`@keyframes treeflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e88; opacity: 1; } 50% { box-shadow: 0 0 8px 2px #22c55e; opacity: 0.55; } }`}</style>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0b3d2e', paddingBottom: 10 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, color: '#22c55e' }}>🌳 PNTHR Tree</h1>
+          <div style={{ color: '#888', fontSize: 12 }}>AI-300 · 52-week-high momentum · full size, 2-week-low trailing stop</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {busy && <span style={{ color: '#888', fontSize: 11 }}>saving…</span>}
+          <ModeButton label="OFF" active={mode === 'off'} color="#666" onClick={() => setMode('off')} />
+          <ModeButton label="PAPER TRADE" active={mode === 'paper'} color="#3b82f6" onClick={() => setMode('paper')} />
+          <ModeButton label="AUTO-EXECUTE" active={mode === 'live'} color="#22c55e" onClick={() => setMode('live')} />
+        </div>
+      </div>
+
+      {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
+      {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
+
+      {/* AUM + Goals */}
+      <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
+        <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 16px' }}>
+          <div style={{ color: '#888', fontSize: 10, textTransform: 'uppercase' }}>Actual AUM</div>
+          <div style={{ color: '#fff', fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(nav)}</div>
+        </div>
+        <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 16px' }}>
+          <div style={{ color: '#888', fontSize: 10, textTransform: 'uppercase' }}>PNTHR Goals (backtest {TREE_CAGR}% CAGR · hypothetical)</div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 4, fontFamily: 'monospace' }}>
+            {[['1yr', 1], ['2yr', 2], ['3yr', 3], ['5yr', 5]].map(([l, y]) => (
+              <span key={l} style={{ fontSize: 13 }}><span style={{ color: '#666' }}>{l}</span> <b style={{ color: '#22c55e' }}>{fmt(nav * Math.pow(1 + TREE_CAGR / 100, y))}</b></span>
+            ))}
+          </div>
+        </div>
+        <div style={{ color: '#666', fontSize: 11, alignSelf: 'center' }}>
+          {data?.counts && <>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</>}
+        </div>
+      </div>
+
+      {/* DEVOUR — held positions */}
+      <div style={{ marginTop: 20 }}>
+        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS ({positions.length})</h3>
+        {positions.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No open positions.</div> :
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{positions.map((p, i) => <DevourCard key={i} p={p} />)}</div>}
+      </div>
+
+      {/* ATTACK — new highs */}
+      <div style={{ marginTop: 18 }}>
+        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 52-WEEK HIGHS ({attack.length})</h3>
+        {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
+          <div>{attack.map(f => <Badge key={f.ticker} f={f} />)}</div>}
+      </div>
+
+      {/* APPROACHING — flashing */}
+      <div style={{ marginTop: 18 }}>
+        <h3 style={{ color: '#facc15', fontSize: 13, letterSpacing: '0.08em' }}>APPROACHING — within 1% of a new high ({approaching.length})</h3>
+        {approaching.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None close yet.</div> :
+          <div>{approaching.map(f => <Badge key={f.ticker} f={f} />)}</div>}
+      </div>
+
+      {/* STALKING — the universe */}
+      <div style={{ marginTop: 18 }}>
+        <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, closest to a new high first ({stalking.length})</h3>
+        <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} />)}</div>
+      </div>
+
+      <div style={{ color: '#555', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
+        Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.
+      </div>
+    </div>
+  );
+}

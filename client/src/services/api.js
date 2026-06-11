@@ -1415,6 +1415,16 @@ export async function updateAmbushConfig(updates) {
   return res.json();
 }
 
+export async function setAmbushReopen(ticker, restrict) {
+  const res = await apiFetch(`${API_BASE}/api/ambush/reopen`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ticker, restrict }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function triggerAmbushTick() {
   const res = await apiFetch(`${API_BASE}/api/ambush/tick`, {
     method: 'POST',

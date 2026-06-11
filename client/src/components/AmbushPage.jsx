@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection, fetchAmbushReconcile, fetchEliteScorecard } from '../services/api';
+import { fetchAmbushSummary, updateAmbushConfig, triggerAmbushTick, deleteAmbushPosition, fetchAmbushProjection, fetchAmbushReconcile, fetchEliteScorecard, setAmbushReopen } from '../services/api';
 import LongShortScorecard from './LongShortScorecard';
 import PageHeader from './PageHeader';
 import AiTickerChartModal from './AiTickerChartModal';
@@ -429,7 +429,7 @@ function DirBadge({ direction }) {
 }
 
 // ── Watching: today's BL+1 / SS+1 candidate pool ────────────────────────────
-function WatchCol({ title, color, items, onTicker, eng, chipStyle }) {
+function WatchCol({ title, color, items, onTicker, onRightClick, eng, chipStyle }) {
   // Chips colored by ENGAGEMENT (eng): SOLID green/red = in play (held • / daily
   // cleared), YELLOW = attacking, LIGHT green/red = weekly signal but not in play yet.
   const readyCount = items.filter(i => i.ready).length;
@@ -442,7 +442,9 @@ function WatchCol({ title, color, items, onTicker, eng, chipStyle }) {
         {items.length === 0 ? <span style={{ color: '#555', fontSize: 12 }}>none today</span> : items.map(it => {
           const e = eng(it.ticker);
           return (
-            <span key={it.ticker} onClick={() => onTicker?.(it.ticker)} title={`${it.sector} — ${e.label} · click for charts`} style={chipStyle(e)}>
+            <span key={it.ticker} onClick={() => onTicker?.(it.ticker)}
+              onContextMenu={onRightClick ? (ev) => { ev.preventDefault(); onRightClick(it.ticker); } : undefined}
+              title={`${it.sector} — ${e.label} · click for charts`} style={chipStyle(e)}>
               {it.ticker}{e.held ? ' •' : ''}
             </span>
           );
@@ -894,6 +896,21 @@ export default function AmbushPage() {
   const DAILY_ZONE = 0.0005; // within 0.05% of the daily trigger → "in the zone" (flashing)
   const posByTicker = {};
   for (const p of positions) posByTicker[(p.ticker || '').toUpperCase()] = p;
+  // NO-REOPEN per-ticker restriction (Scott): a name is "restricted" when NO-REOPEN mode
+  // is on AND its record carries exitWasManual. Restricted chips render PURPLE; right-click
+  // toggles it (allow a restricted name back in, or restrict one from re-opening).
+  const isRestricted = (t) => !!(config?.noReopenExisting && posByTicker[(t || '').toUpperCase()]?.exitWasManual);
+  const RESTRICTED_CHIP = { bg: '#7c3aed', border: '#a78bfa', text: '#ffffff' };
+  const handleToggleReopen = async (ticker) => {
+    const t = (ticker || '').toUpperCase();
+    const restricted = isRestricted(t);
+    const msg = restricted
+      ? `Allow ${t} to RE-OPEN again? (the engine may re-enter it on a fresh signal)`
+      : `RESTRICT ${t} from re-opening? (it stays closed even on a fresh signal)`;
+    if (!window.confirm(msg)) return;
+    try { await setAmbushReopen(t, !restricted); await loadData(); }
+    catch (e) { alert('Reopen toggle failed: ' + e.message); }
+  };
   // nearPct per armed name (how close to its hourly trigger), from the engine.
   const nearByTicker = {};
   for (const h of hunting) if (h && h.ticker && h.nearPct != null) nearByTicker[h.ticker.toUpperCase()] = h.nearPct;
@@ -908,6 +925,7 @@ export default function AmbushPage() {
     const held = p && (p.state === 'ACTIVE' || p.state === 'PROTECT' || (+p.totalShares || 0) !== 0);
     const firedToday = p && (p.state === 'ATTACK' || p.entryDate === todayET); // hourly fired today
     if (held) return { ...solid, held: true, label: 'in a position' };
+    if (isRestricted(t)) return { ...RESTRICTED_CHIP, held: false, restricted: true, label: 'RESTRICTED from re-opening — right-click to allow' };
     if (stage === 'weekly') return { ...light, held: false, label: 'weekly signal live' };
     if (stage === 'daily')  return (huntingSet.has(t) || firedToday)
       ? { ...light, held: false, label: 'daily trigger cleared' }
@@ -1280,8 +1298,8 @@ export default function AmbushPage() {
             <div className={styles.emptyState}>No active signals loaded yet — appears once the engine ticks.</div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '6px 2px' }}>
-              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} eng={(t) => funnelStyle(t, true, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
-              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} eng={(t) => funnelStyle(t, false, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} />
+              <WatchCol title="BL+1 LONGS" color="#22c55e" items={watching.longs} eng={(t) => funnelStyle(t, true, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} onRightClick={handleToggleReopen} />
+              <WatchCol title="SS+1 SHORTS" color="#ef4444" items={watching.shorts} eng={(t) => funnelStyle(t, false, 'weekly')} chipStyle={engChipStyle} onTicker={(t) => openChart(t, [...watching.longs, ...watching.shorts].map(x => x.ticker))} onRightClick={handleToggleReopen} />
             </div>
           )
         )}
@@ -1316,10 +1334,14 @@ export default function AmbushPage() {
             else if (hp >= -DAILY_ZONE) { e = { ...solid, label: `in the trigger zone (${(hp * 100).toFixed(2)}% from trigger)` }; flash = true; }
             else                        e = { ...dim, label: `pulled back past the trigger (${(hp * 100).toFixed(2)}%)` };
           }
+          if (!isHeld && isRestricted(t)) { e = { ...RESTRICTED_CHIP, label: 'RESTRICTED from re-opening — right-click to allow' }; flash = false; }
           const style = { ...engChipStyle(e) };
           if (flash) style.animation = `${isLong ? 'pnthrDailyFlashLong' : 'pnthrDailyFlashShort'} 1s ease-in-out infinite`;
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))} title={`${e.label} · click for charts`} style={style}>
+            <span key={it.ticker}
+              onClick={() => openChart(it.ticker, [...longs, ...shorts].map(x => x.ticker))}
+              onContextMenu={(ev) => { ev.preventDefault(); handleToggleReopen(it.ticker); }}
+              title={`${e.label} · click to chart · right-click to ${isRestricted(t) ? 'ALLOW re-open' : 'RESTRICT re-open'}`} style={style}>
               {it.ticker}{isHeld ? ' •' : ''}
             </span>
           );
@@ -1372,7 +1394,10 @@ export default function AmbushPage() {
           const style = { ...engChipStyle(e) };
           if (conflict) { style.animation = 'pnthrConflictFlash 0.9s ease-in-out infinite'; style.border = '2px solid #fbbf24'; }
           return (
-            <span key={it.ticker} onClick={() => openChart(it.ticker, armed.map(h => h.ticker))} title={conflict ? `⚠ DIRECTION CONFLICT — position is ${it.direction} but the signal is ${signalDir[t]}. Needs attention.` : `${e.label} · click for charts`} style={style}>
+            <span key={it.ticker}
+              onClick={() => openChart(it.ticker, armed.map(h => h.ticker))}
+              onContextMenu={(ev) => { ev.preventDefault(); handleToggleReopen(it.ticker); }}
+              title={conflict ? `⚠ DIRECTION CONFLICT — position is ${it.direction} but the signal is ${signalDir[t]}. Needs attention.` : `${e.label} · click to chart · right-click to ${isRestricted(t) ? 'ALLOW re-open' : 'RESTRICT re-open'}`} style={style}>
               {it.ticker}{conflict ? ' ⚠' : (e.held ? ' •' : '')}
             </span>
           );

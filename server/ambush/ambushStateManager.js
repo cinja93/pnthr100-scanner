@@ -65,6 +65,16 @@ export async function getAmbushPosition(db, ticker) {
   return db.collection(POSITIONS_COLLECTION).findOne({ ticker: ticker.toUpperCase() });
 }
 
+// User override for the NO-REOPEN restriction on a single ticker. The re-entry gate
+// keys off exitWasManual (+ config.noReopenExisting), so set it true to keep a name
+// from re-opening, or false to allow it back in. Right-click toggle on the funnel chips.
+export async function setAmbushReopenRestricted(db, ticker, restricted) {
+  return db.collection(POSITIONS_COLLECTION).updateOne(
+    { ticker: (ticker || '').toUpperCase() },
+    { $set: { exitWasManual: !!restricted, reopenOverrideAt: new Date() } }
+  );
+}
+
 export async function upsertAmbushPosition(db, ticker, update) {
   const now = new Date();
   return db.collection(POSITIONS_COLLECTION).updateOne(

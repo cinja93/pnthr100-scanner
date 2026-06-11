@@ -20,7 +20,7 @@ import {
   getAmbushSummary, getAmbushPositions, getAmbushTrades,
   getRecentAmbushOrders, getAmbushConfig, updateAmbushConfig,
   deleteAmbushPosition, ensureAmbushIndexes,
-  recordAmbushAum, getAmbushAumSeries,
+  recordAmbushAum, getAmbushAumSeries, setAmbushReopenRestricted,
 } from './ambushStateManager.js';
 import { runAmbushTick } from './ambushCron.js';
 import { getAmbushLiveReconcile } from './ambushLiveReconcile.js';
@@ -205,6 +205,23 @@ export function createAmbushRouter(authenticateJWT, requireAdmin) {
       res.json({ ok: true, config });
     } catch (err) {
       console.error('[Ambush API] config update error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/ambush/reopen — toggle the NO-REOPEN restriction on one ticker.
+  // { ticker, restrict: true|false }  true = keep it from re-opening (purple chip),
+  // false = allow it to re-open again. Right-click toggle from the funnel chips.
+  router.post('/reopen', async (req, res) => {
+    try {
+      const db = await connectToDatabase();
+      const ticker = (req.body.ticker || '').toUpperCase();
+      if (!ticker) return res.status(400).json({ error: 'ticker required' });
+      const restrict = !!req.body.restrict;
+      const r = await setAmbushReopenRestricted(db, ticker, restrict);
+      res.json({ ok: true, ticker, restricted: restrict, matched: r.matchedCount });
+    } catch (err) {
+      console.error('[Ambush API] reopen toggle error:', err.message);
       res.status(500).json({ error: err.message });
     }
   });

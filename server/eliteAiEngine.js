@@ -312,13 +312,22 @@ export async function getEliteProjection() {
   const N = factors.length;
   const dates = N ? [startDate] : [];
   { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
-  const projected = factors.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
-  const projectedGross = factorsGross.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
+  // Project the anchor AUM forward at the backtest CAGR (smooth daily compounding) —
+  // NET curve at net CAGR, GROSS at gross CAGR. The raw backtest factor path opens
+  // with a ~1.5yr EMA-warmup flat stretch, which made the near-term projection look
+  // flat ("not tracking"); compounding at the CAGR is the meaningful "where the
+  // backtest says we should be by date X."
+  const cagrNetPct = proj.metrics?.cagrPct || 0;
+  const cagrGrossPct = proj.metricsGross?.cagrPct || 0;
+  const dailyNet = cagrNetPct > 0 ? Math.pow(1 + cagrNetPct / 100, 1 / 252) : 1;
+  const dailyGross = cagrGrossPct > 0 ? Math.pow(1 + cagrGrossPct / 100, 1 / 252) : 1;
+  const projected = dates.map((d, i) => ({ date: d, value: +(startAum * Math.pow(dailyNet, i)).toFixed(0) }));
+  const projectedGross = dates.map((d, i) => ({ date: d, value: +(startAum * Math.pow(dailyGross, i)).toFixed(0) }));
 
   const elapsed = Math.min(_weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
-  const projectedToday = +(startAum * (factors[elapsed]?.factor || 1)).toFixed(0);
+  const projectedToday = +(startAum * Math.pow(dailyNet, elapsed)).toFixed(0);
   const onTrackPct = projectedToday > 0 ? +(((actualNav / projectedToday) - 1) * 100).toFixed(1) : 0;
-  const projectedTodayGross = +(startAum * (factorsGross[elapsed]?.factor || 1)).toFixed(0);
+  const projectedTodayGross = +(startAum * Math.pow(dailyGross, elapsed)).toFixed(0);
   const onTrackPctGross = projectedTodayGross > 0 ? +(((actualNav / projectedTodayGross) - 1) * 100).toFixed(1) : 0;
 
   const cagrPct = proj.metrics?.cagrPct || 0;

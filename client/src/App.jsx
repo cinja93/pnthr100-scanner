@@ -34,6 +34,7 @@ import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import Ai300IndexPage from './components/Ai300IndexPage';
 import BondHeatPage from './components/BondHeatPage';
+import NewHighsLowsPage from './components/NewHighsLowsPage';
 import AiHeatPage from './components/AiHeatPage';
 import JungleHeatPage from './components/JungleHeatPage';
 import AiSectorsPage from './components/AiSectorsPage';
@@ -1771,6 +1772,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR Bond Yields — treasury yields + shock detection */}
           {renderPage === 'bondHeat' && <BondHeatPage />}
+
+          {/* New Highs/Lows — intraday 52-week highs/lows, Carnivore + AI 300 */}
+          {renderPage === 'newHighsLows' && <NewHighsLowsPage />}
 
 
           {/* PNTHR Journal */}

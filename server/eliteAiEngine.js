@@ -32,15 +32,26 @@ function todayET() {
 // carries its full entry plan: L1 trigger, weekly stop, RPS, and the 5-lot share
 // ladder. Null ownerId → not filtered by the live Command-Center book (Elite AI is
 // its own isolated paper account).
+// Real account NAV — the live balance (same source as the AUM tracker / Ambush config).
+// The paper engine sizes against THIS now, not a notional $100k.
+async function getActualNav(db) {
+  let actualNav = 83000;
+  try {
+    const ambCfg = await db.collection('pnthr_ambush_config').findOne({});
+    if (ambCfg?.nav > 0) actualNav = ambCfg.nav;
+    if (ambCfg?.ownerId) { const p = await getUserProfile(ambCfg.ownerId); if (p?.accountSize > 0) actualNav = p.accountSize; }
+  } catch { /* fall back to default */ }
+  return actualNav;
+}
+
 export async function runEliteAiDryRun({ nav } = {}) {
   const db = await connectToDatabase();
   if (!db) return { error: 'NO_DB', created: [] };
 
-  // Graduated sizing: paper equity = $100k seed + realized P&L → 50 / 75 / 100% at the
-  // SAME $125K / $166K NAV steps as Ambush (getSizingMultiplier). Keeps risk-per-trade /
-  // NAV constant; at the current sub-$125K NAV that's 50% → ~$150 risk/name.
-  const realized = (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0);
-  const paperNav = nav || (100000 + realized);
+  // Graduated sizing: paper book sized against the REAL account NAV (not a notional $100k)
+  // → 50 / 75 / 100% at the $125K / $166K steps (getSizingMultiplier). At the current
+  // sub-$125K NAV that's 50% → ~$150 risk/name. Keeps risk-per-trade / NAV constant.
+  const paperNav = nav || (await getActualNav(db));
   const sizingMult = getSizingMultiplier(paperNav);
   const sizingPct = Math.round(sizingMult * 100);
 
@@ -97,7 +108,7 @@ export async function runEliteAiDryRun({ nav } = {}) {
 export async function getEliteSizing() {
   const db = await connectToDatabase();
   const realized = db ? (await db.collection(TRADES).find({}, { projection: { pnl: 1 } }).toArray()).reduce((s, t) => s + (+t.pnl || 0), 0) : 0;
-  const paperNav = 100000 + realized;
+  const paperNav = db ? await getActualNav(db) : 79900;   // size against the REAL account NAV
   return { paperNav, realized, sizingPct: Math.round(getSizingMultiplier(paperNav) * 100), tier: getSizingTierLabel(paperNav), tier1: 125000, tier2: 166000 };
 }
 
@@ -143,7 +154,8 @@ export async function getElitePositions() {
   const db = await connectToDatabase();
   if (!db) return [];
   const positions = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).sort({ createdAt: -1 }).toArray();
-  return positions.map(p => ({ ...p, rec: verifyElitePosition(p) }));
+  const nav = await getActualNav(db);   // 10%-cap / risk checks against the REAL NAV
+  return positions.map(p => ({ ...p, rec: verifyElitePosition(p, nav) }));
 }
 
 // Clear the paper book (dry-run only — never touches anything but pnthr_elite_positions).
@@ -284,14 +296,8 @@ export async function getEliteProjection() {
   const factors = proj.factors || [];
   const factorsGross = proj.factorsGross || [];
 
-  // Actual AUM = the REAL account NAV (same source as the Ambush panel) — we ride the
-  // real AUM forward at the Elite backtest growth rate, NOT the notional paper book.
-  let actualNav = 83000;
-  try {
-    const ambCfg = await db.collection('pnthr_ambush_config').findOne({});
-    if (ambCfg?.nav > 0) actualNav = ambCfg.nav;
-    if (ambCfg?.ownerId) { const p = await getUserProfile(ambCfg.ownerId); if (p?.accountSize > 0) actualNav = p.accountSize; }
-  } catch { /* fall back to default */ }
+  // Actual AUM = the REAL account NAV (same source as the paper engine + Ambush panel).
+  const actualNav = await getActualNav(db);
   const todayISO = _etDateStr();
 
   // Anchor: lock start date + AUM on first call (mirrors Ambush).

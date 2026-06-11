@@ -208,7 +208,7 @@ export default function EliteAiPage() {
         {/* dry-run control bar */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 12px' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', border: '1px solid #6d5bbf', borderRadius: 4, padding: '3px 8px' }}>DRY-RUN · PAPER</span>
-          {sizing && <span title={`Graduated sizing — paper equity $${(sizing.paperNav || 0).toLocaleString()}. Steps: 50% under $125K, 75% under $166K, 100% above. At 50% that caps L1 risk ~$150/name.`} style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', border: '1px solid #b07d1a', borderRadius: 4, padding: '3px 8px' }}>SIZING {sizing.sizingPct}%</span>}
+          {sizing && <span title={`Graduated sizing — sized against the real account NAV $${(sizing.paperNav || 0).toLocaleString()}. Steps: 50% under $125K, 75% under $166K, 100% above. At 50% that caps L1 risk ~$150/name.`} style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', border: '1px solid #b07d1a', borderRadius: 4, padding: '3px 8px' }}>SIZING {sizing.sizingPct}%</span>}
           <button disabled={running} onClick={doRun} style={{ background: '#16a34a', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Run Dry-Run</button>
           <button disabled={running} onClick={doManage} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: 5, padding: '5px 12px', fontWeight: 700, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>Tick (manage)</button>
           <button disabled={running} onClick={doReset} style={{ background: 'transparent', color: '#888', border: '1px solid #3a3a44', borderRadius: 5, padding: '5px 12px', cursor: 'pointer' }}>Reset paper book</button>
@@ -272,7 +272,7 @@ export default function EliteAiPage() {
               <span style={{ color: heatPct >= 15 ? '#dc2626' : '#ccc', fontWeight: 700, fontFamily: 'monospace' }}>{heatPct.toFixed(1)}% / 15%</span>
               <span style={{ color: '#888' }}>risk <b style={{ color: '#ddd', fontFamily: 'monospace' }}>{fmtUsd(bookRisk)}</b></span>
               <span style={{ color: '#888' }}>capacity <b style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmtUsd(capacity)}</b></span>
-              <span style={{ color: '#888' }}>{positions.length} positions · $100k paper NAV</span>
+              <span style={{ color: '#888' }}>{positions.length} positions · {'$' + Math.round(NAV).toLocaleString()} NAV (real account)</span>
             </div>
 
             <LongShortScorecard scorecard={scorecard} />

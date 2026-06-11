@@ -88,7 +88,7 @@ export default function NewHighsLowsPage() {
         <div style={{ color: '#ef4444', padding: 20 }}>Error: {error}</div>
       ) : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <Column title="Carnivore" subtitle="S&P 500 + S&P 400 (679 universe)" data={data?.carnivore} onPick={openCarn} />
+          <Column title="Carnivore" subtitle="S&P 500 + S&P 400 (MidCap)" data={data?.carnivore} onPick={openCarn} />
           <Column title="AI 300" subtitle="PNTHR AI Universe" data={data?.ai300} onPick={openAi} />
         </div>
       )}

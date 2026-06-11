@@ -6,7 +6,7 @@
 // (FMP's yearHigh/yearLow is the rolling 52-week max/min; dayHigh == yearHigh only when
 //  today set or tied the 52-week extreme — so the comparison is robust either way.)
 import { fetchFMP } from './stockService.js';
-import { getAllTickers } from './constituents.js';
+import { getAllTickers, getSp400Tickers } from './constituents.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 const AI_TICKERS = (() => {
@@ -42,7 +42,9 @@ function classify(tickers, quoteMap) {
 }
 
 export async function getNewHighsLows() {
-  const carnivoreTickers = (await getAllTickers()) || [];
+  // Carnivore = base index universe (S&P 500 + Nasdaq + Dow) ∪ full S&P 400 (MidCap).
+  const [base, sp400] = await Promise.all([getAllTickers(), getSp400Tickers()]);
+  const carnivoreTickers = [...new Set([...(base || []), ...(sp400 || [])])];
   const all = [...new Set([...carnivoreTickers, ...AI_TICKERS])];
   const quoteMap = await fetchQuotesChunked(all);
   return {

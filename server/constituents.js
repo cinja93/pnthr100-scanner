@@ -28,8 +28,30 @@ async function fetchConstituents(endpoint) {
   }
 }
 
+// S&P 400 (MidCap 400) constituents. The /sp400_constituent endpoint isn't on the
+// current FMP plan, so fall back to the SPDR S&P MidCap 400 ETF (MDY) holdings,
+// which track the index 1:1 (~400 names).
+async function fetchSp400() {
+  const direct = await fetchConstituents('/sp400_constituent');
+  if (direct.length > 0) return direct;
+  try {
+    const res = await fetch(`${FMP_BASE_URL}/etf-holder/MDY?apikey=${FMP_API_KEY}`);
+    if (res.ok) {
+      const data = await res.json();
+      const list = (Array.isArray(data) ? data : [])
+        .map(h => (h.asset || '').toUpperCase().trim())
+        .filter(t => /^[A-Z][A-Z.\-]{0,5}$/.test(t));
+      if (list.length) console.log(`📋 S&P 400: ${list.length} via MDY ETF holdings (/sp400_constituent unavailable on plan)`);
+      return list;
+    }
+  } catch (error) {
+    console.error('S&P 400 MDY fallback failed:', error.message);
+  }
+  return [];
+}
+
 // Weekly cache for constituent lists — keyed by last Friday's date so it auto-refreshes each week
-const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null, nasdaq100: null, sp400Fill: null };
+const constituentCache = { weekKey: null, allTickers: null, dow30: null, sp500: null, nasdaq100: null, sp400: null, sp400Fill: null };
 
 function getWeekKey() {
   const today = new Date();
@@ -76,7 +98,7 @@ async function refreshConstituentCache() {
     fetchConstituents('/sp500_constituent'),
     fetchConstituents('/nasdaq_constituent'),
     fetchConstituents('/dowjones_constituent'),
-    fetchConstituents('/sp400_constituent'),
+    fetchSp400(),
     getSupplementalStocks(),
   ]);
 
@@ -113,6 +135,7 @@ async function refreshConstituentCache() {
   constituentCache.dow30      = dow30;
   constituentCache.sp500      = sp500;
   constituentCache.nasdaq100  = nasdaq100;
+  constituentCache.sp400      = sp400;
   constituentCache.sp400Fill  = sp400Fill;
 
   console.log(`📋 Constituent cache set (${allTickers.length} unique tickers, ${sp400Fill.length} from S&P 400 fill, valid until next Friday)`);
@@ -122,6 +145,12 @@ async function refreshConstituentCache() {
 export async function getAllTickers() {
   if (!isCacheValid()) await refreshConstituentCache();
   return constituentCache.allTickers;
+}
+
+// Full S&P 400 (MidCap 400) constituents (via /sp400_constituent or MDY ETF fallback).
+export async function getSp400Tickers() {
+  if (!isCacheValid()) await refreshConstituentCache();
+  return constituentCache.sp400 || [];
 }
 
 // Get Dow 30 tickers (for tagging in Jungle universe)

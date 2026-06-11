@@ -1122,6 +1122,42 @@ async function _runAmbushTickInner() {
     }
   }
 
+  // ── OVER-COVER GUARD for HELD positions (2026-06-11 reversal fix) ────────────
+  // Root cause of the BILL/PEGA/BABA short->long flips: a MANUAL (non-PNTHR) stop sat on
+  // the SAME (protective) side as the engine's stop on a held position. The orphan-sweep
+  // above only cancels PNTHR stops on FLAT tickers, and cancelLeftoverStops only cancels
+  // PNTHR-tagged orders — so a manual duplicate on a HELD short survived. When price ran,
+  // BOTH buy-stops fired -> bought MORE than the short -> the position reversed to long.
+  // Guard: for each held position the protective-side resting-stop quantity must not exceed
+  // the position size. Keep the TIGHTEST coverage up to the size; cancel the over-cover
+  // excess (any ref). Never loosens (keeps tightest), never naked (keeps coverage).
+  if (ibkrSnapAgeMin <= 10) {
+    for (const pos of allPositions) {
+      if (pos.state !== STATES.ACTIVE && pos.state !== STATES.PROTECT) continue;
+      const sz = Math.abs(+pos.totalShares || 0);
+      if (!sz) continue;
+      const t = (pos.ticker || '').toUpperCase();
+      if (!ibkrSharesByTicker[t]) continue;                          // only act when IBKR confirms it's held
+      const isLong = pos.direction === 'LONG';
+      const protAction = isLong ? 'SELL' : 'BUY';                    // the side that closes the position
+      const prot = (ibkrStopListByTicker[t] || []).filter(s => (s.action || '').toUpperCase() === protAction && s.permId);
+      const totalProt = prot.reduce((acc, x) => acc + Math.abs(+x.shares || 0), 0);
+      if (prot.length < 2 || totalProt <= sz) continue;             // one stop, or no over-cover -> fine
+      // tightest first: a short covers at the LOWEST buy-stop; a long exits at the HIGHEST sell-stop
+      prot.sort((a, b) => isLong ? (b.price - a.price) : (a.price - b.price));
+      let kept = 0, cancelled = 0;
+      for (const s of prot) {
+        if (kept < sz) { kept += Math.abs(+s.shares || 0); continue; }  // keep tightest coverage up to the position
+        await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: t, permId: s.permId, reason: 'OVER_COVER_DUP' });
+        cancelled++;
+      }
+      if (cancelled) {
+        actions.push({ type: 'OVERCOVER_SWEEP', ticker: t, cancelled, side: protAction, sz });
+        console.log(`[Ambush] OVER-COVER GUARD ${t}: cancelled ${cancelled} extra ${protAction} stop(s) on held ${pos.direction} ${sz}sh (protective stops summed ${totalProt} > ${sz} -> would over-cover and flip).`);
+      }
+    }
+  }
+
   // ═══ PHASE A: Process existing ACTIVE + PROTECT positions ═══
   const activePositions = allPositions.filter(p =>
     p.state === STATES.ACTIVE || p.state === STATES.PROTECT

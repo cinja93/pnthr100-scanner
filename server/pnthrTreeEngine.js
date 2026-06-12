@@ -143,6 +143,9 @@ export async function getPnthrTreeState(db) {
     p.last = last; p.stop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : (p.stop || null);
     p.pnl = +(((last - (p.avgCost || p.entryPrice)) * (p.shares || p.totalShares || 0))).toFixed(0);
     p.pnlPct = +((last / (p.avgCost || p.entryPrice) - 1) * 100).toFixed(1);
+    // PROTECT = the trailing stop has climbed to/above entry → worst case is now a
+    // locked-in profit (Ambush's PROTECT, long-only: stop >= avgCost).
+    p.protected = p.stop != null && p.stop >= (p.avgCost || p.entryPrice);
   }
 
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
@@ -313,18 +316,22 @@ export async function getPnthrTreeProjection(db) {
   await db.collection('pnthr_tree_aum').updateOne({ date: todayISO }, { $set: { date: todayISO, actualAum: nav } }, { upsert: true });
   const actualSeries = await db.collection('pnthr_tree_aum').find({}).sort({ date: 1 }).toArray();
 
-  // projected curve = baseline factor × anchor AUM, mapped to weekday dates
+  // Projected curve = SMOOTH daily compounding at the backtest CAGR, mapped to
+  // weekday dates. NOT the raw backtest equity path: that replays the real
+  // drawdowns, so the "projection" dipped BELOW the starting balance (confusing —
+  // a forward target should rise steadily, like an index goal line). Each weekday =
+  // today's anchor AUM grown at the daily-CAGR rate. (Drawdown risk is disclosed
+  // separately in the metric tiles: max DD %.)
   const N = factors.length;
-  const dates = N ? [startDate] : [];
-  { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
-  const projected = factors.map((f, i) => ({ date: dates[i], value: +(startAum * f.factor).toFixed(0) }));
-
-  const elapsed = Math.min(weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
-  const projectedToday = +(startAum * (factors[elapsed]?.factor || 1)).toFixed(0);
-  const onTrackPct = projectedToday > 0 ? +(((nav / projectedToday) - 1) * 100).toFixed(1) : 0;
-
   const cagrPct = proj.metrics?.cagrPct || 0;
   const dailyCagr = cagrPct > 0 ? Math.pow(1 + cagrPct / 100, 1 / 252) : 1;
+  const dates = N ? [startDate] : [];
+  { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
+  const projected = dates.map((date, i) => ({ date, value: +(startAum * Math.pow(dailyCagr, i)).toFixed(0) }));
+
+  const elapsed = Math.min(weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
+  const projectedToday = +(startAum * Math.pow(dailyCagr, elapsed)).toFixed(0);
+  const onTrackPct = projectedToday > 0 ? +(((nav / projectedToday) - 1) * 100).toFixed(1) : 0;
   const projFwd = N ? simulateForward(projectedToday, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
   const actFwd = N ? simulateForward(nav, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
   const forward = {
@@ -340,6 +347,6 @@ export async function getPnthrTreeProjection(db) {
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
     forward,
     metrics: proj.metrics || null,
-    meta: { backtestEndNav: proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure },
+    meta: { backtestEndNav: projected.length ? projected[projected.length - 1].value : proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure },
   };
 }

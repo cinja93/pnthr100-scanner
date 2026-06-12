@@ -41,12 +41,13 @@ function DevourCard({ p, onClick }) {
   const last = p.last ?? (p.avgCost || p.entryPrice);
   const rps = (p.stop != null && last != null) ? last - p.stop : null;     // current price − stop
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
+  const prot = p.protected;
   return (
-    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#121212', border: `1px solid ${prot ? '#3b82f6' : '#2a2a2a'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
-          <span style={{ color: '#22c55e', fontSize: 11 }}>LONG</span>
+          <span style={{ color: prot ? '#60a5fa' : '#22c55e', fontSize: 11 }}>{prot ? '🛡️ LOCKED' : 'LONG'}</span>
         </span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
       </div>
@@ -54,7 +55,7 @@ function DevourCard({ p, onClick }) {
         <span>Shares <b style={{ color: '#fff' }}>{p.shares || p.totalShares}</b></span>
         <span>Last <b style={{ color: '#fff' }}>${p.last?.toFixed(2)}</b></span>
         <span>Avg <b style={{ color: '#fff' }}>${(p.avgCost || p.entryPrice)?.toFixed(2)}</b></span>
-        <span>Stop <b style={{ color: '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
+        <span>Stop <b style={{ color: prot ? '#22c55e' : '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
         <span>Risk/sh <b style={{ color: '#facc15' }}>${rps != null ? rps.toFixed(2) : '--'}</b></span>
         <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b></span>
       </div>
@@ -97,6 +98,8 @@ export default function PnthrTreePage() {
   const mode = data?.mode || 'off';
   const funnel = data?.funnel || [];
   const positions = data?.positions || [];
+  const protectedPos = positions.filter(p => p.protected);
+  const devourPos = positions.filter(p => !p.protected);
   const attack = funnel.filter(f => f.state === 'attack' && !f.held);
   const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
   const stalking = funnel.filter(f => f.state === 'stalking' && !f.held);
@@ -134,11 +137,18 @@ export default function PnthrTreePage() {
         <span style={{ color: '#555' }}>Backtest hypothetical &amp; survivorship-flattered (current AI-300 names). Not a track record.</span>
       </div>
 
-      {/* DEVOUR — held positions */}
+      {/* DEVOUR — held, trailing stop still below entry (capital at risk) */}
       <div style={{ marginTop: 20 }}>
-        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS ({positions.length})</h3>
-        {positions.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No open positions.</div> :
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{positions.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(positions.map(x => x.ticker), p.ticker)} />)}</div>}
+        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
+        {devourPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No positions with open risk.</div> :
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{devourPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(devourPos.map(x => x.ticker), p.ticker)} />)}</div>}
+      </div>
+
+      {/* PROTECT — trailing stop has reached/passed entry → worst case is a locked profit */}
+      <div style={{ marginTop: 18 }}>
+        <h3 style={{ color: '#60a5fa', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
+        {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{protectedPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(protectedPos.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>
 
       {/* ATTACK — new highs */}

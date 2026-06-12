@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker } from './AmbushPage';
+import { AumTracker, ForwardProjection } from './AmbushPage';
 
 // PNTHR Tree — 52-week-high momentum cockpit.
 // Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).
@@ -9,6 +9,23 @@ import { AumTracker } from './AmbushPage';
 
 const TREE_CAGR = 45.6;   // 1× no-pyramid backtest CAGR (conservative; 2× ≈ +104%). Hypothetical / survivorship-flattered.
 const fmt = (n) => '$' + Math.round(n).toLocaleString();
+
+// Collapsible section wrapper (remembers open/closed per panel in localStorage).
+function Collapsible({ title, storageKey, children }) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(storageKey) !== '0'; } catch { return true; } });
+  const toggle = () => setOpen(o => { const n = !o; try { localStorage.setItem(storageKey, n ? '1' : '0'); } catch { /* */ } return n; });
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: open ? 2 : 0, fontFamily: 'inherit' }}>
+        <span style={{ color: '#3b82f6', fontSize: 12 }}>{open ? '▼' : '▶'}</span>
+        {open
+          ? <span style={{ color: '#555', fontSize: 11, fontWeight: 400 }}>hide {title.toLowerCase()}</span>
+          : <span style={{ color: '#9aa0aa', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em' }}>{title}</span>}
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 function ModeButton({ label, active, color, onClick }) {
   return (
@@ -131,9 +148,18 @@ export default function PnthrTreePage() {
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
 
-      {/* Projected vs Actual AUM + PNTHR Goals — Tree's OWN backtest (daily-10 stop, 2x cap) */}
+      {/* Projected vs Actual AUM + PNTHR Goals — Tree's OWN backtest; each collapsible */}
       <div style={{ marginTop: 14 }}>
-        {projection ? <AumTracker projection={projection} /> : <div style={{ color: '#666', fontSize: 12 }}>Loading projection…</div>}
+        {projection ? (
+          <>
+            <Collapsible title="PROJECTED vs ACTUAL AUM" storageKey="tree_collapse_aum">
+              <AumTracker projection={projection} hideForward />
+            </Collapsible>
+            <Collapsible title="PNTHR GOALS" storageKey="tree_collapse_goals">
+              <ForwardProjection forward={projection.forward} />
+            </Collapsible>
+          </>
+        ) : <div style={{ color: '#666', fontSize: 12 }}>Loading projection…</div>}
       </div>
 
       {/* live funnel counts + current leverage + disclosure */}

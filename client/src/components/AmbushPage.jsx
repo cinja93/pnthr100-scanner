@@ -617,7 +617,7 @@ export function ForwardProjection({ forward }) {
   );
 }
 
-export function AumTracker({ projection }) {
+export function AumTracker({ projection, hideForward }) {
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
   if (!projection?.current) return null;
@@ -746,7 +746,7 @@ export function AumTracker({ projection }) {
       ))}
       </div>
 
-      <ForwardProjection forward={projection.forward} />
+      {!hideForward && <ForwardProjection forward={projection.forward} />}
 
       {!hasGross && chartBlock}
       {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}

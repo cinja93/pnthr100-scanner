@@ -880,6 +880,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      className="pnthr-overlay"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',

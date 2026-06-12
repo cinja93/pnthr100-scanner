@@ -522,7 +522,7 @@ function AumTableModal({ view, projection, onClose }) {
     for (const p of series) { const wk = mondayOf(p.date); if (!seen.has(wk)) { seen.add(wk); rows.push(p); } }
   }
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div onClick={onClose} className="pnthr-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 10, width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #222' }}>
           <div style={{ color: isProj ? '#3b82f6' : '#22c55e', fontWeight: 700, fontSize: 14 }}>
@@ -630,6 +630,7 @@ export function CashLedgerModal({ data, onClose }) {
   );
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      className="pnthr-overlay"
       style={{ position: 'fixed', inset: 0, background: '#000a', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 12, padding: '20px 22px', maxWidth: 840, width: '100%', maxHeight: '88vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

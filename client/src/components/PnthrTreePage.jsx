@@ -45,7 +45,7 @@ function Badge({ f, onClick }) {
   else if (f.state === 'approaching') style = { ...base, background: 'transparent', border: '1px solid #22c55e', color: '#22c55e', animation: 'treeflash 1s ease-in-out infinite' };
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
-    <span style={style} onClick={onClick} title={f.manual
+    <span className="tree-pulse" style={style} onClick={onClick} title={f.manual
       ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 52wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
       : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
@@ -68,7 +68,7 @@ function DevourCard({ p, onClick }) {
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
   const prot = p.protected;
   return (
-    <div onClick={onClick} title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(p.newToday ? { animation: 'treecardflash 1.1s ease-in-out infinite' } : {}) }}>
+    <div onClick={onClick} className="tree-pulse" title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(p.newToday ? { animation: 'treecardflash 1.1s ease-in-out infinite' } : {}) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
@@ -166,9 +166,13 @@ export default function PnthrTreePage() {
   const nav = data?.nav || 0;
 
   return (
-    <div style={{ padding: '20px 26px', color: '#e6e6e6' }}>
+    <div className="pnthr-tree-root" style={{ padding: '20px 26px', color: '#e6e6e6' }}>
       <style>{`@keyframes treeflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e88; opacity: 1; } 50% { box-shadow: 0 0 8px 2px #22c55e; opacity: 0.55; } }
-        @keyframes treecardflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e00; } 50% { box-shadow: 0 0 13px 3px #22c55e; } }`}</style>
+        @keyframes treecardflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e00; } 50% { box-shadow: 0 0 13px 3px #22c55e; } }
+        /* While any overlay modal is open, freeze the page's pulse animations —
+           15 NEW-today cards glowing through the translucent backdrop reads as
+           the whole page flickering (reported on Cash Ledger, 2026-06-12). */
+        .pnthr-tree-root:has(.pnthr-overlay) .tree-pulse { animation: none !important; }`}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0b3d2e', paddingBottom: 10 }}>
         <div>

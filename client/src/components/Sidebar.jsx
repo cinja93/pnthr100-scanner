@@ -322,7 +322,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         info: 'pnthrLive',
         items: [
           { key: 'portfolio', label: 'Portfolio' },
-          { key: 'assistant', label: 'Assistant', badge: 'DASHBOARD' },
           { key: 'orders',    label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
         ],
       }
@@ -333,7 +332,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
     ? {
         groupLabel: 'Internal', info: 'internal', adminOnly: true, pinProtected: true,
         items: [
-          { key: 'assistant',         label: 'Assistant', badge: 'DASHBOARD' },
           { key: 'investor-mgmt',     label: 'Investor Portal' },
           { key: 'journal',           label: 'Journal' },
           { key: 'signal-history',    label: 'Signal History',    badge: 'AI | Carnivore', badgeType: 'split' },

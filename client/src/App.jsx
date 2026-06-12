@@ -61,7 +61,6 @@ import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAler
 import AmbushDiscrepancyBanner from './components/AmbushDiscrepancyBanner';
 import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import ReentryBanner from './components/ReentryBanner';
-import AssistantPage from './components/AssistantPage';
 import OrdersPage from './components/OrdersPage';
 import EliteAiPage from './components/EliteAiPage';
 import PnthrTreePage from './components/PnthrTreePage';
@@ -879,20 +878,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   });
 
   useEffect(() => {
-    if (!isAuthenticated) { setIbkrDiscrepancies([]); return; }
-    const load = async () => {
-      try {
-        const data = await fetchIbkrDiscrepancies();
-        if (data.ibkrConnected && data.discrepancies?.length > 0) {
-          setIbkrDiscrepancies(data.discrepancies);
-        } else {
-          setIbkrDiscrepancies([]);
-        }
-      } catch { /* IBKR not synced — no banner */ }
-    };
-    load();
-    const iv = setInterval(load, 2 * 60 * 1000); // poll every 2 minutes
-    return () => clearInterval(iv);
+    // RETIRED 2026-06-12 with PNTHR Assistant: this legacy IBKR-vs-Command-book banner
+    // pointed users at the (now removed) Assistant page. Tree owns AI-300 + manual TWS is
+    // the workflow now, so it stays empty — no polling, no banner.
+    setIbkrDiscrepancies([]);
   }, [isAuthenticated]);
 
   function dismissIbkrDiscrepancy(key) {
@@ -1731,8 +1720,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR PREY page */}
           {renderPage === 'prey' && <PreyPage onNavigate={navigate} />}
 
-          {/* PNTHR Assistant — Daily Task Co-Pilot */}
-          {renderPage === 'assistant' && <AssistantPage onNavigate={navigate} />}
+          {/* PNTHR Assistant — RETIRED 2026-06-12 (replaced by Orders + Tree). Page removed. */}
 
           {/* PNTHR's Pulse mission control */}
           {renderPage === 'pulse' && <PulsePage onNavigate={navigate} fund="carn" />}

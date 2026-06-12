@@ -95,6 +95,8 @@ export default function PnthrTreePage() {
   const [busy, setBusy] = useState(false);
   const [chart, setChart] = useState(null);
   const [projection, setProjection] = useState(null);
+  const [splitBusy, setSplitBusy] = useState(false);
+  const [splitMsg, setSplitMsg] = useState(null);
   const openChart = (list, ticker) => setChart({ tickers: list, index: Math.max(0, list.indexOf(ticker)) });
 
   const load = useCallback(async () => {
@@ -119,6 +121,26 @@ export default function PnthrTreePage() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       await load();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  // Manual trigger for split tracking: refreshes FMP's split calendar + re-syncs
+  // any pending split's candles (same job that runs nightly at 4:15pm ET).
+  const runSplitCheck = async () => {
+    setSplitBusy(true); setSplitMsg(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/admin/run-split-maintenance`, { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'failed');
+      const bits = [];
+      if (d.calendar?.upserts > 0) bits.push(`${d.calendar.upserts} new split${d.calendar.upserts === 1 ? '' : 's'} detected`);
+      if (d.resynced?.length) bits.push(`re-synced: ${d.resynced.join(', ')}`);
+      if (d.waiting?.length) bits.push(`waiting on FMP: ${d.waiting.join('; ')}`);
+      bits.push(`${d.upcoming || 0} upcoming tracked`);
+      setSplitMsg(`✓ ${bits.join(' · ')}`);
+      await load();
+    } catch (e) { setSplitMsg(`✗ split check failed: ${e.message}`); }
+    finally { setSplitBusy(false); }
   };
 
   const mode = data?.mode || 'off';
@@ -176,6 +198,13 @@ export default function PnthrTreePage() {
       <div style={{ display: 'flex', gap: 18, color: '#888', fontSize: 11, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {data?.counts && <span>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</span>}
         {data && <span>Leverage <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#22c55e' }}>{data.grossX ?? 0}x</b> / {data.grossCapX ?? 2}x cap</span>}
+        <button onClick={runSplitCheck} disabled={splitBusy}
+          title="Refresh FMP's stock-split calendar + re-sync candles for any pending split (runs automatically every evening at 4:15pm ET)"
+          style={{ padding: '3px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', background: 'transparent',
+            border: '1px solid #2f6b46', borderRadius: 6, color: '#7fcf9f', cursor: splitBusy ? 'wait' : 'pointer' }}>
+          {splitBusy ? 'CHECKING…' : '🪓 SPLIT CHECK'}
+        </button>
+        {splitMsg && <span style={{ color: splitMsg.startsWith('✗') ? '#ef4444' : '#7fcf9f' }}>{splitMsg}</span>}
         <span style={{ color: '#555' }}>Backtest hypothetical &amp; survivorship-flattered (current AI-300 names). Not a track record.</span>
       </div>
 

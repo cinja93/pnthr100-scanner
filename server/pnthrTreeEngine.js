@@ -172,15 +172,24 @@ export async function getPnthrTreeState(db) {
   const seenToday = etDateStr();
   try {
     const seenDocs = await db.collection('pnthr_tree_seen').find({}).toArray();
-    const seen = {}; for (const d of seenDocs) seen[d.ticker] = d.firstSeen;
+    const seen = {}, seenAt = {};
+    for (const d of seenDocs) {
+      seen[d.ticker] = d.firstSeen;
+      // precise add-time for ordering: firstSeenAt if present, else the doc's _id timestamp
+      seenAt[d.ticker] = d.firstSeenAt ? new Date(d.firstSeenAt).getTime()
+        : (d._id?.getTimestamp ? d._id.getTimestamp().getTime() : 0);
+    }
     const heldNow = new Set(positions.map(p => p.ticker));
     for (const p of positions) if (!seen[p.ticker]) {
-      await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $setOnInsert: { ticker: p.ticker, firstSeen: seenToday } }, { upsert: true });
-      seen[p.ticker] = seenToday;
+      const now = new Date();
+      await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $setOnInsert: { ticker: p.ticker, firstSeen: seenToday, firstSeenAt: now } }, { upsert: true });
+      seen[p.ticker] = seenToday; seenAt[p.ticker] = now.getTime();
     }
     const gone = seenDocs.filter(d => !heldNow.has(d.ticker)).map(d => d.ticker);
     if (gone.length) await db.collection('pnthr_tree_seen').deleteMany({ ticker: { $in: gone } });
-    positions.forEach(p => { p.newToday = seen[p.ticker] === seenToday; });
+    positions.forEach(p => { p.newToday = seen[p.ticker] === seenToday; p.seenAt = seenAt[p.ticker] || 0; });
+    // Devour list = sequential order added to Devour (oldest first, newest at the bottom)
+    positions.sort((a, b) => (a.seenAt ?? Infinity) - (b.seenAt ?? Infinity));
   } catch { positions.forEach(p => { p.newToday = false; }); }
 
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});

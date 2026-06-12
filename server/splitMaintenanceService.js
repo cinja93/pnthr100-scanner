@@ -138,7 +138,15 @@ async function resyncTicker(db, split) {
   const t = split.ticker;
   const today = etDateStr();
 
-  const fresh = (await fetchHistorical(t, HISTORY_START, today))
+  const old = await db.collection(DAILY_COLL).findOne({ ticker: t });
+
+  // Preserve the stored series' depth: parts of the universe were extended
+  // back past the standard 2022-11-30 anchor (most go to 2022-01-03). A
+  // re-sync that re-pulled from the anchor would silently truncate that
+  // history and knock the ticker out of the backtest's early months (this
+  // exact mistake cost KLAC its first year on 2026-06-12).
+  const fetchFrom = (old?.fromDate && old.fromDate < HISTORY_START) ? old.fromDate : HISTORY_START;
+  const fresh = (await fetchHistorical(t, fetchFrom, today))
     .map(normalizeBar)
     .filter(b => b.date && b.close > 0 && b.high >= b.low && b.high > 0);
   if (fresh.length === 0) return { ready: false, note: 'no FMP history yet' };
@@ -153,8 +161,6 @@ async function resyncTicker(db, split) {
   if (live > 0 && (live < freshLast * 0.5 || live > freshLast * 2.0)) {
     return { ready: false, note: `FMP history not adjusted yet (live $${live} vs last bar $${freshLast})` };
   }
-
-  const old = await db.collection(DAILY_COLL).findOne({ ticker: t });
 
   let action = 'swapped';
   if (old?.daily?.length) {

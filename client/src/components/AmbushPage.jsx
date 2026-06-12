@@ -670,7 +670,7 @@ export function CashLedgerModal({ data, onClose }) {
           </tbody>
         </table>
 
-        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Most-levered days (intraday worst case)</div>
+        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Most-levered days — top 8 by intraday leverage across the whole backtest (not a date range)</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace', minWidth: 560 }}>
             <thead><tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase' }}>
@@ -695,6 +695,40 @@ export function CashLedgerModal({ data, onClose }) {
             </tbody>
           </table>
         </div>
+
+        {data.weekly?.length > 0 && (
+          <>
+            <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '18px 0 6px' }}>
+              Weekly results — full backtest ({data.weekly.length} weeks · {data.weekly[0].weekOf} → {data.weekly[data.weekly.length - 1].endDate})
+            </div>
+            <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #1a1a1a', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace', minWidth: 560 }}>
+                <thead><tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase', position: 'sticky', top: 0, background: '#0d0d0d' }}>
+                  <th style={{ textAlign: 'left', padding: '5px 8px' }}>Week of</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>Equity</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>P&amp;L</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>P&amp;L %</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>Peak lev</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>Margin loan</th>
+                  <th style={{ textAlign: 'right', padding: '5px 8px' }}>Pos</th>
+                </tr></thead>
+                <tbody>
+                  {data.weekly.map((w, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+                      <td style={{ textAlign: 'left', padding: '4px 8px', color: '#e6e6e6', fontFamily: 'system-ui, sans-serif' }}>{w.weekOf}</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: '#e6e6e6' }}>{f(w.equity)}</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: w.pnl >= 0 ? '#22c55e' : '#ef4444' }}>{w.pnl >= 0 ? '+' : ''}{f(w.pnl)}</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: w.pnlPct >= 0 ? '#22c55e' : '#ef4444' }}>{w.pnlPct >= 0 ? '+' : ''}{w.pnlPct}%</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: w.maxLevIntraday > 2 ? '#facc15' : '#ccc' }}>{w.maxLevIntraday}×</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: w.minCash < 0 ? '#ef4444' : '#555' }}>{w.minCash < 0 ? f(w.minCash) : '—'}</td>
+                      <td style={{ textAlign: 'right', padding: '4px 8px', color: '#ccc' }}>{w.posCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         <div style={{ color: '#555', fontSize: 10, marginTop: 14 }}>{data.disclosure}</div>
       </div>

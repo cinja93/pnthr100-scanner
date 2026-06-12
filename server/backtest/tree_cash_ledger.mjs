@@ -40,7 +40,12 @@ for (const d of docs) {
   const idxByDate = {}; bars.forEach((b, i) => { idxByDate[b.date] = i; });
   T[d.ticker] = { bars, idxByDate, hi52, loStop, adv20 };
 }
-const allDates = [...allDatesSet].sort();
+// COMPLETED SESSIONS ONLY (BACKTEST_EXECUTION_RULES): if the script runs
+// intraday, some tickers carry a partial today-bar while most end yesterday —
+// positions without a today-bar would be marked at their FILL price, faking a
+// crash on the final day. Cap the timeline at the last fully closed session.
+const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+const allDates = [...allDatesSet].sort().filter(d => d < todayET);
 
 // ── sim with explicit cash ledger ────────────────────────────────────────────
 const positions = {};
@@ -103,6 +108,7 @@ for (const date of allDates) {
     lev: equity > 0 ? longMV / equity : Infinity,
     equityLow, longMVLow,
     levLow: equityLow > 0 ? longMVLow / equityLow : Infinity,
+    posCount: Object.keys(positions).length,
   });
   if (equity > peakEq) peakEq = equity;
   const dd = (equity - peakEq) / peakEq; if (dd < maxDD) maxDD = dd;
@@ -145,6 +151,45 @@ ledger.slice().filter(r=>isFinite(r.levLow)).sort((a,b)=>b.levLow-a.levLow).slic
   console.log(`     ${r.date}  lev(close) ${r.lev.toFixed(2)}×  lev(intraday) ${r.levLow.toFixed(2)}×  equity ${f(r.equity)}  cash ${f(r.cash)}  longMV ${f(r.longMV)}`));
 console.log('\n  (Hypothetical · survivorship-flattered AI-300 · gross-capped 2×. Reg-T maintenance 25% = margin call at 4× leverage.)\n');
 
+// ── weekly results (full backtest, Monday-anchored) ──────────────────────────
+// One row per week from the very first trading day: end-of-week equity, weekly
+// P&L, the week's worst intraday leverage, deepest margin loan, open positions.
+const mondayOf = (iso) => {
+  const d = new Date(iso + 'T12:00:00Z');
+  const day = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  return d.toISOString().slice(0, 10);
+};
+const weeklyRaw = [];
+let wk = null;
+for (const r of ledger) {
+  const w = mondayOf(r.date);
+  if (!wk || wk.weekOf !== w) {
+    if (wk) weeklyRaw.push(wk);
+    wk = { weekOf: w, endDate: r.date, endEquity: r.equity, maxLevIntraday: isFinite(r.levLow) ? r.levLow : 0, minCash: r.cash, posCount: r.posCount };
+  } else {
+    wk.endDate = r.date; wk.endEquity = r.equity; wk.posCount = r.posCount;
+    wk.maxLevIntraday = Math.max(wk.maxLevIntraday, isFinite(r.levLow) ? r.levLow : 0);
+    wk.minCash = Math.min(wk.minCash, r.cash);
+  }
+}
+if (wk) weeklyRaw.push(wk);
+let prevEq = NAV0;
+const weekly = weeklyRaw.map(w => {
+  const row = {
+    weekOf: w.weekOf, endDate: w.endDate,
+    equity: Math.round(w.endEquity),
+    pnl: Math.round(w.endEquity - prevEq),
+    pnlPct: +((w.endEquity / prevEq - 1) * 100).toFixed(1),
+    maxLevIntraday: +w.maxLevIntraday.toFixed(2),
+    minCash: Math.round(w.minCash),
+    posCount: w.posCount,
+  };
+  prevEq = w.endEquity;
+  return row;
+});
+console.log(`  Weekly results: ${weekly.length} weeks (${weekly[0].weekOf} → ${weekly[weekly.length - 1].weekOf})`);
+
 // ── write the summary the UI panel reads ──────────────────────────────────────
 const callDays = (m) => ledger.filter(r => r.longMVLow > 0 && r.equityLow / r.longMVLow < m).length;
 const summary = {
@@ -170,6 +215,7 @@ const summary = {
     date: r.date, levClose: +r.lev.toFixed(2), levIntraday: +r.levLow.toFixed(2),
     equity: Math.round(r.equity), cash: Math.round(r.cash), longMV: Math.round(r.longMV),
   })),
+  weekly,
 };
 fs.writeFileSync(new URL('../data/treeCashLedger.json', import.meta.url).pathname, JSON.stringify(summary, null, 1));
 console.log('  → wrote server/data/treeCashLedger.json\n');

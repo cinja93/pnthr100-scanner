@@ -8695,6 +8695,11 @@ async function _ambushIbkrMap(db, userId) {
 app.get('/api/ambush/discrepancies', authenticateJWT, async (req, res) => {
   try {
     const db = await connectToDatabase();
+    // PNTHR Tree owns the AI-300 account now. When Ambush is OFF, this cross-engine
+    // banner must NOT flag Tree's live positions as 'unmanaged' — its Flatten button
+    // would market-sell them. Ambush off ⇒ nothing for IT to reconcile ⇒ no rows.
+    const _acfg = await db.collection('pnthr_ambush_config').findOne({});
+    if (!_acfg?.enabled) return res.json({ discrepancies: [], ibkrConnected: true, ambushDisabled: true });
     const { map: ibkr, doc } = await _ambushIbkrMap(db, req.user.userId);
     if (!doc) return res.json({ discrepancies: [], ibkrConnected: false });
     const ageMin = doc.syncedAt ? (Date.now() - new Date(doc.syncedAt).getTime()) / 60000 : Infinity;

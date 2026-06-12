@@ -13,6 +13,7 @@
 //   FMP /api/v4/treasury — 10Y + 2Y bond yields
 
 import Anthropic from '@anthropic-ai/sdk';
+import { getPnthrTreeState } from './pnthrTreeEngine.js';
 import { fetchPreyData, findBestExits } from './newsletterService.js';
 import { archiveThisWeeksExits } from './tradeArchiveWriter.js';
 import { getAllTickers } from './constituents.js';
@@ -527,6 +528,53 @@ async function getAiSectorBreakdown() {
 }
 
 // ── AI Kill Top Scores (top 3 longs + top 3 shorts) ─────────────────────────
+// PNTHR Tree (52-week-high momentum engine) — current open book, exactly what
+// the Tree page's DEVOUR/PROTECT cards show. Surfaced to the prompt so the
+// newsletter can weave the fund's live momentum holdings into the narrative.
+// Read-only snapshot; never exposes share counts or dollar amounts.
+async function getTreeHoldings(db) {
+  try {
+    const state = await getPnthrTreeState(db);
+    const sectorByTicker = {};
+    for (const f of state.funnel || []) sectorByTicker[f.ticker] = f.sector;
+    const positions = (state.positions || []).map(p => ({
+      ticker:    p.ticker,
+      sector:    sectorByTicker[p.ticker] || null,
+      pnlPct:    p.pnlPct ?? null,
+      protected: !!p.protected,
+      newToday:  !!p.newToday,
+    }));
+    return positions.length ? { positions } : null;
+  } catch (e) {
+    console.warn('[Perch v4] Tree holdings unavailable (non-fatal):', e.message);
+    return null;
+  }
+}
+
+// ── One-week special topics ───────────────────────────────────────────────────
+// Dated editorial briefings injected into the prompt while active; they expire
+// on their own. The generation model has no web access and a training cutoff,
+// so real-world events it must cover have to be fed in as verified facts.
+// Add a new entry per event; keep every fact checkable.
+const SPECIAL_TOPICS = [
+  {
+    id: 'spacex-ipo-2026',
+    activeFrom: '2026-06-08',
+    activeThrough: '2026-06-19',   // covers the issue for the week of 2026-06-12
+    facts: `SPECIAL TOPIC — SPACEX IPO BRIEFING (verified facts as of 2026-06-12; treat these as provided news data, safe to reference):
+- SpaceX (Space Exploration Technologies Corp.) began trading on the Nasdaq on Friday, June 12, 2026 under the ticker SPCX. It is the largest IPO in history, raising over $75 billion.
+- Priced at $135 per share, opened at $150, and traded up more than 20% on day one. Market capitalization is roughly $2.1 trillion.
+- Nasdaq changed its index rulebook effective May 1, 2026: a newly listed company ranking in the top 40 by market cap can join the Nasdaq-100 after just 15 trading days. SpaceX is expected to join the Nasdaq-100 around July 6, 2026, with an estimated $7-8 billion of passive index-fund buying around inclusion.
+- The S&P 500 kept its 12-month seasoning and profitability requirements, so SpaceX cannot join the S&P 500 before mid-2027.
+- SpaceX is the dominant rocket-launch provider and operates Starlink, the largest satellite-internet network.
+- PNTHR has added SPCX to the PNTHR AI Elite 300 universe in the Drones/Space/Defense AI sector; it joins the PNTHR AI 300 Index at the next monthly rebalance on July 1, 2026.
+INSTRUCTION: This is the market story of the week. Lead with it in THE OPENING, and revisit it where natural in the PNTHR AI 300 INDEX UPDATE and AI SECTOR SPOTLIGHT sections. Stick strictly to the facts above; do not speculate on price targets and do not tell readers to buy or sell SPCX.`,
+  },
+];
+function activeSpecialTopics(weekOf) {
+  return SPECIAL_TOPICS.filter(t => weekOf >= t.activeFrom && weekOf <= t.activeThrough);
+}
+
 async function getAiKillTop(db) {
   try {
     const doc = await db.collection('pnthr_ai_kill_scores')
@@ -701,7 +749,7 @@ By reading this newsletter, you acknowledge that you are solely responsible for 
 
 (c) 2026 PNTHR Funds. All rights reserved.`;
 
-function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews }) {
+function buildUserPrompt({ weekOf, regime, sectors, top10Longs, top10Shorts, newSignals, tradeOfWeek, trackRecord, upcomingEarnings, disclaimer, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, treeHoldings, specialTopics }) {
   // Regime-driven directional filter. In BULL we hide short data so Claude
   // can't accidentally reference shorts; in BEAR we hide long data; in MIXED
   // we keep both. See feedback_perch_regime_aware_content.md for the rule.
@@ -871,6 +919,17 @@ AI Index Trend: ${pai300Regime.pai300Bull === true ? 'ABOVE its long-term trend 
 Active AI signals scored: ${pai300Regime.scoredCount}`
     : 'PNTHR AI 300 INDEX: Data not available this week.';
 
+  // PNTHR Tree book — the fund's live 52-week-high momentum holdings. Woven
+  // through the issue (Scott 2026-06-12). Regime-aware: in an AI bear regime
+  // these are existing positions under management, never long pitches.
+  const treeBlock = (treeHoldings?.positions?.length)
+    ? `PNTHR TREE BOOK (our newest engine: it buys AI 300 leaders breaking out to fresh 52-week highs and rides them with a trailing stop; "profit locked" = the stop has climbed past our entry, so the worst case is a gain):
+${treeHoldings.positions.map(p => `${p.ticker}${p.sector ? ` (${p.sector})` : ''}${p.pnlPct != null ? `, ${p.pnlPct >= 0 ? '+' : ''}${p.pnlPct}% since entry` : ''}${p.protected ? ' [profit locked]' : ''}${p.newToday ? ' [entered this week]' : ''}`).join('\n')}
+${aiIsBear
+    ? 'TREE RULE: The AI index regime is BEARISH, so do NOT pitch these as long ideas. You may reference them only as existing positions being managed with trailing stops.'
+    : 'TREE WEAVE INSTRUCTION: Weave these holdings into the conversation THROUGHOUT the newsletter where they fit naturally, not in one lump. Good spots: WHERE THE MONEY IS MOVING (when a holding sits in a sector you discuss), PNTHR AI 300 INDEX UPDATE and AI SECTOR SPOTLIGHT (these are all AI 300 names), and THE WEEK AHEAD (if any are reporting earnings). Frame them as positions our momentum model is currently riding, not as new buy recommendations. Mention at least 4-5 of them by ticker across the issue, prioritizing the [profit locked] and [entered this week] names. Never reveal share counts or dollar amounts.'}`
+    : '';
+
   // AI upcoming earnings
   const aiEarningsSection = (() => {
     if (!aiUpcomingEarnings || aiUpcomingEarnings.length === 0) {
@@ -967,11 +1026,15 @@ ${aiTopLongs || 'No AI long setups this week.'}`}
 ${aiIsBull ? 'TOP AI SHORT SETUPS: REGIME-OMITTED. AI bull regime.' : `TOP AI SHORT SETUPS (top 3 from AI Elite 300):
 ${aiTopShorts || 'No AI short setups this week.'}`}
 
+${treeBlock}
+
 ${aiEarningsSection}
 
 === MACRO DATA ===
 
 ${bondBlock}
+
+${(specialTopics || []).map(t => t.facts).join('\n\n')}
 
 MARKET NEWS HEADLINES (recent, from financial news sources — use these for real-world context):
 ${(marketNews || []).length > 0 ? marketNews.map(n => `- ${n.title} (${n.source}, ${n.date})`).join('\n') : 'No market news available.'}
@@ -1023,7 +1086,7 @@ export async function generatePerch(db) {
   const recentTotwTickers = await getRecentTotwTickers(db, regime.weekOf);
   console.log(`[Perch v4] TOTW dedup — excluding ${recentTotwTickers.length} recent tickers: ${recentTotwTickers.join(', ') || '(none)'}`);
 
-  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf] = await Promise.all([
+  const [sectors, top10Longs, top10Shorts, newSignals, tradeOfWeekFromArchive, bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews, sp500SectorPerf, treeHoldings] = await Promise.all([
     getSectorBreakdown(db, regime.weekOf),
     getTop10Longs(db, regime.weekOf),
     getTop10Shorts(db, regime.weekOf),
@@ -1036,8 +1099,10 @@ export async function generatePerch(db) {
     getAiUpcomingEarnings(regime.weekOf),
     getMarketNews(),
     getSp500SectorPerformance(),
+    getTreeHoldings(db),
   ]);
-  console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}, News: ${marketNews.length} headlines`);
+  const specialTopics = activeSpecialTopics(regime.weekOf);
+  console.log(`[Perch v4] AI 300 Regime: ${pai300Regime?.regimeLabel ?? 'N/A'}, Bond 10Y: ${bondYields?.y10 ?? 'N/A'}%, AI sectors: ${aiSectors.length}, News: ${marketNews.length} headlines, Tree holdings: ${treeHoldings?.positions?.length ?? 0}, Special topics: ${specialTopics.map(t => t.id).join(', ') || '(none)'}`);
 
   // Build combined 27-sector performance ranking (11 S&P 500 + 16 AI 300)
   const combinedSectorPerf = [
@@ -1111,6 +1176,7 @@ export async function generatePerch(db) {
     upcomingEarnings,
     disclaimer: DISCLAIMER,
     bondYields, pai300Regime, aiSectors, aiKillTop, aiUpcomingEarnings, marketNews,
+    treeHoldings, specialTopics,
   });
 
   // 3. Call Claude API
@@ -1215,6 +1281,8 @@ export async function generatePerch(db) {
         aiTopLong:      aiKillTop?.longs?.[0]?.ticker ?? null,
         aiTopShort:     aiKillTop?.shorts?.[0]?.ticker ?? null,
         aiEarningsCount: aiUpcomingEarnings.length,
+        treeHoldings:   (treeHoldings?.positions || []).map(p => p.ticker),
+        specialTopics:  specialTopics.map(t => t.id),
       },
     },
   };

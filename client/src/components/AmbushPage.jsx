@@ -736,10 +736,13 @@ export function CashLedgerModal({ data, onClose }) {
   );
 }
 
-export function AumTracker({ projection, hideForward, cashLedger }) {
+export function AumTracker({ projection, hideForward, cashLedger, onActualTable }) {
+  // onActualTable (optional): overrides the Actual AUM box click — the Tree page
+  // uses it to open its IBKR-truth daily trade log instead of the plain table.
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
   const [showLedger, setShowLedger] = useState(false);
+  const openActual = onActualTable || (() => setTableView('actual'));
   if (!projection?.current) return null;
   const { current, projected, actual, anchor } = projection;
   const box = (label, value, color, onClick) => (
@@ -834,7 +837,7 @@ export function AumTracker({ projection, hideForward, cashLedger }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: current.projectedAumGross != null ? 'stretch' : 'flex-end', width: current.projectedAumGross != null ? 320 : undefined }}>
           {current.projectedAumGross != null ? (
             <>
-              {bundle(box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual')), '#2a2a2a')}
+              {bundle(box('Actual AUM', current.actualAum, '#22c55e', openActual), '#2a2a2a')}
               {bundle(<>
                 {box('Projected AUM (Net)', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
                 {trackBadge(current.onTrackPct, ' (net)')}
@@ -847,7 +850,7 @@ export function AumTracker({ projection, hideForward, cashLedger }) {
           ) : (
             <>
               {box('Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
-              {box('Actual AUM', current.actualAum, '#22c55e', () => setTableView('actual'))}
+              {box('Actual AUM', current.actualAum, '#22c55e', openActual)}
               {trackBadge(current.onTrackPct)}
             </>
           )}

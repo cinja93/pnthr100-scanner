@@ -464,3 +464,84 @@ export async function getPnthrTreeProjection(db) {
     meta: { backtestEndNav: projected.length ? projected[projected.length - 1].value : proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure },
   };
 }
+
+// ── EOD DAILY TRADE LOG (IBKR truth) ─────────────────────────────────────────
+// Recorded after the close (16:35 ET cron + admin re-record endpoint). One doc
+// per trading day in pnthr_tree_daily_log: NAV, every open position with IBKR's
+// own marks/unrealized P&L, and every execution IBKR reported that day — split
+// STRATEGY (in the Tree book, engine-managed) vs MANUAL (everything else, e.g.
+// SPCX/ARM — Scott's discretionary trades). All numbers come from the bridge's
+// IBKR snapshot, never from engine records, so the log matches IBKR exactly.
+const DAILY_LOG = 'pnthr_tree_daily_log';
+
+export async function recordTreeDailyLog(db) {
+  const date = etDateStr();
+  const cfg = await getPnthrTreeConfig(db);
+  const excl = await engineExclusions(db);
+  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const nav = await getNav(db);
+
+  // Tree book right now = strategy names (paper book in paper mode; engine-managed
+  // AI-300 IBKR longs in live mode). Excluded names (SPCX) are never strategy.
+  const book = new Set();
+  if (cfg.mode === 'live') {
+    for (const p of (snap.positions || [])) {
+      const t = (p.ticker || p.symbol || '').toUpperCase();
+      if (AI_META[t] && !excl.has(t) && (p.position ?? p.shares) > 0) book.add(t);
+    }
+  } else {
+    for (const p of await db.collection(POS).find({ status: 'ACTIVE' }).toArray()) book.add(p.ticker);
+  }
+  const isStrategy = (t) => book.has(t) && !!AI_META[t] && !excl.has(t);
+
+  // Open positions — IBKR's own marks and unrealized P&L, plus the resting stop.
+  const stops = {};
+  for (const o of (snap.stopOrders || [])) {
+    const t = (o.symbol || o.ticker || '').toUpperCase();
+    if ((o.action || '').toUpperCase() === 'SELL') stops[t] = Math.max(stops[t] || 0, +o.stopPrice || 0);
+  }
+  const positions = (snap.positions || []).filter(p => (p.position ?? p.shares) !== 0).map(p => {
+    const t = (p.ticker || p.symbol || '').toUpperCase();
+    const sh = p.position ?? p.shares;
+    const last = +p.marketPrice || 0;
+    return {
+      ticker: t, company: AI_META[t]?.name || null, sector: AI_META[t]?.sector || null,
+      shares: sh, avgCost: +(+p.avgCost).toFixed(2), last: +last.toFixed(2),
+      value: +(+p.marketValue || sh * last).toFixed(0),
+      pnl: +(+p.unrealizedPNL || 0).toFixed(0),
+      pnlPct: p.avgCost > 0 ? +((last / p.avgCost - 1) * 100).toFixed(1) : null,
+      stop: stops[t] || null, strategy: isStrategy(t),
+    };
+  });
+  const openPnl = +positions.reduce((a, p) => a + (p.pnl || 0), 0).toFixed(0);
+
+  // Today's executions, straight from IBKR's reqExecutions feed. The feed can
+  // carry the previous session on a no-trade day — filter by the exec timestamp
+  // ("YYYYMMDD  HH:MM:SS", TWS-local clock) so only today's fills are logged.
+  const ymd = date.replaceAll('-', '');
+  const trades = (snap.latestExecutions || [])
+    .filter(e => !e.time || String(e.time).replace(/[^0-9]/g, '').startsWith(ymd))
+    .map(e => {
+      const t = (e.symbol || '').toUpperCase();
+      return {
+        time: e.time || null, ticker: t, side: e.side === 'SLD' ? 'SELL' : 'BUY',
+        shares: +e.shares, price: +(+e.price).toFixed(2), value: +(e.shares * e.price).toFixed(0),
+        execId: e.execId || null, strategy: isStrategy(t),
+      };
+    });
+
+  const doc = {
+    date, recordedAt: new Date(), mode: cfg.mode, nav, openPnl,
+    positionsCount: positions.length, positions,
+    trades, tradesCount: trades.length,
+    nonStrategyTickers: [...new Set(trades.filter(x => !x.strategy).map(x => x.ticker))],
+    ibkrSyncedAt: snap.syncedAt || null, execSyncedAt: snap.latestExecSyncedAt || null,
+  };
+  await db.collection(DAILY_LOG).updateOne({ date }, { $set: doc }, { upsert: true });
+  console.log(`[Tree Daily Log] ${date} recorded — NAV $${nav}, ${positions.length} positions, ${trades.length} trades (${doc.nonStrategyTickers.length ? 'manual: ' + doc.nonStrategyTickers.join(', ') : 'all strategy'})`);
+  return doc;
+}
+
+export async function getTreeDailyLog(db, limit = 30) {
+  return db.collection(DAILY_LOG).find({}).sort({ date: -1 }).limit(limit).toArray();
+}

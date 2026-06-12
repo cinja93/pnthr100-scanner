@@ -27,6 +27,90 @@ function Collapsible({ title, storageKey, children }) {
   );
 }
 
+// ── Daily trade log modal (IBKR truth, recorded 4:35pm ET each trading day) ──
+// Per day: NAV, open positions with IBKR's own P&L, and every execution of the
+// day — STRATEGY trades (Tree book) split from MANUAL trades (e.g. SPCX/ARM).
+function TreeDailyLogModal({ days, onClose, onRecordNow, busy }) {
+  const f$ = (n) => (n < 0 ? '-$' : '$') + Math.round(Math.abs(n)).toLocaleString();
+  const timeOf = (t) => { const m = String(t || '').match(/(\d{2}:\d{2}:\d{2})/); return m ? m[1] : '—'; };
+  const th = { textAlign: 'right', padding: '4px 8px' };
+  const tradeTable = (rows, accent) => (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace', marginBottom: 10 }}>
+      <thead><tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase' }}>
+        <th style={{ ...th, textAlign: 'left' }}>Time (TWS)</th><th style={{ ...th, textAlign: 'left' }}>Ticker</th>
+        <th style={{ ...th, textAlign: 'left' }}>Side</th><th style={th}>Shares</th><th style={th}>Price</th><th style={th}>Value</th>
+      </tr></thead>
+      <tbody>{rows.map((x, i) => (
+        <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+          <td style={{ ...th, textAlign: 'left', color: '#888' }}>{timeOf(x.time)}</td>
+          <td style={{ ...th, textAlign: 'left', color: accent, fontWeight: 700 }}>{x.ticker}</td>
+          <td style={{ ...th, textAlign: 'left', color: x.side === 'BUY' ? '#22c55e' : '#ef4444' }}>{x.side}</td>
+          <td style={{ ...th, color: '#e6e6e6' }}>{x.shares}</td>
+          <td style={{ ...th, color: '#e6e6e6' }}>${x.price?.toFixed(2)}</td>
+          <td style={{ ...th, color: '#ccc' }}>{f$(x.value)}</td>
+        </tr>))}
+      </tbody>
+    </table>
+  );
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} className="pnthr-overlay"
+      style={{ position: 'fixed', inset: 0, background: '#000c', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#0d0d0d', border: '1px solid #1c3a28', borderRadius: 12, padding: '20px 22px', maxWidth: 900, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+          <h2 style={{ margin: 0, color: '#22c55e', fontSize: 18 }}>📜 Daily Trade Log — IBKR truth</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onRecordNow} disabled={busy} style={{ background: '#161616', border: '1px solid #2f6b46', color: '#7fcf9f', borderRadius: 6, padding: '4px 12px', cursor: busy ? 'wait' : 'pointer', fontSize: 12 }}>{busy ? 'Recording…' : '↻ Record now'}</button>
+            <button onClick={onClose} style={{ background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}>Close</button>
+          </div>
+        </div>
+        <div style={{ color: '#666', fontSize: 11, margin: '4px 0 14px' }}>Recorded automatically at 4:35pm ET each trading day from the IBKR snapshot — positions, P&amp;L, and every execution, exactly as IBKR reports them.</div>
+        {(!days || days.length === 0) && <div style={{ color: '#888', fontSize: 13 }}>No days recorded yet — the first record lands at 4:35pm ET, or click "Record now".</div>}
+        {(days || []).map(d => {
+          const strat = (d.trades || []).filter(t => t.strategy);
+          const manual = (d.trades || []).filter(t => !t.strategy);
+          return (
+            <div key={d.date} style={{ border: '1px solid #1c3a28', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 8, fontFamily: 'monospace' }}>
+                <b style={{ color: '#e6e6e6', fontSize: 15 }}>{d.date}</b>
+                <span style={{ color: '#888', fontSize: 12 }}>NAV <b style={{ color: '#22c55e' }}>{f$(d.nav)}</b></span>
+                <span style={{ color: '#888', fontSize: 12 }}>Open P&amp;L <b style={{ color: d.openPnl >= 0 ? '#22c55e' : '#ef4444' }}>{d.openPnl >= 0 ? '+' : ''}{f$(d.openPnl)}</b></span>
+                <span style={{ color: '#888', fontSize: 12 }}>{d.positionsCount} open positions · {d.tradesCount} trades{manual.length ? ` (${manual.length} manual)` : ''}</span>
+              </div>
+              {strat.length > 0 && <>
+                <div style={{ color: '#7fcf9f', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Strategy trades (PNTHR Tree book)</div>
+                {tradeTable(strat, '#22c55e')}
+              </>}
+              {manual.length > 0 && <>
+                <div style={{ color: '#facc15', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>⚠️ Not part of the strategy — manual trades ({[...new Set(manual.map(x => x.ticker))].join(', ')})</div>
+                {tradeTable(manual, '#facc15')}
+              </>}
+              {(d.trades || []).length === 0 && <div style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>No trades this day.</div>}
+              <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '6px 0 4px' }}>Open positions at record time</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' }}>
+                <thead><tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase' }}>
+                  <th style={{ ...th, textAlign: 'left' }}>Ticker</th><th style={th}>Shares</th><th style={th}>Avg</th><th style={th}>Last</th><th style={th}>P&amp;L</th><th style={th}>P&amp;L %</th><th style={th}>Stop</th>
+                </tr></thead>
+                <tbody>{(d.positions || []).map((p, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+                    <td style={{ ...th, textAlign: 'left' }}><b style={{ color: p.strategy ? '#22c55e' : '#facc15' }}>{p.ticker}</b>{!p.strategy && <span style={{ color: '#facc15', fontSize: 9, marginLeft: 6 }}>MANUAL</span>}</td>
+                    <td style={{ ...th, color: '#e6e6e6' }}>{p.shares}</td>
+                    <td style={{ ...th, color: '#ccc' }}>${p.avgCost?.toFixed(2)}</td>
+                    <td style={{ ...th, color: '#e6e6e6' }}>${p.last?.toFixed(2)}</td>
+                    <td style={{ ...th, color: p.pnl >= 0 ? '#22c55e' : '#ef4444' }}>{p.pnl >= 0 ? '+' : ''}{f$(p.pnl)}</td>
+                    <td style={{ ...th, color: p.pnlPct >= 0 ? '#22c55e' : '#ef4444' }}>{p.pnlPct != null ? `${p.pnlPct >= 0 ? '+' : ''}${p.pnlPct}%` : '—'}</td>
+                    <td style={{ ...th, color: p.stop ? '#ef4444' : '#555' }}>{p.stop ? `$${p.stop.toFixed(2)}` : '—'}</td>
+                  </tr>))}
+                </tbody>
+              </table>
+              <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Recorded {d.recordedAt ? new Date(d.recordedAt).toLocaleString() : '—'} · IBKR snapshot {d.ibkrSyncedAt ? new Date(d.ibkrSyncedAt).toLocaleString() : '—'} · mode {d.mode}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ModeButton({ label, active, color, onClick }) {
   return (
     <button onClick={onClick} style={{
@@ -103,6 +187,25 @@ export default function PnthrTreePage() {
   const [projection, setProjection] = useState(null);
   const [splitBusy, setSplitBusy] = useState(false);
   const [splitMsg, setSplitMsg] = useState(null);
+  const [dailyLog, setDailyLog] = useState(null);       // null = closed; array = open modal
+  const [logBusy, setLogBusy] = useState(false);
+
+  const openDailyLog = async () => {
+    setDailyLog([]);   // open immediately, fill when loaded
+    try {
+      const r = await apiFetch(`${API_BASE}/api/pnthr-tree/daily-log`, { headers: authHeaders() });
+      if (r.ok) setDailyLog((await r.json()).days || []);
+    } catch { /* keep empty state */ }
+  };
+  const recordLogNow = async () => {
+    setLogBusy(true);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/record-daily-log`, { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const fresh = await apiFetch(`${API_BASE}/api/pnthr-tree/daily-log`, { headers: authHeaders() });
+      if (fresh.ok) setDailyLog((await fresh.json()).days || []);
+    } catch (e) { setErr(e.message); } finally { setLogBusy(false); }
+  };
   const openChart = (list, ticker) => setChart({ tickers: list, index: Math.max(0, list.indexOf(ticker)) });
 
   const load = useCallback(async () => {
@@ -195,7 +298,7 @@ export default function PnthrTreePage() {
         {projection ? (
           <>
             <Collapsible title="PROJECTED vs ACTUAL AUM" storageKey="tree_collapse_aum">
-              <AumTracker projection={projection} hideForward cashLedger={projection.cashLedger} />
+              <AumTracker projection={projection} hideForward cashLedger={projection.cashLedger} onActualTable={openDailyLog} />
             </Collapsible>
             <Collapsible title="PNTHR GOALS" storageKey="tree_collapse_goals">
               <ForwardProjection forward={projection.forward} />
@@ -261,6 +364,10 @@ export default function PnthrTreePage() {
       <div style={{ color: '#555', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
         Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.
       </div>
+
+      {dailyLog !== null && (
+        <TreeDailyLogModal days={dailyLog} onClose={() => setDailyLog(null)} onRecordNow={recordLogNow} busy={logBusy} />
+      )}
 
       {chart && (
         <AiTickerChartModal

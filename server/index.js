@@ -40,7 +40,7 @@ import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstitu
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
-import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection } from './pnthrTreeEngine.js';
+import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
@@ -2639,6 +2639,15 @@ app.post('/api/admin/pnthr-tree/reset', authenticateJWT, requireAdmin, async (re
 });
 app.post('/api/admin/pnthr-tree/tick', authenticateJWT, requireAdmin, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await runPnthrTreeTick(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+// EOD daily trade log (IBKR-truth): read the archive / re-record today on demand
+app.get('/api/pnthr-tree/daily-log', authenticateJWT, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json({ days: await getTreeDailyLog(db, Math.min(+req.query.limit || 30, 120)) }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-tree/record-daily-log', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await recordTreeDailyLog(db)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6386,6 +6395,17 @@ cron.schedule('*/2 13-20 * * 1-5', async () => {
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
   finally { pnthrTreeTickRunning = false; }
 });
+
+// PNTHR Tree — EOD daily trade log, 4:35pm ET Mon–Fri (after the close, before
+// the 4:40 orders cron). Snapshots IBKR truth: NAV, open positions w/ IBKR P&L,
+// and every execution of the day, split strategy vs manual. Re-recordable via
+// POST /api/admin/pnthr-tree/record-daily-log.
+cron.schedule('35 16 * * 1-5', async () => {
+  try {
+    const db = await connectToDatabase();
+    await recordTreeDailyLog(db);
+  } catch (err) { console.error('[Tree Daily Log] EOD record failed:', err.message); }
+}, { timezone: 'America/New_York' });
 
 cron.schedule('40 16 * * 1-5', async () => {
   if (dailyOrdersRunning) return;

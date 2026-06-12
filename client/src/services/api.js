@@ -1387,6 +1387,12 @@ export async function fetchAmbushProjection() {
   return res.json();
 }
 
+export async function fetchPnthrTreeProjection() {
+  const res = await apiFetch(`${API_BASE}/api/pnthr-tree/projection`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchEliteProjection() {
   const res = await apiFetch(`${API_BASE}/api/elite-ai/projection`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

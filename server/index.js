@@ -39,7 +39,7 @@ import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstitu
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
-import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick } from './pnthrTreeEngine.js';
+import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
@@ -2610,6 +2610,10 @@ app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {
 // ── PNTHR TREE — 52-week-high momentum engine (off | paper | live) ──────────
 app.get('/api/pnthr-tree', authenticateJWT, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await getPnthrTreeState(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/pnthr-tree/projection', authenticateJWT, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await getPnthrTreeProjection(db)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/mode', authenticateJWT, requireAdmin, async (req, res) => {

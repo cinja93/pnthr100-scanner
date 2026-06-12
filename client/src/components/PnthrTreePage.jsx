@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch, authHeaders, API_BASE } from '../services/api';
+import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
+import { AumTracker } from './AmbushPage';
 
 // PNTHR Tree — 52-week-high momentum cockpit.
 // Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).
@@ -60,6 +61,7 @@ export default function PnthrTreePage() {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [chart, setChart] = useState(null);
+  const [projection, setProjection] = useState(null);
   const openChart = (list, ticker) => setChart({ tickers: list, index: Math.max(0, list.indexOf(ticker)) });
 
   const load = useCallback(async () => {
@@ -71,6 +73,10 @@ export default function PnthrTreePage() {
   }, []);
 
   useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+  useEffect(() => {
+    const go = () => fetchPnthrTreeProjection().then(setProjection).catch(() => {});
+    go(); const id = setInterval(go, 60000); return () => clearInterval(id);
+  }, []);
 
   const setMode = async (mode) => {
     if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 52-week high. Make sure Ambush & Elite are OFF (one engine per account). Proceed?')) return;
@@ -110,23 +116,16 @@ export default function PnthrTreePage() {
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
 
-      {/* AUM + Goals */}
-      <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
-        <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 16px' }}>
-          <div style={{ color: '#888', fontSize: 10, textTransform: 'uppercase' }}>Actual AUM</div>
-          <div style={{ color: '#fff', fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(nav)}</div>
-        </div>
-        <div style={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 16px' }}>
-          <div style={{ color: '#888', fontSize: 10, textTransform: 'uppercase' }}>PNTHR Goals (backtest {TREE_CAGR}% CAGR · hypothetical)</div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 4, fontFamily: 'monospace' }}>
-            {[['1yr', 1], ['2yr', 2], ['3yr', 3], ['5yr', 5]].map(([l, y]) => (
-              <span key={l} style={{ fontSize: 13 }}><span style={{ color: '#666' }}>{l}</span> <b style={{ color: '#22c55e' }}>{fmt(nav * Math.pow(1 + TREE_CAGR / 100, y))}</b></span>
-            ))}
-          </div>
-        </div>
-        <div style={{ color: '#666', fontSize: 11, alignSelf: 'center' }}>
-          {data?.counts && <>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</>}
-        </div>
+      {/* Projected vs Actual AUM + PNTHR Goals — Tree's OWN backtest (daily-10 stop, 2x cap) */}
+      <div style={{ marginTop: 14 }}>
+        {projection ? <AumTracker projection={projection} /> : <div style={{ color: '#666', fontSize: 12 }}>Loading projection…</div>}
+      </div>
+
+      {/* live funnel counts + current leverage + disclosure */}
+      <div style={{ display: 'flex', gap: 18, color: '#888', fontSize: 11, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {data?.counts && <span>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</span>}
+        {data && <span>Leverage <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#22c55e' }}>{data.grossX ?? 0}x</b> / {data.grossCapX ?? 2}x cap</span>}
+        <span style={{ color: '#555' }}>Backtest hypothetical &amp; survivorship-flattered (current AI-300 names). Not a track record.</span>
       </div>
 
       {/* DEVOUR — held positions */}

@@ -430,6 +430,7 @@ export const SECTORS = [
     thesis: 'Quantum is the next computing paradigm, and an existential complement to AI. PNTHR holds a focused quantum basket: not because the technology is mature, but because when capital flow accelerates here, it accelerates violently. Small positions in every credible name ensure participation.',
     holdings: [
       { ticker: 'IONQ', name: 'IonQ Inc.', thesis: 'IonQ is the leading trapped-ion quantum computing pure-play with cloud quantum access via AWS, Azure, and Google. PNTHR holds IONQ as the cornerstone quantum holding.' },
+      { ticker: 'QNT', name: 'Quantinuum Inc.', thesis: 'Quantinuum is the full-stack quantum computing leader spun out of Honeywell (Honeywell plus Cambridge Quantum), trapped-ion hardware paired with quantum software, public since its June 2026 Nasdaq IPO. PNTHR holds QNT as a flagship quantum pure-play.' },
       { ticker: 'RGTI', name: 'Rigetti Computing', thesis: 'Rigetti operates superconducting quantum computers with US government and commercial deployments. PNTHR holds RGTI as a focused superconducting-quantum bet.' },
       { ticker: 'QBTS', name: 'D-Wave Quantum', thesis: 'D-Wave Quantum is the leader in quantum annealing, practical optimization quantum computing. PNTHR holds QBTS as a focused quantum-annealing play.' },
       { ticker: 'QUBT', name: 'Quantum Computing Inc.', thesis: 'Quantum Computing Inc. develops photonic quantum systems and quantum software. PNTHR holds QUBT as a small-cap quantum lottery ticket.' },

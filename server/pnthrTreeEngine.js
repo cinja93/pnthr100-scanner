@@ -161,6 +161,23 @@ export async function getPnthrTreeState(db) {
     p.protected = p.stop != null && p.stop >= (p.avgCost || p.entryPrice);
   }
 
+  // Flag positions that are NEW to Devour TODAY (so the UI can flash them until the
+  // ET date rolls over). Tracks the first date each held ticker appears — covers both
+  // Tree auto-entries and Scott's manual buys; a re-entry after an exit flashes again.
+  const seenToday = etDateStr();
+  try {
+    const seenDocs = await db.collection('pnthr_tree_seen').find({}).toArray();
+    const seen = {}; for (const d of seenDocs) seen[d.ticker] = d.firstSeen;
+    const heldNow = new Set(positions.map(p => p.ticker));
+    for (const p of positions) if (!seen[p.ticker]) {
+      await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $setOnInsert: { ticker: p.ticker, firstSeen: seenToday } }, { upsert: true });
+      seen[p.ticker] = seenToday;
+    }
+    const gone = seenDocs.filter(d => !heldNow.has(d.ticker)).map(d => d.ticker);
+    if (gone.length) await db.collection('pnthr_tree_seen').deleteMany({ ticker: { $in: gone } });
+    positions.forEach(p => { p.newToday = seen[p.ticker] === seenToday; });
+  } catch { positions.forEach(p => { p.newToday = false; }); }
+
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
   const grossUsed = positions.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
   return {

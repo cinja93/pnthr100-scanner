@@ -45,9 +45,14 @@ function Badge({ f, onClick }) {
   else if (f.state === 'approaching') style = { ...base, background: 'transparent', border: '1px solid #22c55e', color: '#22c55e', animation: 'treeflash 1s ease-in-out infinite' };
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
-    <span style={style} onClick={onClick} title={`${f.ticker} · ${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high`}>
+    <span style={style} onClick={onClick} title={`${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
-      {f.state === 'attack' && f.shares > 0 && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5 }}>{f.shares}sh</span>}
+      {(f.state === 'attack' || f.state === 'approaching') && f.shares > 0 && (
+        <>
+          <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5 }}>{f.shares}sh</span>
+          {f.stop != null && <span style={{ color: f.state === 'attack' ? '#fecaca' : '#f87171' }}>stop ${f.stop.toFixed(2)}</span>}
+        </>
+      )}
     </span>
   );
 }
@@ -60,11 +65,12 @@ function DevourCard({ p, onClick }) {
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
   const prot = p.protected;
   return (
-    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+    <div onClick={onClick} title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(p.newToday ? { animation: 'treecardflash 1.1s ease-in-out infinite' } : {}) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
           <span style={{ color: prot ? '#60a5fa' : '#22c55e', fontSize: 11 }}>{prot ? '🛡️ LOCKED' : 'LONG'}</span>
+          {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
         </span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
       </div>
@@ -130,7 +136,8 @@ export default function PnthrTreePage() {
 
   return (
     <div style={{ padding: '20px 26px', color: '#e6e6e6' }}>
-      <style>{`@keyframes treeflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e88; opacity: 1; } 50% { box-shadow: 0 0 8px 2px #22c55e; opacity: 0.55; } }`}</style>
+      <style>{`@keyframes treeflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e88; opacity: 1; } 50% { box-shadow: 0 0 8px 2px #22c55e; opacity: 0.55; } }
+        @keyframes treecardflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e00; } 50% { box-shadow: 0 0 13px 3px #22c55e; } }`}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0b3d2e', paddingBottom: 10 }}>
         <div>

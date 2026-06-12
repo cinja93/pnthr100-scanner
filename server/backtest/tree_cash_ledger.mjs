@@ -13,6 +13,7 @@
 
 import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
+import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { calcCommission, calcSlippage } from './costEngine.js';
 
@@ -143,4 +144,33 @@ console.log('\n  ── worst 8 days by intraday leverage ──');
 ledger.slice().filter(r=>isFinite(r.levLow)).sort((a,b)=>b.levLow-a.levLow).slice(0,8).forEach(r =>
   console.log(`     ${r.date}  lev(close) ${r.lev.toFixed(2)}×  lev(intraday) ${r.levLow.toFixed(2)}×  equity ${f(r.equity)}  cash ${f(r.cash)}  longMV ${f(r.longMV)}`));
 console.log('\n  (Hypothetical · survivorship-flattered AI-300 · gross-capped 2×. Reg-T maintenance 25% = margin call at 4× leverage.)\n');
+
+// ── write the summary the UI panel reads ──────────────────────────────────────
+const callDays = (m) => ledger.filter(r => r.longMVLow > 0 && r.equityLow / r.longMVLow < m).length;
+const summary = {
+  generatedFrom: 'tree_cash_ledger.mjs',
+  strategy: 'AI-300 long-only · daily-10 stop · 2% risk / 10% cap · 2× gross cap',
+  disclosure: 'Hypothetical · survivorship-flattered AI-300 · gross-capped 2×. Reg-T maintenance 25% → margin call at 4× leverage.',
+  period: `${ledger[0].date} → ${ledger[ledger.length - 1].date}`,
+  tradingDays: ledger.length,
+  startCash: NAV0,
+  endingEquity: Math.round(endEq),
+  maxDDPct: +(Math.abs(maxDD) * 100).toFixed(1),
+  lowestEquity: Math.round(minEquityLow.equityLow),
+  lowestEquityDate: minEquityLow.date,
+  deepestMarginLoan: Math.round(-minCash),
+  peakLevClose: +maxLev.lev.toFixed(2),
+  peakLevIntraday: +maxLevLow.levLow.toFixed(2),
+  callMaintBreakevenPct: +(100 / maxLevLow.levLow).toFixed(1),   // margin-call only if blended maintenance exceeds this
+  breaks: {
+    blowupDays: blowupIntraday.length,
+    call25Days: callDays(0.25), call30Days: callDays(0.30), call35Days: callDays(0.35),
+  },
+  worstDays: ledger.slice().filter(r => isFinite(r.levLow)).sort((a, b) => b.levLow - a.levLow).slice(0, 8).map(r => ({
+    date: r.date, levClose: +r.lev.toFixed(2), levIntraday: +r.levLow.toFixed(2),
+    equity: Math.round(r.equity), cash: Math.round(r.cash), longMV: Math.round(r.longMV),
+  })),
+};
+fs.writeFileSync(new URL('../data/treeCashLedger.json', import.meta.url).pathname, JSON.stringify(summary, null, 1));
+console.log('  → wrote server/data/treeCashLedger.json\n');
 process.exit(0);

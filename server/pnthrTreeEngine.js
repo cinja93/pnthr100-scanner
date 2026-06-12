@@ -270,6 +270,15 @@ function loadTreeBaseline() {
   }
   return _treeBaseline;
 }
+const _treeCashLedgerPath = new URL('./data/treeCashLedger.json', import.meta.url).pathname;
+let _treeCashLedger;
+function loadCashLedger() {
+  if (_treeCashLedger === undefined) {
+    try { _treeCashLedger = JSON.parse(fs.readFileSync(_treeCashLedgerPath, 'utf8')); }
+    catch { _treeCashLedger = null; }
+  }
+  return _treeCashLedger;
+}
 function etDateStr(d = new Date()) {
   const p = {};
   for (const { type, value } of new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)) p[type] = value;
@@ -350,6 +359,7 @@ export async function getPnthrTreeProjection(db) {
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
     forward,
     metrics: proj.metrics || null,
+    cashLedger: loadCashLedger(),
     meta: { backtestEndNav: projected.length ? projected[projected.length - 1].value : proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure },
   };
 }

@@ -1,0 +1,88 @@
+{
+ "generatedFrom": "tree_cash_ledger.mjs",
+ "strategy": "AI-300 long-only · daily-10 stop · 2% risk / 10% cap · 2× gross cap",
+ "disclosure": "Hypothetical · survivorship-flattered AI-300 · gross-capped 2×. Reg-T maintenance 25% → margin call at 4× leverage.",
+ "period": "2023-01-03 → 2026-06-11",
+ "tradingDays": 863,
+ "startCash": 100000,
+ "endingEquity": 1200841,
+ "maxDDPct": 55,
+ "lowestEquity": 85311,
+ "lowestEquityDate": "2023-04-25",
+ "deepestMarginLoan": 1393089,
+ "peakLevClose": 2.07,
+ "peakLevIntraday": 2.15,
+ "callMaintBreakevenPct": 46.5,
+ "breaks": {
+  "blowupDays": 0,
+  "call25Days": 0,
+  "call30Days": 0,
+  "call35Days": 0
+ },
+ "worstDays": [
+  {
+   "date": "2026-06-09",
+   "levClose": 2.01,
+   "levIntraday": 2.15,
+   "equity": 1086009,
+   "cash": -1097519,
+   "longMV": 2183528
+  },
+  {
+   "date": "2024-12-17",
+   "levClose": 1.99,
+   "levIntraday": 2.14,
+   "equity": 380826,
+   "cash": -378579,
+   "longMV": 759406
+  },
+  {
+   "date": "2025-10-14",
+   "levClose": 2,
+   "levIntraday": 2.14,
+   "equity": 620842,
+   "cash": -621063,
+   "longMV": 1241905
+  },
+  {
+   "date": "2024-12-16",
+   "levClose": 1.95,
+   "levIntraday": 2.12,
+   "equity": 349747,
+   "cash": -330750,
+   "longMV": 680497
+  },
+  {
+   "date": "2024-11-27",
+   "levClose": 2.04,
+   "levIntraday": 2.11,
+   "equity": 290066,
+   "cash": -300252,
+   "longMV": 590319
+  },
+  {
+   "date": "2026-06-04",
+   "levClose": 2,
+   "levIntraday": 2.11,
+   "equity": 1386638,
+   "cash": -1385620,
+   "longMV": 2772258
+  },
+  {
+   "date": "2026-02-17",
+   "levClose": 2.03,
+   "levIntraday": 2.11,
+   "equity": 607938,
+   "cash": -626983,
+   "longMV": 1234921
+  },
+  {
+   "date": "2025-10-13",
+   "levClose": 2,
+   "levIntraday": 2.1,
+   "equity": 607367,
+   "cash": -606040,
+   "longMV": 1213407
+  }
+ ]
+}

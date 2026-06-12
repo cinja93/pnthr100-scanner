@@ -153,7 +153,7 @@ export default function PnthrTreePage() {
         {projection ? (
           <>
             <Collapsible title="PROJECTED vs ACTUAL AUM" storageKey="tree_collapse_aum">
-              <AumTracker projection={projection} hideForward />
+              <AumTracker projection={projection} hideForward cashLedger={projection.cashLedger} />
             </Collapsible>
             <Collapsible title="PNTHR GOALS" storageKey="tree_collapse_goals">
               <ForwardProjection forward={projection.forward} />

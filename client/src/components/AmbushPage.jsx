@@ -617,9 +617,94 @@ export function ForwardProjection({ forward }) {
   );
 }
 
-export function AumTracker({ projection, hideForward }) {
+// Cash-ledger / margin-stress detail modal (Tree page; opened from the AUM panel).
+export function CashLedgerModal({ data, onClose }) {
+  const f = n => (n < 0 ? '-$' : '$') + Math.round(Math.abs(n)).toLocaleString();
+  const b = data.breaks || {};
+  const noBreaks = !b.blowupDays && !b.call25Days && !b.call30Days && !b.call35Days;
+  const stat = (label, value, color) => (
+    <div style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 12px', minWidth: 150 }}>
+      <div style={{ color: '#888', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+      <div style={{ color: color || '#e6e6e6', fontSize: 18, fontWeight: 700, fontFamily: 'monospace' }}>{value}</div>
+    </div>
+  );
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: '#000a', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#0d0d0d', border: '1px solid #25405f', borderRadius: 12, padding: '20px 22px', maxWidth: 840, width: '100%', maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h2 style={{ margin: 0, color: '#3b82f6', fontSize: 18 }}>📒 Cash Ledger &amp; Margin Stress</h2>
+          <button onClick={onClose} style={{ background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}>Close</button>
+        </div>
+        <div style={{ color: '#666', fontSize: 11, margin: '4px 0 14px' }}>{data.strategy} · {data.period} · {data.tradingDays} trading days · start {f(data.startCash)}</div>
+
+        <div style={{ background: noBreaks ? '#0e1f14' : '#2a0d0d', border: `1px solid ${noBreaks ? '#22c55e' : '#ef4444'}`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, color: noBreaks ? '#22c55e' : '#fca5a5', fontWeight: 700, fontSize: 13 }}>
+          {noBreaks ? '✅ Never breaks — 0 account-blowup days and 0 margin-call days (25/30/35% maintenance).' : '❌ Breaks — see the break tests below.'}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          {stat('Ending equity', f(data.endingEquity), '#22c55e')}
+          {stat('Max drawdown', data.maxDDPct + '%', '#facc15')}
+          {stat('Lowest equity', f(data.lowestEquity), '#e6e6e6')}
+          {stat('Deepest margin loan', f(-data.deepestMarginLoan), '#facc15')}
+          {stat('Peak lev (close)', data.peakLevClose + '×', '#e6e6e6')}
+          {stat('Peak lev (intraday)', data.peakLevIntraday + '×', '#e6e6e6')}
+        </div>
+
+        <div style={{ color: '#aaa', fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+          A margin call would only trigger if your broker's blended maintenance requirement exceeded <b style={{ color: '#facc15' }}>{data.callMaintBreakevenPct}%</b> (standard is 25–35%). Reg-T maintenance of 25% calls at 4× leverage; the peak here was {data.peakLevIntraday}×.
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
+          <tbody>
+            {[['Account blowup (equity ≤ 0)', b.blowupDays],
+              ['Margin call @ 25% maintenance (lev > 4.0×)', b.call25Days],
+              ['Margin call @ 30% maintenance (lev > 3.3×)', b.call30Days],
+              ['Margin call @ 35% maintenance (lev > 2.9×)', b.call35Days]].map(([label, days], i) => (
+              <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+                <td style={{ padding: '6px 8px', color: '#ccc' }}>{label}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right', color: days ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{days ? days + ' days ❌' : '0 days ✅'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Most-levered days (intraday worst case)</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace', minWidth: 560 }}>
+            <thead><tr style={{ color: '#b4b4be', fontSize: 10, textTransform: 'uppercase' }}>
+              <th style={{ textAlign: 'left', padding: '5px 8px' }}>Date</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px' }}>Lev (close)</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px' }}>Lev (intraday)</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px' }}>Equity</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px' }}>Cash</th>
+              <th style={{ textAlign: 'right', padding: '5px 8px' }}>Long MV</th>
+            </tr></thead>
+            <tbody>
+              {(data.worstDays || []).map((r, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
+                  <td style={{ textAlign: 'left', padding: '5px 8px', color: '#e6e6e6', fontFamily: 'system-ui, sans-serif' }}>{r.date}</td>
+                  <td style={{ textAlign: 'right', padding: '5px 8px', color: '#ccc' }}>{r.levClose}×</td>
+                  <td style={{ textAlign: 'right', padding: '5px 8px', color: '#facc15' }}>{r.levIntraday}×</td>
+                  <td style={{ textAlign: 'right', padding: '5px 8px', color: '#22c55e' }}>{f(r.equity)}</td>
+                  <td style={{ textAlign: 'right', padding: '5px 8px', color: '#ef4444' }}>{f(r.cash)}</td>
+                  <td style={{ textAlign: 'right', padding: '5px 8px', color: '#ccc' }}>{f(r.longMV)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ color: '#555', fontSize: 10, marginTop: 14 }}>{data.disclosure}</div>
+      </div>
+    </div>
+  );
+}
+
+export function AumTracker({ projection, hideForward, cashLedger }) {
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
+  const [showLedger, setShowLedger] = useState(false);
   if (!projection?.current) return null;
   const { current, projected, actual, anchor } = projection;
   const box = (label, value, color, onClick) => (
@@ -703,6 +788,11 @@ export function AumTracker({ projection, hideForward }) {
           <button onClick={() => setShowChart(s => !s)} style={{ marginTop: 8, background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
             {showChart ? '▲ Hide chart' : '▼ Show chart'}
           </button>
+          {cashLedger && (
+            <button onClick={() => setShowLedger(true)} style={{ marginTop: 8, marginLeft: 8, background: '#161616', border: '1px solid #2a2a2a', color: '#aaa', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>
+              📒 Cash Ledger
+            </button>
+          )}
           {hasGross && chartBlock}
         </div>
         {/* the 2 boxes — upper right, click for table */}
@@ -750,6 +840,7 @@ export function AumTracker({ projection, hideForward }) {
 
       {!hasGross && chartBlock}
       {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}
+      {showLedger && cashLedger && <CashLedgerModal data={cashLedger} onClose={() => setShowLedger(false)} />}
     </div>
   );
 }

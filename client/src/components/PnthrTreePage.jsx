@@ -37,6 +37,10 @@ function Badge({ f, onClick }) {
 
 function DevourCard({ p, onClick }) {
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
+  const shares = p.shares || p.totalShares;
+  const last = p.last ?? (p.avgCost || p.entryPrice);
+  const rps = (p.stop != null && last != null) ? last - p.stop : null;     // current price − stop
+  const totalRisk = rps != null ? rps * shares : null;                     // × shares
   return (
     <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -51,6 +55,8 @@ function DevourCard({ p, onClick }) {
         <span>Last <b style={{ color: '#fff' }}>${p.last?.toFixed(2)}</b></span>
         <span>Avg <b style={{ color: '#fff' }}>${(p.avgCost || p.entryPrice)?.toFixed(2)}</b></span>
         <span>Stop <b style={{ color: '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
+        <span>Risk/sh <b style={{ color: '#facc15' }}>${rps != null ? rps.toFixed(2) : '--'}</b></span>
+        <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b></span>
       </div>
     </div>
   );

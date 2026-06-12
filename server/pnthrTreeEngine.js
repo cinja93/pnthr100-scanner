@@ -79,7 +79,7 @@ const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2�
 const AI_META = {};
 const AI_TICKERS = (() => {
   const out = [];
-  for (const s of AI_SECTORS) for (const h of s.holdings) { out.push(h.ticker); AI_META[h.ticker] = { sector: s.name }; }
+  for (const s of AI_SECTORS) for (const h of s.holdings) { out.push(h.ticker); AI_META[h.ticker] = { sector: s.name, name: h.name }; }
   return [...new Set(out)];
 })();
 
@@ -214,6 +214,8 @@ export async function getPnthrTreeState(db) {
     // PROTECT = the trailing stop has climbed to/above entry → worst case is now a
     // locked-in profit (Ambush's PROTECT, long-only: stop >= avgCost).
     p.protected = p.stop != null && p.stop >= (p.avgCost || p.entryPrice);
+    p.company = AI_META[p.ticker]?.name || null;     // shown under the ticker on Devour cards
+    p.sector  = AI_META[p.ticker]?.sector || null;   // one of the 16 AI-300 sectors
   }
 
   // Flag positions that are NEW to Devour TODAY (so the UI can flash them until the

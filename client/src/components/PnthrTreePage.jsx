@@ -77,6 +77,12 @@ function DevourCard({ p, onClick }) {
         </span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
       </div>
+      {(p.company || p.sector) && (
+        <div style={{ marginTop: 6, lineHeight: 1.3 }}>
+          {p.company && <div style={{ color: '#bbb', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={p.company}>{p.company}</div>}
+          {p.sector && <div style={{ color: prot ? '#60a5fa' : '#7fcf9f', fontSize: 10, letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={`AI 300 sector: ${p.sector}`}>{p.sector}</div>}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: 8, fontSize: 12, fontFamily: 'monospace', color: '#ccc' }}>
         <span>Shares <b style={{ color: '#fff' }}>{p.shares || p.totalShares}</b></span>
         <span>Last <b style={{ color: '#fff' }}>${p.last?.toFixed(2)}</b></span>

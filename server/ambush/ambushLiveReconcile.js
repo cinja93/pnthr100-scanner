@@ -133,6 +133,19 @@ export async function getAmbushLiveReconcile(db) {
   let nav = cfg?.nav || 83000;
   if (cfg?.ownerId) { try { const p = await getUserProfile(cfg.ownerId); if (p?.accountSize > 0) nav = p.accountSize; } catch {} }
 
+  // ── Ambush retired → reconcile idle ──────────────────────────────────────
+  // PNTHR Tree now owns the AI-300 account. When Ambush is OFF it has no book to
+  // reconcile, so this panel must NOT flag Tree's live positions as phantom/unmanaged/
+  // shares discrepancies (that produced the false "NEEDS ATTENTION" banner with the
+  // dangerous Flatten/Keep buttons). Zero rows when Ambush is disabled.
+  if (!cfg?.enabled) {
+    return {
+      rows: [], summary: { green: 0, yellow: 0, red: 0, gray: 0 },
+      snapHealth: { status: 'gray', reason: 'Ambush off — PNTHR Tree owns AI-300' },
+      snapAgeMin: null, nav, diag: 'Ambush disabled — reconcile idle (PNTHR Tree owns AI-300).',
+    };
+  }
+
   const snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: cfg?.ownerId });
   const snapAgeMin = snap?.syncedAt ? (Date.now() - new Date(snap.syncedAt).getTime()) / 60000 : Infinity;
   const ib = {}; for (const p of (snap?.positions || [])) { const t = (p.symbol || p.ticker || '').toUpperCase(); if (t) ib[t] = { sh: +p.shares || 0, avg: +p.avgCost || 0, px: +p.marketPrice || +p.avgCost || 0 }; }

@@ -140,7 +140,19 @@ export async function getPnthrTreeState(db) {
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
     const priorHigh = highs[t];   // real prior 52wk high (excl today) — see priorBands
-    if (!(price > 0) || !(priorHigh > 0)) continue;
+    if (!(price > 0)) continue;
+    if (!(priorHigh > 0)) {
+      // MANUAL-ONLY names (ENGINE_EXCLUDE or <1yr of bars, e.g. SPCX/QNT IPOs): still
+      // LIST them in STALKING so the page shows the full AI-300 universe, but with no
+      // trigger/stop/size — they can never escalate past stalking, and the engine tick
+      // (which requires priorHigh + skips ENGINE_EXCLUDE) never trades them.
+      funnel.push({
+        ticker: t, sector: AI_META[t]?.sector, price, priorHigh: null, pctToHigh: null,
+        changePct: +q.changesPercentage || 0, state: 'stalking', held: held.has(t),
+        manual: true, stop: null, shares: 0, risk: 0, posValue: 0,
+      });
+      continue;
+    }
     let state = 'stalking';
     if (dayHigh >= priorHigh + 0.01) state = 'attack';                 // broke the prior 52wk high today
     else if (price >= priorHigh * (1 - APPROACH_PCT)) state = 'approaching';
@@ -153,7 +165,7 @@ export async function getPnthrTreeState(db) {
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
     });
   }
-  funnel.sort((a, b) => a.pctToHigh - b.pctToHigh);   // closest to a new high first
+  funnel.sort((a, b) => (a.pctToHigh ?? Infinity) - (b.pctToHigh ?? Infinity));   // closest to a new high first; manual (no high) last
 
   // enrich positions with the live stop + P&L
   for (const p of positions) {

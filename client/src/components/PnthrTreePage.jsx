@@ -45,8 +45,11 @@ function Badge({ f, onClick }) {
   else if (f.state === 'approaching') style = { ...base, background: 'transparent', border: '1px solid #22c55e', color: '#22c55e', animation: 'treeflash 1s ease-in-out infinite' };
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
-    <span style={style} onClick={onClick} title={`${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
+    <span style={style} onClick={onClick} title={f.manual
+      ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — no 52wk-high trigger yet (new IPO seasoning or data re-sync); the engine never trades it`
+      : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
+      {f.manual && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5, color: '#facc15', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>MANUAL</span>}
       {(f.state === 'attack' || f.state === 'approaching') && f.shares > 0 && (
         <>
           <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5 }}>{f.shares}sh</span>

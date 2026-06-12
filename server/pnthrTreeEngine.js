@@ -75,7 +75,10 @@ async function priorBands(db, tickers) {
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!bars.length) continue;
     const hi = bars.slice(-LOOKBACK_52W), lo = bars.slice(-STOP_LOOKBACK);
-    if (hi.length) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
+    // A real 52-week high needs a FULL year of bars. Without this guard a fresh IPO
+    // (e.g. QNT, ~6 bars) would set its "52wk high" to a few-days high and falsely
+    // trigger ATTACK. No high → the name is skipped from the funnel until it seasons.
+    if (bars.length >= LOOKBACK_52W) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
     if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
   }
   return { highs, lows };

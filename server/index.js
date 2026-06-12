@@ -6329,7 +6329,12 @@ async function isAmbushModeActive() {
   try {
     const db = await connectToDatabase();
     const config = await getAmbushConfigForGate(db);
-    return !!config?.enabled;
+    if (config?.enabled) return true;
+    // PNTHR Tree also owns AI-300 when running (paper or live) → suppress the legacy
+    // AI-300 crons (weekly ratchet, stale-hunt, orders preview/daily, MCE/Monday
+    // auto-exec, intraday grade monitor) so ONLY Tree manages the AI-300 account.
+    const tree = await getPnthrTreeConfig(db);
+    return !!(tree?.mode && tree.mode !== 'off');
   } catch { return false; }
 }
 

@@ -125,7 +125,7 @@ export default function PnthrTreePage() {
   }, 0);
   const attack = funnel.filter(f => f.state === 'attack' && !f.held);
   const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
-  const stalking = funnel.filter(f => f.state === 'stalking' && !f.held);
+  const stalking = funnel.filter(f => f.state === 'stalking' && !f.held).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const nav = data?.nav || 0;
 
   return (
@@ -205,7 +205,7 @@ export default function PnthrTreePage() {
 
       {/* STALKING — the universe */}
       <div style={{ marginTop: 18 }}>
-        <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, closest to a new high first ({stalking.length})</h3>
+        <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, A→Z ({stalking.length})</h3>
         <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(stalking.map(x => x.ticker), f.ticker)} />)}</div>
       </div>
 

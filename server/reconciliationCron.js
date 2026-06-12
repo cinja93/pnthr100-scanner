@@ -63,6 +63,18 @@ export async function runUnifiedReconciliation({ db, dryRun = false } = {}) {
   if (!db) db = await connectToDatabase();
   if (!db) return { error: 'NO_DB' };
 
+  // ── PNTHR Tree ownership gate ──────────────────────────────────────────────
+  // When PNTHR Tree is running (paper OR live) it is the SOLE manager of the
+  // AI-300 account. This legacy reconciler works off the OLD pnthr_portfolio book
+  // and would treat Tree's positions/stops as orphans → cancel them, leaving
+  // positions NAKED. So the entire unified reconciliation STANDS DOWN whenever
+  // Tree is active (and resumes automatically if Tree returns to 'off').
+  // Fail-safe: if Tree's mode can't be read, skip rather than risk clobbering it.
+  let treeMode = 'off';
+  try { treeMode = (await db.collection('pnthr_tree_config').findOne({}))?.mode || 'off'; }
+  catch { return { skipped: 'TREE_MODE_UNREADABLE' }; }
+  if (treeMode !== 'off') return { skipped: 'PNTHR_TREE_ACTIVE', treeMode };
+
   const startedAt = new Date();
   // Ghost reconciler runs FIRST: if it closes a position this tick, the
   // orphan janitor (which runs last) will see the ticker as no-longer-active

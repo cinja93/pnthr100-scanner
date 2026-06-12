@@ -100,6 +100,12 @@ export default function PnthrTreePage() {
   const positions = data?.positions || [];
   const protectedPos = positions.filter(p => p.protected);
   const devourPos = positions.filter(p => !p.protected);
+  // Devour roll-up: total open P&L, and total $ at risk if every stop fired (current price → stop).
+  const devourPnl = devourPos.reduce((a, p) => a + (p.pnl || 0), 0);
+  const devourRisk = devourPos.reduce((a, p) => {
+    const last = p.last ?? (p.avgCost || p.entryPrice);
+    return a + ((p.stop != null && last != null) ? (last - p.stop) * (p.shares || p.totalShares || 0) : 0);
+  }, 0);
   const attack = funnel.filter(f => f.state === 'attack' && !f.held);
   const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
   const stalking = funnel.filter(f => f.state === 'stalking' && !f.held);
@@ -139,7 +145,13 @@ export default function PnthrTreePage() {
 
       {/* DEVOUR — held, trailing stop still below entry (capital at risk) */}
       <div style={{ marginTop: 20 }}>
-        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid #1c3a28', paddingBottom: 6, marginBottom: 10 }}>
+          <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0 }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
+          <div style={{ display: 'flex', gap: 20, fontSize: 12, fontFamily: 'monospace' }}>
+            <span style={{ color: '#888' }}>Open P&amp;L <b style={{ color: devourPnl >= 0 ? '#22c55e' : '#ef4444' }}>{devourPnl >= 0 ? '+' : '-'}{fmt(Math.abs(devourPnl))}</b></span>
+            <span style={{ color: '#888' }}>Total risk if all stopped <b style={{ color: '#facc15' }}>-{fmt(devourRisk)}</b> <span style={{ color: '#555' }}>({nav > 0 ? (devourRisk / nav * 100).toFixed(1) : '0'}% of NAV)</span></span>
+          </div>
+        </div>
         {devourPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No positions with open risk.</div> :
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{devourPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(devourPos.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>

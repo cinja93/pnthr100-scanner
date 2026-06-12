@@ -374,6 +374,7 @@ export const SECTORS = [
     weight: 7,
     thesis: 'The Pentagon and allies are spending unprecedented capital on AI-powered drones, autonomous systems, satellite intelligence, and AI-augmented defense software. PNTHR\'s defense-AI sector captures the prime contractors, drone pure-plays, space companies, and government services firms profiting from the AI defense super-cycle.',
     holdings: [
+      { ticker: 'SPCX', name: 'SpaceX (Space Exploration Technologies)', thesis: 'SpaceX is the dominant launch provider and operator of Starlink, the largest satellite-internet network, public since its record June 2026 IPO. AI-driven autonomous launch/landing plus the Starlink AI backbone. PNTHR holds SPCX as the flagship space-AI Elite holding.' },
       { ticker: 'RKLB', name: 'Rocket Lab USA', thesis: 'Rocket Lab is the leading small-satellite launch and space systems company, exploding backlog from AI-data satellite constellations. PNTHR holds RKLB as a top-tier space-AI Elite holding.' },
       { ticker: 'ASTS', name: 'AST SpaceMobile', thesis: 'AST SpaceMobile builds the only direct-to-cell satellite broadband network, AI-driven space-based connectivity. PNTHR holds ASTS as a high-conviction space-AI lottery ticket.' },
       { ticker: 'PL', name: 'Planet Labs', thesis: 'Planet Labs operates the largest commercial Earth-observation satellite constellation, AI-driven geospatial intelligence for governments and enterprises. PNTHR holds PL as the cornerstone AI-geospatial pure play.' },

@@ -27,14 +27,19 @@ const APPROACH_PCT   = 0.01;   // within 1% of the 52wk high → "approaching" (
 const STOP_LOOKBACK  = 10;     // 2 trading weeks
 const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes today)
 
-// ── Split / stale-data exclude ───────────────────────────────────────────────
-// Tickers the engine must IGNORE because their stored candles are split-stale: a
-// pending/just-applied split makes the live (broker) price a fraction of our cached
-// candle prices, so the engine would compute a 52wk-high/2wk-low-stop at the OLD
-// scale and try to place a stop ABOVE the market (instant liquidation). Remove a
-// ticker here only after re-backfilling its candles split-adjusted (post-ex-date).
-//   KLAC — 10:1 split effective 2026-06-12. Re-sync candles after the split, then drop.
-const SPLIT_EXCLUDE = new Set(['KLAC']);
+// ── Engine exclude (MANUAL-ONLY tickers) ─────────────────────────────────────
+// Tickers the engine must IGNORE in funnel / entry / stop-management — trade them
+// BY HAND. Two cases:
+//   (a) split-stale candles: a pending/just-applied split makes the live (broker)
+//       price a fraction of our cached candles, so the engine would set a 2wk-low
+//       stop at the OLD scale, ABOVE the market = instant liquidation; and
+//   (b) brand-new IPOs with no/insufficient history: no real 52wk high to break and
+//       no 2wk-low to stop against (sizing the model can't compute).
+// Remove a ticker here only once its candles are clean (split re-synced, or ~1yr of
+// history accumulated). While excluded, the engine never enters, exits, or stops it.
+//   KLAC — 10:1 split 2026-06-12; re-sync candles post-split, then drop.
+//   SPCX — SpaceX IPO 2026-06-12 (no history); Scott trades it manually until it seasons.
+const ENGINE_EXCLUDE = new Set(['KLAC', 'SPCX']);
 const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
                                // WITHOUT this the per-name 2%/10% sizing piles to 4-10× in a broad rally
                                // (backtest: 72%+ drawdown). 2× cap → ~106% CAGR / 55% DD (daily-stop, hypothetical).
@@ -80,7 +85,7 @@ async function priorBands(db, tickers) {
   const highs = {}, lows = {};
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
   for (const d of docs) {
-    if (SPLIT_EXCLUDE.has(d.ticker)) continue;   // split-stale → no high/low → skipped from funnel/entry/manage
+    if (ENGINE_EXCLUDE.has(d.ticker)) continue;   // split-stale → no high/low → skipped from funnel/entry/manage
     const bars = (d.daily || []).filter(b => b.date < today && +b.high > 0 && +b.low > 0)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!bars.length) continue;
@@ -215,7 +220,7 @@ export async function runPnthrTreeTick(db) {
   // 1) ENTRIES — any AI-300 name at a NEW intraday 52wk high we don't already hold
   for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
-    if (SPLIT_EXCLUDE.has(t)) continue;   // split-stale candles → don't trade
+    if (ENGINE_EXCLUDE.has(t)) continue;   // split-stale candles → don't trade
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
     const priorHigh = highs[t];   // real prior 52wk high (excl today)
@@ -266,7 +271,7 @@ export async function runPnthrTreeTick(db) {
     for (const p of (snap.positions || [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
-      if (SPLIT_EXCLUDE.has(t)) continue;   // split-stale → DON'T place a stop (would be at the old scale, above market)
+      if (ENGINE_EXCLUDE.has(t)) continue;   // split-stale → DON'T place a stop (would be at the old scale, above market)
       const newStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null; if (!newStop) continue;
       const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
       if (newStop > cur + 0.01) {

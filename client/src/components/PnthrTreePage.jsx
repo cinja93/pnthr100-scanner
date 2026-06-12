@@ -34,19 +34,24 @@ function Badge({ f, onClick }) {
   );
 }
 
-function PositionBadge({ p, onClick }) {
-  const last = p.last ?? p.avgCost ?? p.entryPrice;
-  const shares = p.shares || p.totalShares;
-  const up = p.pnl >= 0;
+function DevourCard({ p, onClick }) {
+  const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   return (
-    <span onClick={onClick}
-      title={`${p.ticker} · ${shares}sh @ $${(p.avgCost || p.entryPrice)?.toFixed(2)} · stop $${p.stop?.toFixed(2)} · ${up ? '+' : ''}${fmt(p.pnl)} (${p.pnlPct}%) — click for daily + weekly charts`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 8, margin: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace', background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 700 }}>
-      <b style={{ fontSize: 13 }}>{p.ticker}</b>
-      <span style={{ opacity: 0.85 }}>${last?.toFixed(2)}</span>
-      <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5 }}>{shares}sh</span>
-      <span style={{ color: up ? '#bbf7d0' : '#fecaca' }}>{up ? '+' : ''}{p.pnlPct}%</span>
-    </span>
+    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
+          <span style={{ color: '#22c55e', fontSize: 11 }}>LONG</span>
+        </span>
+        <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: 8, fontSize: 12, fontFamily: 'monospace', color: '#ccc' }}>
+        <span>Shares <b style={{ color: '#fff' }}>{p.shares || p.totalShares}</b></span>
+        <span>Last <b style={{ color: '#fff' }}>${p.last?.toFixed(2)}</b></span>
+        <span>Avg <b style={{ color: '#fff' }}>${(p.avgCost || p.entryPrice)?.toFixed(2)}</b></span>
+        <span>Stop <b style={{ color: '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
+      </div>
+    </div>
   );
 }
 
@@ -128,7 +133,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 20 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS ({positions.length})</h3>
         {positions.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No open positions.</div> :
-          <div>{positions.map((p, i) => <PositionBadge key={i} p={p} onClick={() => openChart(positions.map(x => x.ticker), p.ticker)} />)}</div>}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{positions.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(positions.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>
 
       {/* ATTACK — new highs */}

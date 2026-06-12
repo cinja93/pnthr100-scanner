@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
+import AiTickerChartModal from './AiTickerChartModal';
 
 // PNTHR Tree — 52-week-high momentum cockpit.
 // Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).
@@ -33,10 +34,10 @@ function Badge({ f, onClick }) {
   );
 }
 
-function DevourCard({ p }) {
+function DevourCard({ p, onClick }) {
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   return (
-    <div style={{ background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: '#121212', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 800, fontSize: 16 }}>{p.ticker} <span style={{ color: '#22c55e', fontSize: 11 }}>LONG</span></span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
@@ -55,6 +56,8 @@ export default function PnthrTreePage() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [chart, setChart] = useState(null);
+  const openChart = (list, ticker) => setChart({ tickers: list, index: Math.max(0, list.indexOf(ticker)) });
 
   const load = useCallback(async () => {
     try {
@@ -127,32 +130,40 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 20 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>DEVOUR — POSITIONS ({positions.length})</h3>
         {positions.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No open positions.</div> :
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{positions.map((p, i) => <DevourCard key={i} p={p} />)}</div>}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{positions.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(positions.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>
 
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 52-WEEK HIGHS ({attack.length})</h3>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
-          <div>{attack.map(f => <Badge key={f.ticker} f={f} />)}</div>}
+          <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} />)}</div>}
       </div>
 
       {/* APPROACHING — flashing */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#facc15', fontSize: 13, letterSpacing: '0.08em' }}>APPROACHING — within 1% of a new high ({approaching.length})</h3>
         {approaching.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None close yet.</div> :
-          <div>{approaching.map(f => <Badge key={f.ticker} f={f} />)}</div>}
+          <div>{approaching.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} />)}</div>}
       </div>
 
       {/* STALKING — the universe */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, closest to a new high first ({stalking.length})</h3>
-        <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} />)}</div>
+        <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(stalking.map(x => x.ticker), f.ticker)} />)}</div>
       </div>
 
       <div style={{ color: '#555', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
         Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.
       </div>
+
+      {chart && (
+        <AiTickerChartModal
+          tickers={chart.tickers}
+          initialIndex={chart.index}
+          onClose={() => setChart(null)}
+        />
+      )}
     </div>
   );
 }

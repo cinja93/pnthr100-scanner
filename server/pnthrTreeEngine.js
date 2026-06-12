@@ -37,9 +37,10 @@ const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes to
 //       no 2wk-low to stop against (sizing the model can't compute).
 // Remove a ticker here only once its candles are clean (split re-synced, or ~1yr of
 // history accumulated). While excluded, the engine never enters, exits, or stops it.
-//   KLAC — 10:1 split 2026-06-12; re-sync candles post-split, then drop.
 //   SPCX — SpaceX IPO 2026-06-12 (no history); Scott trades it manually until it seasons.
-const ENGINE_EXCLUDE = new Set(['KLAC', 'SPCX']);
+//   (KLAC removed 2026-06-12: FMP published the 10:1 split-adjusted history; candles
+//    deleted + re-backfilled, verified continuous on the post-split scale.)
+const ENGINE_EXCLUDE = new Set(['SPCX']);
 const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
                                // WITHOUT this the per-name 2%/10% sizing piles to 4-10× in a broad rally
                                // (backtest: 72%+ drawdown). 2× cap → ~106% CAGR / 55% DD (daily-stop, hypothetical).

@@ -16,6 +16,7 @@ import { fetchFMP } from './stockService.js';
 import { getUserProfile } from './database.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { enqueueAmbushOrder } from './ambush/ambushStateManager.js';
+import { getSplitExclusions, flagSuspectSplit } from './splitMaintenanceService.js';
 
 const CFG    = 'pnthr_tree_config';
 const POS    = 'pnthr_tree_positions';
@@ -40,7 +41,37 @@ const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes to
 //   SPCX — SpaceX IPO 2026-06-12 (no history); Scott trades it manually until it seasons.
 //   (KLAC removed 2026-06-12: FMP published the 10:1 split-adjusted history; candles
 //    deleted + re-backfilled, verified continuous on the post-split scale.)
+// SPLITS are now handled AUTOMATICALLY: splitMaintenanceService tracks FMP's split
+// calendar and any universe ticker with a pending (un-resynced) split is excluded
+// dynamically via engineExclusions() below — no more hand-editing this set for splits.
 const ENGINE_EXCLUDE = new Set(['SPCX']);
+
+// Static manual-only set ∪ dynamic split exclusions → Map(ticker → reason).
+async function engineExclusions(db) {
+  const out = new Map();
+  for (const t of ENGINE_EXCLUDE) out.set(t, 'new IPO — seasoning until ~1yr of bars');
+  try { for (const [t, why] of await getSplitExclusions(db)) out.set(t, why); }
+  catch (e) { console.error('[Tree] split exclusions unavailable:', e.message); }
+  return out;
+}
+
+// Live-vs-stored price sanity net: if the live quote is wildly off the stored
+// candle scale (a split the calendar missed, or bad data), DROP the ticker's
+// bands so the engine can't enter or trail a stop off bogus levels, and flag
+// it for the nightly split re-sync. This is the guard that would have caught
+// KLAC even with no calendar (live $241 vs stored ~$2,411).
+function applyPriceSanity(quotes, bands) {
+  const flagged = [];
+  for (const t of Object.keys(bands.highs)) {
+    const price = +quotes[t]?.price, last = bands.lastClose?.[t];
+    if (!(price > 0) || !(last > 0)) continue;
+    if (price < last * 0.6 || price > last * 1.67) {
+      flagged.push({ ticker: t, price, lastClose: last });
+      delete bands.highs[t]; delete bands.lows[t];
+    }
+  }
+  return flagged;
+}
 const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
                                // WITHOUT this the per-name 2%/10% sizing piles to 4-10× in a broad rally
                                // (backtest: 72%+ drawdown). 2× cap → ~106% CAGR / 55% DD (daily-stop, hypothetical).
@@ -81,12 +112,12 @@ async function fetchQuotes(tickers) {
 //              intraday move, so a fresh breakout never registers (it stays "approaching").
 //   lows[t]  = min low of the prior ≤10 bars    → the 2-week trailing-stop reference.
 // Excluding today makes the live trigger identical to the backtest (prior-bars-only).
-async function priorBands(db, tickers) {
+async function priorBands(db, tickers, excl) {
   const today = etDateStr();
-  const highs = {}, lows = {};
+  const highs = {}, lows = {}, lastClose = {};
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
   for (const d of docs) {
-    if (ENGINE_EXCLUDE.has(d.ticker)) continue;   // split-stale → no high/low → skipped from funnel/entry/manage
+    if (excl?.has(d.ticker)) continue;   // manual-only (IPO seasoning / split re-sync pending) → no bands → no entry/manage
     const bars = (d.daily || []).filter(b => b.date < today && +b.high > 0 && +b.low > 0)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!bars.length) continue;
@@ -96,8 +127,9 @@ async function priorBands(db, tickers) {
     // trigger ATTACK. No high → the name is skipped from the funnel until it seasons.
     if (bars.length >= LOOKBACK_52W) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
     if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
+    lastClose[d.ticker] = +bars[bars.length - 1].close;   // for the live-price sanity net
   }
-  return { highs, lows };
+  return { highs, lows, lastClose };
 }
 
 function sizeFor(nav, price, stop) {
@@ -121,7 +153,12 @@ export async function setPnthrTreeMode(db, mode) {
 export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
   const nav = await getNav(db);
-  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS)]);
+  const excl = await engineExclusions(db);
+  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
+  for (const f of applyPriceSanity(quotes, bands)) {   // un-tracked split / bad data → manual until re-synced
+    excl.set(f.ticker, `live $${f.price} vs stored $${f.lastClose} — data re-sync pending`);
+    flagSuspectSplit(db, f.ticker, `Tree state: live $${f.price} vs stored close $${f.lastClose}`).catch(() => {});
+  }
   const { highs, lows } = bands;
 
   const held = new Set();
@@ -150,7 +187,7 @@ export async function getPnthrTreeState(db) {
       funnel.push({
         ticker: t, sector: AI_META[t]?.sector, price, priorHigh: null, pctToHigh: null,
         changePct: +q.changesPercentage || 0, state: 'stalking', held: held.has(t),
-        manual: true, stop: null, shares: 0, risk: 0, posValue: 0,
+        manual: true, note: excl.get(t) || null, stop: null, shares: 0, risk: 0, posValue: 0,
       });
       continue;
     }
@@ -219,9 +256,15 @@ export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
   if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
   const nav = await getNav(db);
-  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS)]);
-  const { highs, lows } = bands;
+  const excl = await engineExclusions(db);
+  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
   const actions = [];
+  for (const f of applyPriceSanity(quotes, bands)) {   // un-tracked split / bad data → hands off until re-synced
+    excl.set(f.ticker, 'price/data mismatch');
+    actions.push({ type: 'DATA_SANITY_EXCLUDE', ticker: f.ticker, price: f.price, lastClose: f.lastClose });
+    await flagSuspectSplit(db, f.ticker, `Tree tick: live $${f.price} vs stored close $${f.lastClose}`).catch(() => {});
+  }
+  const { highs, lows } = bands;
 
   // held set + current GROSS exposure (for the 2× leverage cap)
   const held = new Set();
@@ -242,7 +285,7 @@ export async function runPnthrTreeTick(db) {
   // 1) ENTRIES — any AI-300 name at a NEW intraday 52wk high we don't already hold
   for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
-    if (ENGINE_EXCLUDE.has(t)) continue;   // split-stale candles → don't trade
+    if (excl.has(t)) continue;   // manual-only (IPO seasoning / split re-sync pending) → don't trade
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
     const priorHigh = highs[t];   // real prior 52wk high (excl today)
@@ -293,7 +336,7 @@ export async function runPnthrTreeTick(db) {
     for (const p of (snap.positions || [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
-      if (ENGINE_EXCLUDE.has(t)) continue;   // split-stale → DON'T place a stop (would be at the old scale, above market)
+      if (excl.has(t)) continue;   // split-stale / IPO → DON'T place a stop (could be at the wrong scale, above market)
       const newStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null; if (!newStop) continue;
       const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
       if (newStop > cur + 0.01) {

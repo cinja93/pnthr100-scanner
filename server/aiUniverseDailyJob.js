@@ -59,7 +59,7 @@ async function fetchWithRetry(url, retries = MAX_RETRIES) {
   return null;
 }
 
-async function fetchHistorical(ticker, fromDate, toDate) {
+export async function fetchHistorical(ticker, fromDate, toDate) {
   const url = `${FMP_BASE}/historical-price-full/${ticker}?from=${fromDate}&to=${toDate}&apikey=${FMP_API_KEY}`;
   const raw = await fetchWithRetry(url).catch(() => null);
   if (!raw) return [];
@@ -67,7 +67,7 @@ async function fetchHistorical(ticker, fromDate, toDate) {
   return [];
 }
 
-function normalizeBar(b) {
+export function normalizeBar(b) {
   return {
     date:   b.date,
     open:   parseFloat(b.open)   || 0,
@@ -80,7 +80,7 @@ function normalizeBar(b) {
 
 // Pure aggregator — daily bars (any order) → Monday-anchored weekly bars.
 // Mirrors scripts/aiUniverse/buildAiUniverseWeeklyCandles.js exactly.
-function aggregateToWeekly(dailyBars) {
+export function aggregateToWeekly(dailyBars) {
   if (!dailyBars || dailyBars.length === 0) return [];
   const sorted = [...dailyBars].sort((a, b) => a.date.localeCompare(b.date));
   const weeks  = [];
@@ -148,7 +148,7 @@ export async function runAiUniverseDailyUpdate() {
   console.log(`[AI Universe Daily] starting — ${tickers.length} tickers, target date ${today}`);
   const startTime = Date.now();
 
-  let appended = 0, alreadyCurrent = 0, missing = 0, failed = 0, weeklyRebuilt = 0;
+  let appended = 0, alreadyCurrent = 0, missing = 0, failed = 0, weeklyRebuilt = 0, suspect = 0;
   let totalBarsAdded = 0;
 
   for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
@@ -184,6 +184,25 @@ export async function runAiUniverseDailyUpdate() {
         alreadyCurrent++;
         await sleep(BATCH_DELAY);
         continue;
+      }
+
+      // SPLIT/DATA GUARD: never merge bars on a different price scale onto the
+      // stored series (post-split bars onto pre-split history — that seam would
+      // poison every consumer, incl. the PAI300 index for the night). Flag the
+      // ticker for the split re-sync machinery and skip the append; the re-sync
+      // swaps the whole series wholesale once FMP's history is adjusted.
+      const lastStoredBar = (existing?.daily || []).reduce((m, b) => (!m || b.date > m.date ? b : m), null);
+      if (lastStoredBar?.close > 0) {
+        const oldestNew = cleanNew.reduce((m, b) => (!m || b.date < m.date ? b : m), null);
+        const r = oldestNew.close / lastStoredBar.close;
+        if (r < 0.6 || r > 1.67) {
+          suspect++;
+          console.warn(`[AI Universe Daily] ${ticker}: new bar ${oldestNew.date} $${oldestNew.close} vs stored ${lastStoredBar.date} $${lastStoredBar.close} — scale mismatch, append blocked (split re-sync will repair)`);
+          const { flagSuspectSplit } = await import('./splitMaintenanceService.js');   // dynamic — avoids circular import
+          await flagSuspectSplit(db, ticker, `daily append blocked: new $${oldestNew.close} vs stored $${lastStoredBar.close}`);
+          await sleep(BATCH_DELAY);
+          continue;
+        }
       }
 
       const merged = [...cleanNew, ...(existing?.daily || [])]
@@ -249,8 +268,9 @@ export async function runAiUniverseDailyUpdate() {
     missing,
     failed,
     weeklyRebuilt,
+    suspect,
     totalBarsAdded,
   };
-  console.log(`[AI Universe Daily] done in ${elapsedSec}s — appended ${appended}, current ${alreadyCurrent}, missing ${missing}, failed ${failed}, weeklyRebuilt ${weeklyRebuilt}, +${totalBarsAdded} bars`);
+  console.log(`[AI Universe Daily] done in ${elapsedSec}s — appended ${appended}, current ${alreadyCurrent}, missing ${missing}, failed ${failed}, suspect ${suspect}, weeklyRebuilt ${weeklyRebuilt}, +${totalBarsAdded} bars`);
   return summary;
 }

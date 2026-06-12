@@ -33,6 +33,7 @@ import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, refreshDeactivatedTickers } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
+import { runSplitMaintenance } from './splitMaintenanceService.js';
 import { runAiUniverseHealthCheck, loadDeactivatedTickers } from './aiUniverseHealthJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalanceWeightsNow, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
@@ -2352,6 +2353,18 @@ app.post('/api/admin/run-pnthr-ai-300', authenticateJWT, requireAdmin, async (re
     res.json({ ok: true, message: 'PNTHR AI 300 rebuild started — check server logs.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Stock-split tracking: manual trigger for the calendar refresh + candle
+// re-sync pass (also runs automatically at the top of the 4:15pm pipeline).
+app.post('/api/admin/run-split-maintenance', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const result = await runSplitMaintenance();
+    res.json(result);
+  } catch (err) {
+    console.error('[splitMaintenance] Error:', err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -6482,6 +6495,14 @@ cron.schedule('15 16 * * 1-5', async () => {
   if (aiUniverseDailyRunning) return;
   aiUniverseDailyRunning = true;
   try {
+    // Splits FIRST: refresh FMP's split calendar + re-sync any pending split's
+    // candles BEFORE the daily append runs, so adjusted history lands wholesale
+    // and the appender never stitches mixed-scale bars (see splitMaintenanceService).
+    try {
+      console.log('[Splits] calendar refresh + pending re-sync check...');
+      const sm = await runSplitMaintenance();
+      console.log(`[Splits] done: ${JSON.stringify(sm)}`);
+    } catch (e) { console.error('[CRON] Split maintenance failed:', e.message); }
     try {
       console.log('[AI Universe Daily] starting cron...');
       await runAiUniverseDailyUpdate();

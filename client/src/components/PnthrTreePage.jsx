@@ -43,7 +43,7 @@ function DevourCard({ p, onClick }) {
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
   const prot = p.protected;
   return (
-    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#121212', border: `1px solid ${prot ? '#3b82f6' : '#2a2a2a'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
+    <div onClick={onClick} title="Click for daily + weekly charts" style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>

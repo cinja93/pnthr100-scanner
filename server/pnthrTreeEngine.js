@@ -25,6 +25,7 @@ const VITALITY_PCT   = 0.02;   // risk budget per name
 const TICKER_CAP_PCT = 0.10;   // max position value per name
 const APPROACH_PCT   = 0.01;   // within 1% of the 52wk high → "approaching" (flashing)
 const STOP_LOOKBACK  = 10;     // 2 trading weeks
+const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes today)
 const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
                                // WITHOUT this the per-name 2%/10% sizing piles to 4-10× in a broad rally
                                // (backtest: 72%+ drawdown). 2× cap → ~106% CAGR / 55% DD (daily-stop, hypothetical).
@@ -59,15 +60,25 @@ async function fetchQuotes(tickers) {
   return map;
 }
 
-// 2-week lowest-low per ticker (the trailing stop reference), from the daily backtest candles.
-async function twoWeekLows(db, tickers) {
-  const out = {};
+// Prior-bar bands from the daily backtest candles, EXCLUDING today's forming bar:
+//   highs[t] = max high of the prior ≤252 bars  → the real 52-week high to break (the
+//              ATTACK trigger). NOT FMP's `yearHigh` field — that already absorbs today's
+//              intraday move, so a fresh breakout never registers (it stays "approaching").
+//   lows[t]  = min low of the prior ≤10 bars    → the 2-week trailing-stop reference.
+// Excluding today makes the live trigger identical to the backtest (prior-bars-only).
+async function priorBands(db, tickers) {
+  const today = etDateStr();
+  const highs = {}, lows = {};
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
   for (const d of docs) {
-    const bars = (d.daily || []).filter(b => +b.low > 0).sort((a, b) => a.date.localeCompare(b.date)).slice(-STOP_LOOKBACK);
-    if (bars.length) out[d.ticker] = Math.min(...bars.map(b => +b.low));
+    const bars = (d.daily || []).filter(b => b.date < today && +b.high > 0 && +b.low > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!bars.length) continue;
+    const hi = bars.slice(-LOOKBACK_52W), lo = bars.slice(-STOP_LOOKBACK);
+    if (hi.length) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
+    if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
   }
-  return out;
+  return { highs, lows };
 }
 
 function sizeFor(nav, price, stop) {
@@ -91,7 +102,8 @@ export async function setPnthrTreeMode(db, mode) {
 export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
   const nav = await getNav(db);
-  const [quotes, lows] = await Promise.all([fetchQuotes(AI_TICKERS), twoWeekLows(db, AI_TICKERS)]);
+  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS)]);
+  const { highs, lows } = bands;
 
   const held = new Set();
   let positions = [];
@@ -108,16 +120,17 @@ export async function getPnthrTreeState(db) {
   const funnel = [];
   for (const t of AI_TICKERS) {
     const q = quotes[t]; if (!q) continue;
-    const price = +q.price, dayHigh = +q.dayHigh, yearHigh = +q.yearHigh;
-    if (!(price > 0) || !(yearHigh > 0)) continue;
+    const price = +q.price, dayHigh = +q.dayHigh || +q.price;
+    const priorHigh = highs[t];   // real prior 52wk high (excl today) — see priorBands
+    if (!(price > 0) || !(priorHigh > 0)) continue;
     let state = 'stalking';
-    if (dayHigh >= yearHigh) state = 'attack';
-    else if (price >= yearHigh * (1 - APPROACH_PCT)) state = 'approaching';
+    if (dayHigh >= priorHigh + 0.01) state = 'attack';                 // broke the prior 52wk high today
+    else if (price >= priorHigh * (1 - APPROACH_PCT)) state = 'approaching';
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const sz = stop ? sizeFor(nav, price, stop) : { shares: 0, rps: 0, risk: 0 };
     funnel.push({
-      ticker: t, sector: AI_META[t]?.sector, price, yearHigh,
-      pctToHigh: +(((yearHigh - price) / yearHigh) * 100).toFixed(2),
+      ticker: t, sector: AI_META[t]?.sector, price, priorHigh,
+      pctToHigh: +(((priorHigh - price) / priorHigh) * 100).toFixed(2),
       changePct: +q.changesPercentage || 0, state, held: held.has(t),
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
     });
@@ -146,7 +159,8 @@ export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
   if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
   const nav = await getNav(db);
-  const [quotes, lows] = await Promise.all([fetchQuotes(AI_TICKERS), twoWeekLows(db, AI_TICKERS)]);
+  const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS)]);
+  const { highs, lows } = bands;
   const actions = [];
 
   // held set + current GROSS exposure (for the 2× leverage cap)
@@ -169,8 +183,9 @@ export async function runPnthrTreeTick(db) {
   for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
     const q = quotes[t]; if (!q) continue;
-    const price = +q.price, dayHigh = +q.dayHigh, yearHigh = +q.yearHigh;
-    if (!(price > 0) || !(yearHigh > 0) || dayHigh < yearHigh) continue;   // not a new high
+    const price = +q.price, dayHigh = +q.dayHigh || +q.price;
+    const priorHigh = highs[t];   // real prior 52wk high (excl today)
+    if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 52wk high
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const { shares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
     if (!stop || shares < 1) continue;

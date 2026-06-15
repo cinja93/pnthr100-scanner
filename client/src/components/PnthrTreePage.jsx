@@ -17,7 +17,7 @@ const fmt = (n) => '$' + Math.round(n).toLocaleString();
 //   YELLOW — last price within 0.05% of break-even (avg cost) → the trade is sitting at scratch.
 // Red wins when both apply (the stop is the action trigger). Tweak the bands here.
 const NEAR_STOP_PCT = 0.01;     // 1.0% of the stop
-const NEAR_BE_PCT   = 0.0005;   // 0.05% of break-even (very tight — see note in the chat)
+const NEAR_BE_PCT   = 0.005;    // 0.5% of break-even (Scott widened from 0.05% so yellow catches a fading winner)
 
 // Collapsible section wrapper (remembers open/closed per panel in localStorage).
 function Collapsible({ title, storageKey, children }) {

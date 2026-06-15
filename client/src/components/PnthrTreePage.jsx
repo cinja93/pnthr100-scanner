@@ -410,8 +410,23 @@ export default function PnthrTreePage() {
         </div>
       )}
 
-      {/* DEVOUR — held, trailing stop still below entry (capital at risk) */}
+      {/* PROTECT — trailing stop has reached/passed entry → worst case is a locked profit. Shown FIRST. */}
       <div style={{ marginTop: 20 }}>
+        <h3 style={{ color: '#60a5fa', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
+        {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{protectedPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(protectedPos.map(x => x.ticker), p.ticker)} />)}</div>}
+      </div>
+
+      {/* RECENTLY STOPPED — stop hit in the last 24h; stays red so it can't be missed (sits with PROTECT) */}
+      {recentStops.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <h3 style={{ color: '#ef4444', fontSize: 13, letterSpacing: '0.08em' }}>🛑 RECENTLY STOPPED — LAST 24H ({recentStops.length})</h3>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{recentStops.map((s, i) => <StoppedCard key={i} s={s} onClick={() => openChart([s.ticker], s.ticker)} />)}</div>
+        </div>
+      )}
+
+      {/* DEVOUR — held, trailing stop still below entry (capital at risk). Shown after PROTECT. */}
+      <div style={{ marginTop: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid #1c3a28', paddingBottom: 6, marginBottom: 10 }}>
           <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0 }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
           <div style={{ display: 'flex', gap: 20, fontSize: 12, fontFamily: 'monospace' }}>
@@ -422,21 +437,6 @@ export default function PnthrTreePage() {
         {devourPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No positions with open risk.</div> :
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{devourPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(devourPos.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>
-
-      {/* PROTECT — trailing stop has reached/passed entry → worst case is a locked profit */}
-      <div style={{ marginTop: 18 }}>
-        <h3 style={{ color: '#60a5fa', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
-        {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{protectedPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(protectedPos.map(x => x.ticker), p.ticker)} />)}</div>}
-      </div>
-
-      {/* RECENTLY STOPPED — stop hit in the last 24h; stays red so it can't be missed */}
-      {recentStops.length > 0 && (
-        <div style={{ marginTop: 18 }}>
-          <h3 style={{ color: '#ef4444', fontSize: 13, letterSpacing: '0.08em' }}>🛑 RECENTLY STOPPED — LAST 24H ({recentStops.length})</h3>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{recentStops.map((s, i) => <StoppedCard key={i} s={s} onClick={() => openChart([s.ticker], s.ticker)} />)}</div>
-        </div>
-      )}
 
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>

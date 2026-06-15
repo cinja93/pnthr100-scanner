@@ -149,11 +149,38 @@ export async function setPnthrTreeMode(db, mode) {
   return { mode };
 }
 
+// ── One-time migration to the live-mirror paper model ───────────────────────
+// Clears the OLD disconnected sim book (which replaced your real account in the
+// view) and reseeds "seen" with yesterday's date for your current real holdings, so
+// adopting them doesn't make everything flash NEW on day one. Runs EXACTLY once
+// (guarded by cfg.mirrorMigrated) and only exists in this NEW code — so Render's
+// redeploy timing is irrelevant and the old engine can never refill the sim book.
+async function ensureMirrorMigration(db, cfg, excl) {
+  if (cfg.mirrorMigrated) return false;
+  await db.collection(POS).deleteMany({ mode: 'paper' });
+  await db.collection(TRADES).deleteMany({ mode: 'paper' });
+  await db.collection('pnthr_tree_seen').deleteMany({});
+  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
+  const yStr = etDateStr(yesterday);
+  for (const p of (snap.positions || [])) {
+    const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
+    if (AI_META[t] && !excl.has(t) && sh > 0) {
+      await db.collection('pnthr_tree_seen').updateOne({ ticker: t }, { $setOnInsert: { ticker: t, firstSeen: yStr, firstSeenAt: yesterday } }, { upsert: true });
+    }
+  }
+  await db.collection(CFG).updateOne({}, { $set: { mirrorMigrated: true, mirrorMigratedAt: new Date() } }, { upsert: true });
+  cfg.mirrorMigrated = true;
+  console.log('[Tree] live-mirror migration: sim book cleared, "seen" reseeded for current holdings.');
+  return true;
+}
+
 // ── Live snapshot the page polls: funnel + sizing/stops + positions ──────────
 export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
   const nav = await getNav(db);
   const excl = await engineExclusions(db);
+  await ensureMirrorMigration(db, cfg, excl);
   const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
   for (const f of applyPriceSanity(quotes, bands)) {   // un-tracked split / bad data → manual until re-synced
     excl.set(f.ticker, `live $${f.price} vs stored $${f.lastClose} — data re-sync pending`);
@@ -161,17 +188,27 @@ export async function getPnthrTreeState(db) {
   }
   const { highs, lows } = bands;
 
-  const held = new Set();
-  let positions = [];
-  if (cfg.mode === 'live') {
-    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
-    positions = (snap.positions || [])
-      .filter(p => { const t = (p.ticker || p.symbol || '').toUpperCase(); return AI_META[t] && (p.position ?? p.shares) > 0; })
-      .map(p => ({ ticker: (p.ticker || p.symbol).toUpperCase(), shares: p.position ?? p.shares, avgCost: p.avgCost ?? p.avgPrice, live: true }));
-  } else {
-    positions = await db.collection(POS).find({ status: 'ACTIVE' }).toArray();
+  // ── Displayed book = your REAL IBKR account (adopted) + (paper only) the engine's
+  //    SIMULATED would-buys, so paper mimics live automation exactly. The ONLY thing
+  //    live does that paper doesn't is actually send the orders to the broker. ───────
+  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const realRaw = [];
+  for (const p of (snap.positions || [])) {
+    const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
+    if (sh > 0) realRaw.push({ ticker: t, shares: sh, avgCost: p.avgCost ?? p.avgPrice, real: true });
   }
-  positions.forEach(p => held.add(p.ticker));
+  const realHeld = new Set(realRaw.map(p => p.ticker));
+  let simRaw = [];
+  if (cfg.mode === 'paper') {
+    simRaw = (await db.collection(POS).find({ status: 'ACTIVE' }).toArray())
+      .filter(p => !realHeld.has(p.ticker))     // your real account always takes precedence
+      .map(p => ({ ticker: p.ticker, shares: p.totalShares || p.shares, avgCost: p.avgCost || p.entryPrice, entryPrice: p.entryPrice, sim: true }));
+  }
+  // off-strategy = a held name Tree never trades (ENGINE_EXCLUDE like SPCX, or non-AI-300)
+  const offStrategy = (t) => excl.has(t) || !AI_META[t];
+  let positions = [], manualTrades = [];
+  for (const p of [...realRaw, ...simRaw]) (offStrategy(p.ticker) ? manualTrades : positions).push(p);
+  const held = new Set([...realRaw, ...simRaw].map(p => p.ticker));   // everything displayed is "held" for the funnel
 
   const funnel = [];
   for (const t of AI_TICKERS) {
@@ -205,52 +242,62 @@ export async function getPnthrTreeState(db) {
   }
   funnel.sort((a, b) => (a.pctToHigh ?? Infinity) - (b.pctToHigh ?? Infinity));   // closest to a new high first; manual (no high) last
 
-  // enrich positions with the live stop + P&L
-  for (const p of positions) {
-    const q = quotes[p.ticker]; const last = q ? +q.price : p.avgCost;
-    p.last = last; p.stop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : (p.stop || null);
-    p.pnl = +(((last - (p.avgCost || p.entryPrice)) * (p.shares || p.totalShares || 0))).toFixed(0);
-    p.pnlPct = +((last / (p.avgCost || p.entryPrice) - 1) * 100).toFixed(1);
-    // PROTECT = the trailing stop has climbed to/above entry → worst case is now a
-    // locked-in profit (Ambush's PROTECT, long-only: stop >= avgCost).
-    p.protected = p.stop != null && p.stop >= (p.avgCost || p.entryPrice);
-    p.company = AI_META[p.ticker]?.name || null;     // shown under the ticker on Devour cards
-    p.sector  = AI_META[p.ticker]?.sector || null;   // one of the 16 AI-300 sectors
-  }
+  // enrich each card with live price, the engine's 2-week-low stop, and P&L. Real
+  // positions carry your ACTUAL avg cost (so P&L mirrors your account); sim would-buys
+  // carry the simulated entry. Applies to both the strategy book and the manual box.
+  const enrich = (p) => {
+    const q = quotes[p.ticker]; const basis = p.avgCost || p.entryPrice || 0;
+    const last = q ? +q.price : (basis || 0);
+    p.last = last;
+    p.stop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : (p.stop || null);
+    p.pnl = +(((last - basis) * (p.shares || p.totalShares || 0))).toFixed(0);
+    p.pnlPct = basis ? +((last / basis - 1) * 100).toFixed(1) : 0;
+    // PROTECT = trailing stop has climbed to/above entry → worst case is a locked profit.
+    p.protected = p.stop != null && basis > 0 && p.stop >= basis;
+    p.company = AI_META[p.ticker]?.name || null;
+    p.sector  = AI_META[p.ticker]?.sector || null;
+  };
+  positions.forEach(enrich);
+  manualTrades.forEach(enrich);
 
-  // Flag positions that are NEW to Devour TODAY (so the UI can flash them until the
-  // ET date rolls over). Tracks the first date each held ticker appears — covers both
-  // Tree auto-entries and Scott's manual buys; a re-entry after an exit flashes again.
+  // ── NEW-today flash + "Early" latch ─────────────────────────────────────────
+  // Early = a strategy position you bought BEFORE the engine's signal (it has not yet
+  // made a new 52-week high while you've held it). The moment it does ("the strategy
+  // DID recommend it"), the latch flips and Early drops PERMANENTLY for this holding.
+  // Engine sim-buys are recommended by definition → never Early. Resets on exit.
   const seenToday = etDateStr();
+  const heldNow = new Set([...positions, ...manualTrades].map(p => p.ticker));
   try {
     const seenDocs = await db.collection('pnthr_tree_seen').find({}).toArray();
-    const seen = {}, seenAt = {};
+    const seen = {}, seenAt = {}, grad = {};
     for (const d of seenDocs) {
       seen[d.ticker] = d.firstSeen;
-      // precise add-time for ordering: firstSeenAt if present, else the doc's _id timestamp
-      seenAt[d.ticker] = d.firstSeenAt ? new Date(d.firstSeenAt).getTime()
-        : (d._id?.getTimestamp ? d._id.getTimestamp().getTime() : 0);
+      seenAt[d.ticker] = d.firstSeenAt ? new Date(d.firstSeenAt).getTime() : (d._id?.getTimestamp ? d._id.getTimestamp().getTime() : 0);
+      grad[d.ticker] = !!d.graduatedAt;
     }
-    const heldNow = new Set(positions.map(p => p.ticker));
-    for (const p of positions) if (!seen[p.ticker]) {
+    const attackNow = (t) => { const q = quotes[t]; const dh = q ? (+q.dayHigh || +q.price) : 0; return highs[t] > 0 && dh >= highs[t] + 0.01; };
+    for (const p of positions) {
       const now = new Date();
-      await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $setOnInsert: { ticker: p.ticker, firstSeen: seenToday, firstSeenAt: now } }, { upsert: true });
-      seen[p.ticker] = seenToday; seenAt[p.ticker] = now.getTime();
+      if (!seen[p.ticker]) {
+        await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $setOnInsert: { ticker: p.ticker, firstSeen: seenToday, firstSeenAt: now } }, { upsert: true });
+        seen[p.ticker] = seenToday; seenAt[p.ticker] = now.getTime();
+      }
+      if (!grad[p.ticker] && (p.sim || attackNow(p.ticker))) {     // engine recommended it → latch graduated
+        await db.collection('pnthr_tree_seen').updateOne({ ticker: p.ticker }, { $set: { graduatedAt: now } });
+        grad[p.ticker] = true;
+      }
+      p.early = !p.sim && !grad[p.ticker];
     }
     const gone = seenDocs.filter(d => !heldNow.has(d.ticker)).map(d => d.ticker);
     if (gone.length) await db.collection('pnthr_tree_seen').deleteMany({ ticker: { $in: gone } });
     positions.forEach(p => { p.newToday = seen[p.ticker] === seenToday; p.seenAt = seenAt[p.ticker] || 0; });
-    // Devour list = sequential order added to Devour (oldest first, newest at the bottom)
     positions.sort((a, b) => (a.seenAt ?? Infinity) - (b.seenAt ?? Infinity));
-  } catch { positions.forEach(p => { p.newToday = false; }); }
+  } catch { positions.forEach(p => { p.newToday = false; p.early = false; }); }
 
   // ── Recently stopped (last 24h) — red cards that stay visible after a stop hit ─
-  // Aggregated per ticker (partial fills collapse to one card); only TRUE stop hits
-  // get a card, and a name that was stopped then re-entered (now held) drops off.
   let recentStops = [];
   try {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
-    const heldTickers = new Set(positions.map(p => p.ticker));
     const exitDocs = await db.collection('pnthr_tree_exits').find({ recordedAt: { $gte: since } }).toArray();
     const byT = {};
     for (const x of exitDocs) {
@@ -261,15 +308,16 @@ export async function getPnthrTreeState(db) {
       if (new Date(x.recordedAt) > new Date(a.recordedAt)) a.recordedAt = x.recordedAt;
     }
     recentStops = Object.values(byT)
-      .filter(a => a.stopHit && !heldTickers.has(a.ticker))
+      .filter(a => a.stopHit && !heldNow.has(a.ticker))
       .map(a => ({ ticker: a.ticker, shares: a.shares, exitPrice: a.shares ? +(a.gross / a.shares).toFixed(2) : null, stop: a.stop, avgCost: a.avgCost, pnl: a.pnl, company: a.company, sector: a.sector, stoppedAt: a.recordedAt }))
       .sort((a, b) => new Date(b.stoppedAt) - new Date(a.stoppedAt));
   } catch { recentStops = []; }
 
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
-  const grossUsed = positions.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
+  const allBook = [...positions, ...manualTrades];   // leverage counts the whole displayed book
+  const grossUsed = allBook.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
   return {
-    mode: cfg.mode, nav, funnel, positions, counts, recentStops,
+    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
     updatedAt: new Date().toISOString(),
   };
@@ -318,7 +366,7 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
           execId: e.execId, ticker: t, exitPrice, shares: sharesSold, avgCost, stop, stopHit,
           pnl: (avgCost != null && exitPrice > 0) ? +((exitPrice - avgCost) * sharesSold).toFixed(0) : null,
           company: AI_META[t]?.name || null, sector: AI_META[t]?.sector || null,
-          mode: 'live', execTime: e.time || null, recordedAt: new Date(),
+          mode: cfg.mode, execTime: e.time || null, recordedAt: new Date(),
         } },
       { upsert: true },
     );
@@ -337,6 +385,7 @@ export async function runPnthrTreeTick(db) {
   if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
   const nav = await getNav(db);
   const excl = await engineExclusions(db);
+  await ensureMirrorMigration(db, cfg, excl);   // one-time: switch to the live-mirror model
   const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
   const actions = [];
   for (const f of applyPriceSanity(quotes, bands)) {   // un-tracked split / bad data → hands off until re-synced
@@ -346,17 +395,19 @@ export async function runPnthrTreeTick(db) {
   }
   const { highs, lows } = bands;
 
-  // held set + current GROSS exposure (for the 2× leverage cap)
+  // held set + current GROSS exposure (for the 2× leverage cap). Read your REAL account
+  // ONCE (adopted in BOTH modes). In paper, ALSO count the engine's simulated would-buys
+  // so it never double-buys a name you already hold, real or simulated.
+  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
   const held = new Set();
   let gross = 0;
-  if (cfg.mode === 'live') {
-    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
-    for (const p of (snap.positions || [])) {
-      const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
-      if (sh !== 0) { held.add(t); gross += Math.abs(sh) * (+quotes[t]?.price || p.avgCost || p.avgPrice || 0); }
-    }
-  } else {
+  for (const p of (snap.positions || [])) {
+    const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
+    if (sh !== 0) { held.add(t); gross += Math.abs(sh) * (+quotes[t]?.price || p.avgCost || p.avgPrice || 0); }
+  }
+  if (cfg.mode === 'paper') {
     for (const p of await db.collection(POS).find({ status: 'ACTIVE' }).toArray()) {
+      if (held.has(p.ticker)) continue;     // your real account takes precedence
       held.add(p.ticker); gross += (p.totalShares || p.shares || 0) * (+quotes[p.ticker]?.price || p.entryPrice || p.avgCost || 0);
     }
   }
@@ -415,9 +466,10 @@ export async function runPnthrTreeTick(db) {
       }
     }
   }
-  // LIVE manage: trail each held position's stop UP to its current 2-week low (broker-resting stop fires the exit)
+  // LIVE manage: trail each held position's stop UP to its current 2-week low (broker-resting
+  // stop fires the exit). LIVE ONLY — in paper the page just DISPLAYS the intended stop; the
+  // engine never modifies your real broker stops until you go live.
   if (cfg.mode === 'live') {
-    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
     for (const p of (snap.positions || [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
@@ -429,10 +481,12 @@ export async function runPnthrTreeTick(db) {
         actions.push({ type: 'LIVE_TRAIL', ticker: t, newStop, from: cur });
       }
     }
-    // Record any stop-outs so they stay on the page as red cards for 24h (enqueues nothing).
-    try { const n = await captureTreeStopOuts(db, cfg, snap, lows, excl); if (n) actions.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
-    catch (e) { console.error('[Tree] stop-out capture failed:', e.message); }
   }
+  // Stop-out capture (exec-driven, reads your real SELL fills) — runs in BOTH paper and live
+  // so a real stop-out shows as a red "recently stopped" card either way. Enqueues NOTHING;
+  // in paper this is the only thing that touches the real account, and it is read-only.
+  try { const n = await captureTreeStopOuts(db, cfg, snap, lows, excl); if (n) actions.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
+  catch (e) { console.error('[Tree] stop-out capture failed:', e.message); }
 
   await db.collection(CFG).updateOne({}, { $set: { lastTick: new Date(), lastActions: actions.slice(0, 50) } }, { upsert: true });
   return { mode: cfg.mode, actions };
@@ -567,18 +621,10 @@ export async function recordTreeDailyLog(db) {
   const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
   const nav = await getNav(db);
 
-  // Tree book right now = strategy names (paper book in paper mode; engine-managed
-  // AI-300 IBKR longs in live mode). Excluded names (SPCX) are never strategy.
-  const book = new Set();
-  if (cfg.mode === 'live') {
-    for (const p of (snap.positions || [])) {
-      const t = (p.ticker || p.symbol || '').toUpperCase();
-      if (AI_META[t] && !excl.has(t) && (p.position ?? p.shares) > 0) book.add(t);
-    }
-  } else {
-    for (const p of await db.collection(POS).find({ status: 'ACTIVE' }).toArray()) book.add(p.ticker);
-  }
-  const isStrategy = (t) => book.has(t) && !!AI_META[t] && !excl.has(t);
+  // Strategy = an AI-300 name Tree actually trades. ENGINE_EXCLUDE names (SPCX) and any
+  // non-AI-300 holding are "manual / off-strategy". Mode-agnostic, so the log matches the
+  // page's Manual-Trades classification in both paper and live.
+  const isStrategy = (t) => !!AI_META[t] && !excl.has(t);
 
   // Open positions — IBKR's own marks and unrealized P&L, plus the resting stop.
   const stops = {};

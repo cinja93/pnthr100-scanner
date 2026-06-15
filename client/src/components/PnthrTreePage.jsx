@@ -159,7 +159,7 @@ function Badge({ f, onClick }) {
   );
 }
 
-function DevourCard({ p, onClick }) {
+function DevourCard({ p, onClick, offStrategy }) {
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   const shares = p.shares || p.totalShares;
   const last = p.last ?? (p.avgCost || p.entryPrice);
@@ -168,23 +168,25 @@ function DevourCard({ p, onClick }) {
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
   const prot = p.protected;
 
-  // Exit-proximity warning state. RED = at/within 1% of the stop (about to exit);
-  // YELLOW = within 0.05% of break-even (trade at scratch). Red wins if both fire.
-  const nearStop = (p.stop > 0 && last != null) ? last <= p.stop * (1 + NEAR_STOP_PCT) : false;
-  const nearBreakeven = (avg > 0 && last != null) ? Math.abs(last - avg) / avg <= NEAR_BE_PCT : false;
+  // Exit-proximity warning (strategy positions only — off-strategy names have no engine
+  // stop). RED = at/within 1% of the stop; YELLOW = within 0.05% of break-even.
+  const nearStop = (!offStrategy && p.stop > 0 && last != null) ? last <= p.stop * (1 + NEAR_STOP_PCT) : false;
+  const nearBreakeven = (!offStrategy && avg > 0 && last != null) ? Math.abs(last - avg) / avg <= NEAR_BE_PCT : false;
   const warn = nearStop ? 'stop' : (nearBreakeven ? 'be' : null);
 
-  const borderColor = warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#3b82f6' : '#22c55e');
-  const bgColor     = warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#0d1626' : '#0e1a12');
-  const flashAnim   = warn === 'stop' ? 'treestopflash 0.85s ease-in-out infinite'
+  const borderColor = offStrategy ? '#b45309' : warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#3b82f6' : '#22c55e');
+  const bgColor     = offStrategy ? '#1a1304' : warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#0d1626' : '#0e1a12');
+  const flashAnim   = offStrategy ? undefined
+                    : warn === 'stop' ? 'treestopflash 0.85s ease-in-out infinite'
                     : warn === 'be'   ? 'treebeflash 1.1s ease-in-out infinite'
                     : (p.newToday ? 'treecardflash 1.1s ease-in-out infinite' : undefined);
   return (
-    <div onClick={onClick} className="tree-pulse" title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(flashAnim ? { animation: flashAnim } : {}) }}>
+    <div onClick={onClick} className="tree-pulse" title={offStrategy ? 'Off strategy — Tree does not trade this; you manage it. Click for charts.' : (p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts')} style={{ cursor: 'pointer', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(flashAnim ? { animation: flashAnim } : {}) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
-          <span style={{ color: prot ? '#60a5fa' : '#22c55e', fontSize: 11 }}>{prot ? '🛡️ LOCKED' : 'LONG'}</span>
+          <span style={{ background: offStrategy ? '#7c4a03' : '#16a34a', border: `1px solid ${offStrategy ? '#f59e0b' : '#22c55e'}`, color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
+          <span style={{ color: offStrategy ? '#f59e0b' : (prot ? '#60a5fa' : '#22c55e'), fontSize: 11 }}>{offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
+          {p.early && !offStrategy && <span title="You bought this before the engine's signal (a new 52-week high). The tag clears the moment the strategy triggers the buy." style={{ background: '#f59e0b', color: '#1a1200', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>EARLY</span>}
           {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
           {warn === 'stop' && <span title={`Within ${(NEAR_STOP_PCT * 100).toFixed(0)}% of the stop ($${p.stop?.toFixed(2)}) — exit imminent`} style={{ background: '#ef4444', color: '#1a0000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>⚠ NEAR STOP</span>}
           {warn === 'be' && <span title={`Within ${(NEAR_BE_PCT * 100).toFixed(2)}% of break-even ($${avg?.toFixed(2)}) — trade at scratch`} style={{ background: '#facc15', color: '#1a1500', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>≈ BREAK-EVEN</span>}
@@ -320,6 +322,7 @@ export default function PnthrTreePage() {
   const protectedPos = positions.filter(p => p.protected);
   const devourPos = positions.filter(p => !p.protected);
   const recentStops = data?.recentStops || [];
+  const manualTrades = data?.manualTrades || [];
   // Devour roll-up: total open P&L, and total $ at risk if every stop fired (current price → stop).
   const devourPnl = devourPos.reduce((a, p) => a + (p.pnl || 0), 0);
   const devourRisk = devourPos.reduce((a, p) => {
@@ -422,6 +425,15 @@ export default function PnthrTreePage() {
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
           <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} />)}</div>}
       </div>
+
+      {/* MANUAL TRADES — positions you hold that Tree never trades (SPCX, non-AI-300) */}
+      {manualTrades.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <h3 style={{ color: '#f59e0b', fontSize: 13, letterSpacing: '0.08em' }}>✋ MANUAL TRADES — OFF STRATEGY ({manualTrades.length})</h3>
+          <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>You hold these; the engine doesn't manage them (excluded names like SPCX, or anything outside the AI-300). P&amp;L is your real P&amp;L.</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{manualTrades.map((p, i) => <DevourCard key={i} p={p} offStrategy onClick={() => openChart(manualTrades.map(x => x.ticker), p.ticker)} />)}</div>
+        </div>
+      )}
 
       {/* APPROACHING — flashing */}
       <div style={{ marginTop: 18 }}>

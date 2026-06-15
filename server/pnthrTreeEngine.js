@@ -653,9 +653,18 @@ export async function recordTreeDailyLog(db) {
   const nav = await getNav(db);
 
   // Strategy = an AI-300 name Tree actually trades. ENGINE_EXCLUDE names (SPCX) and any
-  // non-AI-300 holding are "manual / off-strategy". Mode-agnostic, so the log matches the
-  // page's Manual-Trades classification in both paper and live.
+  // non-AI-300 holding are "manual / off-strategy". Mode-agnostic.
   const isStrategy = (t) => !!AI_META[t] && !excl.has(t);
+  // Pull the page's OWN strategy / early / manual classification so the log matches it to
+  // the letter. EARLY = a strategy name you bought before the engine's signal (held, not yet
+  // at a new 52wk high). Falls back to strategy/manual for any ticker no longer in the book.
+  const catByTicker = {};
+  try {
+    const st = await getPnthrTreeState(db);
+    for (const p of (st.manualTrades || [])) catByTicker[p.ticker] = 'manual';
+    for (const p of (st.positions || [])) catByTicker[p.ticker] = p.early ? 'early' : 'strategy';
+  } catch { /* fall back below */ }
+  const categoryOf = (t) => catByTicker[t] || (isStrategy(t) ? 'strategy' : 'manual');
 
   // Open positions — IBKR's own marks and unrealized P&L, plus the resting stop.
   const stops = {};
@@ -673,7 +682,7 @@ export async function recordTreeDailyLog(db) {
       value: +(+p.marketValue || sh * last).toFixed(0),
       pnl: +(+p.unrealizedPNL || 0).toFixed(0),
       pnlPct: p.avgCost > 0 ? +((last / p.avgCost - 1) * 100).toFixed(1) : null,
-      stop: stops[t] || null, strategy: isStrategy(t),
+      stop: stops[t] || null, strategy: isStrategy(t), category: categoryOf(t),
     };
   });
   const openPnl = +positions.reduce((a, p) => a + (p.pnl || 0), 0).toFixed(0);
@@ -689,7 +698,7 @@ export async function recordTreeDailyLog(db) {
       return {
         time: e.time || null, ticker: t, side: e.side === 'SLD' ? 'SELL' : 'BUY',
         shares: +e.shares, price: +(+e.price).toFixed(2), value: +(e.shares * e.price).toFixed(0),
-        execId: e.execId || null, strategy: isStrategy(t),
+        execId: e.execId || null, strategy: isStrategy(t), category: categoryOf(t),
       };
     });
 
@@ -697,6 +706,8 @@ export async function recordTreeDailyLog(db) {
     date, recordedAt: new Date(), mode: cfg.mode, nav, openPnl,
     positionsCount: positions.length, positions,
     trades, tradesCount: trades.length,
+    earlyTickers: [...new Set(trades.filter(x => x.category === 'early').map(x => x.ticker))],
+    manualTickers: [...new Set(trades.filter(x => x.category === 'manual').map(x => x.ticker))],
     nonStrategyTickers: [...new Set(trades.filter(x => !x.strategy).map(x => x.ticker))],
     ibkrSyncedAt: snap.syncedAt || null, execSyncedAt: snap.latestExecSyncedAt || null,
   };

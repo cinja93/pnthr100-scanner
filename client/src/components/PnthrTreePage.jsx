@@ -81,19 +81,26 @@ function TreeDailyLogModal({ days, onClose, onRecordNow, busy }) {
         <div style={{ color: '#666', fontSize: 11, margin: '4px 0 14px' }}>Recorded automatically at 4:35pm ET each trading day from the IBKR snapshot — positions, P&amp;L, and every execution, exactly as IBKR reports them.</div>
         {(!days || days.length === 0) && <div style={{ color: '#888', fontSize: 13 }}>No days recorded yet — the first record lands at 4:35pm ET, or click "Record now".</div>}
         {(days || []).map(d => {
-          const strat = (d.trades || []).filter(t => t.strategy);
-          const manual = (d.trades || []).filter(t => !t.strategy);
+          const catOf = (x) => x.category || (x.strategy ? 'strategy' : 'manual');   // old records predate `category`
+          const strat = (d.trades || []).filter(t => catOf(t) === 'strategy');
+          const early = (d.trades || []).filter(t => catOf(t) === 'early');
+          const manual = (d.trades || []).filter(t => catOf(t) === 'manual');
+          const extra = [early.length && `${early.length} early`, manual.length && `${manual.length} manual`].filter(Boolean).join(', ');
           return (
             <div key={d.date} style={{ border: '1px solid #1c3a28', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
               <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 8, fontFamily: 'monospace' }}>
                 <b style={{ color: '#e6e6e6', fontSize: 15 }}>{d.date}</b>
                 <span style={{ color: '#888', fontSize: 12 }}>NAV <b style={{ color: '#22c55e' }}>{f$(d.nav)}</b></span>
                 <span style={{ color: '#888', fontSize: 12 }}>Open P&amp;L <b style={{ color: d.openPnl >= 0 ? '#22c55e' : '#ef4444' }}>{d.openPnl >= 0 ? '+' : ''}{f$(d.openPnl)}</b></span>
-                <span style={{ color: '#888', fontSize: 12 }}>{d.positionsCount} open positions · {d.tradesCount} trades{manual.length ? ` (${manual.length} manual)` : ''}</span>
+                <span style={{ color: '#888', fontSize: 12 }}>{d.positionsCount} open positions · {d.tradesCount} trades{extra ? ` (${extra})` : ''}</span>
               </div>
               {strat.length > 0 && <>
                 <div style={{ color: '#7fcf9f', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Strategy trades (PNTHR Tree book)</div>
                 {tradeTable(strat, '#22c55e')}
+              </>}
+              {early.length > 0 && <>
+                <div style={{ color: '#f59e0b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>⏱ Early entries — strategy names bought ahead of the engine's signal ({[...new Set(early.map(x => x.ticker))].join(', ')})</div>
+                {tradeTable(early, '#f59e0b')}
               </>}
               {manual.length > 0 && <>
                 <div style={{ color: '#facc15', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>⚠️ Not part of the strategy — manual trades ({[...new Set(manual.map(x => x.ticker))].join(', ')})</div>
@@ -107,7 +114,7 @@ function TreeDailyLogModal({ days, onClose, onRecordNow, busy }) {
                 </tr></thead>
                 <tbody>{(d.positions || []).map((p, i) => (
                   <tr key={i} style={{ borderTop: '1px solid #1a1a1a' }}>
-                    <td style={{ ...th, textAlign: 'left' }}><b style={{ color: p.strategy ? '#22c55e' : '#facc15' }}>{p.ticker}</b>{!p.strategy && <span style={{ color: '#facc15', fontSize: 9, marginLeft: 6 }}>MANUAL</span>}</td>
+                    <td style={{ ...th, textAlign: 'left' }}>{(() => { const c = p.category || (p.strategy ? 'strategy' : 'manual'); const col = c === 'strategy' ? '#22c55e' : c === 'early' ? '#f59e0b' : '#facc15'; return <><b style={{ color: col }}>{p.ticker}</b>{c === 'early' && <span style={{ color: '#f59e0b', fontSize: 9, marginLeft: 6 }}>EARLY</span>}{c === 'manual' && <span style={{ color: '#facc15', fontSize: 9, marginLeft: 6 }}>MANUAL</span>}</>; })()}</td>
                     <td style={{ ...th, color: '#e6e6e6' }}>{p.shares}</td>
                     <td style={{ ...th, color: '#ccc' }}>${p.avgCost?.toFixed(2)}</td>
                     <td style={{ ...th, color: '#e6e6e6' }}>${p.last?.toFixed(2)}</td>

@@ -377,6 +377,7 @@ export default function PnthrTreePage() {
       <div style={{ display: 'flex', gap: 18, color: '#888', fontSize: 11, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {data?.counts && <span>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</span>}
         {data && <span>Leverage <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#22c55e' }}>{data.grossX ?? 0}x</b> / {data.grossCapX ?? 2}x cap</span>}
+        {data && <span>Net liq deployed <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#7fcf9f' }}>{Math.round((data.grossX || 0) * 100)}%</b> <span style={{ color: '#555' }}>(Σ % net liq)</span></span>}
         <button onClick={runSplitCheck} disabled={splitBusy}
           title="Refresh FMP's stock-split calendar + re-sync candles for any pending split (runs automatically every evening at 4:15pm ET)"
           style={{ padding: '3px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', background: 'transparent',

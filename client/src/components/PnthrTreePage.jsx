@@ -10,6 +10,15 @@ import { AumTracker, ForwardProjection } from './AmbushPage';
 const TREE_CAGR = 45.6;   // 1× no-pyramid backtest CAGR (conservative; 2× ≈ +104%). Hypothetical / survivorship-flattered.
 const fmt = (n) => '$' + Math.round(n).toLocaleString();
 
+// ── Exit-proximity warnings on held cards (Scott 2026-06-14) ────────────────
+// A "stock in play" (DEVOUR / PROTECT card) flashes to warn how close it is to
+// an exit or to going flat:
+//   RED    — last price within 1% of the trailing stop (or already at/below it) → about to be stopped out.
+//   YELLOW — last price within 0.05% of break-even (avg cost) → the trade is sitting at scratch.
+// Red wins when both apply (the stop is the action trigger). Tweak the bands here.
+const NEAR_STOP_PCT = 0.01;     // 1.0% of the stop
+const NEAR_BE_PCT   = 0.0005;   // 0.05% of break-even (very tight — see note in the chat)
+
 // Collapsible section wrapper (remembers open/closed per panel in localStorage).
 function Collapsible({ title, storageKey, children }) {
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(storageKey) !== '0'; } catch { return true; } });
@@ -148,16 +157,31 @@ function DevourCard({ p, onClick }) {
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   const shares = p.shares || p.totalShares;
   const last = p.last ?? (p.avgCost || p.entryPrice);
+  const avg = p.avgCost || p.entryPrice;                                   // break-even price
   const rps = (p.stop != null && last != null) ? last - p.stop : null;     // current price − stop
   const totalRisk = rps != null ? rps * shares : null;                     // × shares
   const prot = p.protected;
+
+  // Exit-proximity warning state. RED = at/within 1% of the stop (about to exit);
+  // YELLOW = within 0.05% of break-even (trade at scratch). Red wins if both fire.
+  const nearStop = (p.stop > 0 && last != null) ? last <= p.stop * (1 + NEAR_STOP_PCT) : false;
+  const nearBreakeven = (avg > 0 && last != null) ? Math.abs(last - avg) / avg <= NEAR_BE_PCT : false;
+  const warn = nearStop ? 'stop' : (nearBreakeven ? 'be' : null);
+
+  const borderColor = warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#3b82f6' : '#22c55e');
+  const bgColor     = warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#0d1626' : '#0e1a12');
+  const flashAnim   = warn === 'stop' ? 'treestopflash 0.85s ease-in-out infinite'
+                    : warn === 'be'   ? 'treebeflash 1.1s ease-in-out infinite'
+                    : (p.newToday ? 'treecardflash 1.1s ease-in-out infinite' : undefined);
   return (
-    <div onClick={onClick} className="tree-pulse" title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: prot ? '#0d1626' : '#0e1a12', border: `1px solid ${prot ? '#3b82f6' : '#22c55e'}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(p.newToday ? { animation: 'treecardflash 1.1s ease-in-out infinite' } : {}) }}>
+    <div onClick={onClick} className="tree-pulse" title={p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts'} style={{ cursor: 'pointer', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(flashAnim ? { animation: flashAnim } : {}) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
           <span style={{ color: prot ? '#60a5fa' : '#22c55e', fontSize: 11 }}>{prot ? '🛡️ LOCKED' : 'LONG'}</span>
           {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
+          {warn === 'stop' && <span title={`Within ${(NEAR_STOP_PCT * 100).toFixed(0)}% of the stop ($${p.stop?.toFixed(2)}) — exit imminent`} style={{ background: '#ef4444', color: '#1a0000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>⚠ NEAR STOP</span>}
+          {warn === 'be' && <span title={`Within ${(NEAR_BE_PCT * 100).toFixed(2)}% of break-even ($${avg?.toFixed(2)}) — trade at scratch`} style={{ background: '#facc15', color: '#1a1500', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>≈ BREAK-EVEN</span>}
         </span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
       </div>
@@ -272,6 +296,9 @@ export default function PnthrTreePage() {
     <div className="pnthr-tree-root" style={{ padding: '20px 26px', color: '#e6e6e6' }}>
       <style>{`@keyframes treeflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e88; opacity: 1; } 50% { box-shadow: 0 0 8px 2px #22c55e; opacity: 0.55; } }
         @keyframes treecardflash { 0%,100% { box-shadow: 0 0 0 0 #22c55e00; } 50% { box-shadow: 0 0 13px 3px #22c55e; } }
+        /* Exit-proximity flashes on held cards: RED near the stop, YELLOW near break-even. */
+        @keyframes treestopflash { 0%,100% { box-shadow: 0 0 0 0 #ef444400; } 50% { box-shadow: 0 0 15px 4px #ef4444; } }
+        @keyframes treebeflash   { 0%,100% { box-shadow: 0 0 0 0 #facc1500; } 50% { box-shadow: 0 0 13px 3px #facc15; } }
         /* While any overlay modal is open, freeze the page's pulse animations —
            15 NEW-today cards glowing through the translucent backdrop reads as
            the whole page flickering (reported on Cash Ledger, 2026-06-12). */

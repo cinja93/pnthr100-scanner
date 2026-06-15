@@ -1,7 +1,12 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 311 holdings across 16 sectors. Last updated: 2026-05-27.
+// 312 holdings across 16 sectors. Last updated: 2026-06-15.
 //
+// v3.7 (2026-06-15): +12 ADDs — UBER (S5), SAP (S6), ACN/FIG/SHOP (S7), NTSK/SAIL (S8),
+//   MNTN (S9), TTAN (S11), HTFL/CAI/HNGE (S12). -12 REMOVEs — D (NEE acquisition), AES (GIP/EQT
+//   take-private), CHPT/BLNK/EVGO/PLUG (EV-charging & hydrogen, non-AI), HIVE (BTC miner, thin AI),
+//   OPEN/Z (proptech) from S11, DDD/NNDM/SSYS (3D printing) from S16. Net 312 → 312. totalHoldings
+//   corrected 311 → 312 (counter was stale). ACLS kept (active position).
 // v3.6 (2026-05-27): added GFS, TSEM, UMC, SIMO to S1; NOK to S3; PRO to S7; GSAT to S13. 304 → 311.
 // v3.5 (2026-05-20): sector weight adjustments.
 // v3.4 (2026-05-20): updated Index Members PDF for Multi-strategy + MCE methodology.
@@ -20,9 +25,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v3.6',
-  date: 'May 2026',
-  totalHoldings: 311,
+  version: 'v3.7',
+  date: 'June 2026',
+  totalHoldings: 312,
   totalSectors: 16,
 };
 
@@ -104,7 +109,6 @@ export const SECTORS = [
       { ticker: 'NEE', name: 'NextEra Energy', thesis: 'NextEra is the largest US utility with the most renewable + storage capacity, supplying clean power to hyperscaler AI data centers. Their Florida + national renewables footprint, plus regulated utility cash flows, give NEE a uniquely defensive AI-power profile. PNTHR holds NEE as the diversified utility leg of our AI-power basket.' },
       { ticker: 'SRE', name: 'Sempra Energy', thesis: 'Sempra operates Texas and California utility assets plus LNG export, both of which serve AI data center demand. Texas data center power buildout sits squarely on Sempra\'s grid. PNTHR holds SRE as a regulated-utility AI play with LNG optionality.' },
       { ticker: 'CWEN', name: 'Clearway Energy', thesis: 'Clearway owns renewable + storage assets supplying AI-grade clean power under long-term contracts. Hyperscaler clean energy mandates create structural demand. PNTHR holds CWEN as a yield-and-growth AI-renewables play.' },
-      { ticker: 'AES', name: 'AES Corporation', thesis: 'AES has signed direct AI data center power deals (including Amazon and Google) and operates a global renewable + storage platform. Their AI-tailwind power contracts are reaccelerating growth. PNTHR holds AES as a re-rating utility with explicit hyperscaler exposure.' },
       { ticker: 'CCJ', name: 'Cameco Corporation', thesis: 'Cameco is the largest publicly traded uranium producer and owns 49% of Westinghouse, the reactor builder. As nuclear becomes THE AI power solution, uranium demand and Westinghouse revenues both inflect. PNTHR holds CCJ as a foundational AI-nuclear fuel and equipment Elite holding.' },
       { ticker: 'OKLO', name: 'Oklo Inc.', thesis: 'Oklo is the leading small modular reactor pure-play, backed by Sam Altman, designed specifically for behind-the-meter AI data center power. First commercial deployments create explosive optionality. PNTHR holds OKLO as a high-beta AI-nuclear lottery ticket with massive upside if SMR technology scales.' },
       { ticker: 'BE', name: 'Bloom Energy', thesis: 'Bloom Energy builds solid-oxide fuel cells deployed behind-the-meter at AI data centers for instant on-site power generation. Hyperscaler announcements have catalyzed re-rating. PNTHR holds BE as a unique fuel-cell AI-power exposure.' },
@@ -112,7 +116,6 @@ export const SECTORS = [
       { ticker: 'NNE', name: 'Nano Nuclear Energy', thesis: 'Nano Nuclear develops portable micro-reactors for distributed AI data center power, defense bases, and remote industrial sites. Speculative but uniquely positioned. PNTHR holds NNE as a small-cap micro-reactor lottery ticket in our AI-nuclear book.' },
       { ticker: 'ETN', name: 'Eaton Corporation', thesis: 'Eaton builds the electrical distribution, switchgear, and power management systems that connect generation to AI data center racks. Their content-per-data-center is exploding. PNTHR holds ETN as a top-tier AI electrical infrastructure Elite holding.' },
       { ticker: 'PWR', name: 'Quanta Services', thesis: 'Quanta is the largest US electrical infrastructure construction firm, they build the transmission lines and substations connecting power plants to AI data centers. Multi-year backlogs reflect AI grid buildout. PNTHR holds PWR as the construction services leg of our AI-power thesis.' },
-      { ticker: 'D', name: 'Dominion Energy', thesis: 'Dominion is the regulated utility serving Virginia\'s "Data Center Alley", the world\'s largest concentration of AI data centers. They are literally THE utility for AI compute capacity in North America. PNTHR considers D a non-negotiable AI-power Elite holding.' },
       { ticker: 'HUBB', name: 'Hubbell Incorporated', thesis: 'Hubbell makes the electrical components, connectors, and grid hardware AI data centers need at scale. Hyperscaler buildouts directly drive Hubbell volumes. PNTHR holds HUBB as a quietly compounding AI electrical equipment play.' },
       { ticker: 'GNRC', name: 'Generac Holdings', thesis: 'Generac builds the backup power generators that AI data centers and critical facilities require. Hyperscaler resiliency mandates plus C&I demand drive growth. PNTHR holds GNRC as a focused AI-resilience power play.' },
       { ticker: 'POWL', name: 'Powell Industries', thesis: 'Powell Industries manufactures custom-engineered switchgear and electrical equipment for AI data centers, LNG export terminals, and oil and gas. Massive AI-driven backlog reset valuation. PNTHR holds POWL as a small-cap, high-conviction AI electrical equipment specialist.' },
@@ -124,10 +127,6 @@ export const SECTORS = [
       { ticker: 'ENPH', name: 'Enphase Energy', thesis: 'Enphase leads in AI-managed solar microinverters and battery storage. Their software optimizes home + commercial energy across the grid. PNTHR holds ENPH as a software-margin renewables-AI play.' },
       { ticker: 'FLNC', name: 'Fluence Energy', thesis: 'Fluence is the leading utility-scale battery energy storage system integrator. AI-managed grid storage is critical infrastructure for renewable AI power. PNTHR holds FLNC as a focused grid-scale storage pure play.' },
       { ticker: 'STEM', name: 'Stem Inc.', thesis: 'Stem provides AI-driven energy storage software for commercial and industrial grid optimization. Pure-play AI energy software with deep moat. PNTHR holds STEM as a small-cap AI-grid software bet.' },
-      { ticker: 'PLUG', name: 'Plug Power', thesis: 'Plug Power develops hydrogen fuel cell systems for industrial, mobility, and stationary power. Hydrogen could become a clean baseload solution for AI data centers. PNTHR holds PLUG as a speculative hydrogen-AI power option.' },
-      { ticker: 'EVGO', name: 'EVgo Inc.', thesis: 'EVgo operates fast-charging EV networks managed by AI optimization software. As autonomous EV fleets scale, EVgo benefits. PNTHR holds EVGO for EV-charging-network exposure within the AI-power book.' },
-      { ticker: 'CHPT', name: 'ChargePoint Holdings', thesis: 'ChargePoint runs the largest EV charging network globally with AI-driven utilization software. Long-term EV transition tailwind. PNTHR holds CHPT as the second leg of our EV-charging exposure.' },
-      { ticker: 'BLNK', name: 'Blink Charging', thesis: 'Blink builds and operates EV charging stations across the US and Europe. High-beta small-cap EV-charging exposure. PNTHR holds BLNK as a small-cap optionality bet within our EV-AI charging book.' },
       { ticker: 'EQT', name: 'EQT Corporation', thesis: 'EQT is the #1 Appalachian natural gas producer, directly supplying the gas-fired AI data centers being built across Pennsylvania, Ohio, and Virginia. AI gas demand is THE under-discussed bull case. PNTHR holds EQT as a non-negotiable AI-gas pure play.' },
       { ticker: 'KMI', name: 'Kinder Morgan', thesis: 'Kinder Morgan operates the largest US natural gas pipeline network, already announcing multiple AI data center direct supply deals. As AI runs on gas, KMI runs the gas. PNTHR holds KMI as the cornerstone AI-pipeline holding.' },
       { ticker: 'WMB', name: 'Williams Companies', thesis: 'Williams operates the Transco interstate gas pipeline serving the eastern AI data center corridor. Long-term contracts with AI-driven gas demand growth. PNTHR holds WMB as the second leg of our AI-pipeline trade.' },
@@ -181,7 +180,6 @@ export const SECTORS = [
       { ticker: 'MARA', name: 'Marathon Digital Holdings', thesis: 'MARA is the largest US Bitcoin miner increasingly evaluating AI hosting opportunities at their power-rich sites. PNTHR holds MARA as Bitcoin-with-AI-optionality.' },
       { ticker: 'HUT', name: 'Hut 8 Mining', thesis: 'Hut 8 operates Bitcoin mining and high-performance computing infrastructure at multiple Texas and Alberta sites. PNTHR holds HUT as Bitcoin-AI hybrid exposure.' },
       { ticker: 'CIFR', name: 'Cipher Mining', thesis: 'Cipher Mining operates Texas-based Bitcoin mining capacity with explicit AI hosting pivot strategy. PNTHR holds CIFR as a small-cap Bitcoin-AI conversion bet.' },
-      { ticker: 'HIVE', name: 'HIVE Digital Technologies', thesis: 'HIVE Digital operates green-energy Bitcoin mining and AI compute infrastructure across Canada, Sweden, and Iceland. PNTHR holds HIVE as a green-energy Bitcoin-AI pivot.' },
       { ticker: 'BITF', name: 'Bitfarms', thesis: 'Bitfarms operates Bitcoin mining facilities increasingly evaluating AI hosting. PNTHR holds BITF as small-cap Bitcoin-AI optionality.' },
       { ticker: 'NET', name: 'Cloudflare Inc.', thesis: 'Cloudflare is the leading edge AI compute platform, Workers AI runs inference at the network edge globally. Edge inference is a structural AI growth vector. PNTHR holds NET as the cornerstone edge-AI platform.' },
       { ticker: 'NTNX', name: 'Nutanix Inc.', thesis: 'Nutanix delivers hybrid cloud infrastructure software for enterprise AI workloads. Their NVIDIA partnership puts them inside enterprise AI deployment. PNTHR holds NTNX as an enterprise hybrid-cloud AI play.' },
@@ -222,6 +220,7 @@ export const SECTORS = [
       { ticker: 'NIO', name: 'NIO Inc.', thesis: 'NIO is a leading Chinese premium EV maker with NIO Pilot ADAS and battery-swap network. PNTHR holds NIO as a premium Chinese EV-AI play.' },
       { ticker: 'LI', name: 'Li Auto', thesis: 'Li Auto sells Chinese hybrid SUVs with AI-driven cabin and driving features, fastest-growing premium Chinese EV. PNTHR holds LI as a focused Chinese EV-AI bet.' },
       { ticker: 'XPEV', name: 'XPeng Inc.', thesis: 'XPeng builds Chinese EVs with leading XNGP autonomous driving capabilities and humanoid-robot ambitions. PNTHR holds XPEV as a focused Chinese AI-EV play.' },
+      { ticker: 'UBER', name: 'Uber Technologies, Inc.', thesis: 'Uber operates the world\'s largest ride-hail and delivery network and is becoming the demand layer for autonomous mobility, partnering with multiple AV developers and NVIDIA to deploy robotaxis at scale across its marketplace. Its routing, pricing, and matching engines are themselves large-scale AI systems. PNTHR holds UBER as the platform that monetizes autonomous driving without the capital burden of building the vehicles.' },
     ],
   },
   {
@@ -236,6 +235,7 @@ export const SECTORS = [
       { ticker: 'AMZN', name: 'Amazon.com Inc.', thesis: 'Amazon Web Services dominates cloud infrastructure, runs Bedrock plus Trainium custom AI silicon, and integrates AI across retail and logistics. PNTHR holds AMZN as a cornerstone AI mega-cap with capped weight.' },
       { ticker: 'ORCL', name: 'Oracle Corporation', thesis: 'Oracle Cloud Infrastructure is the surprise AI cloud winner, direct OpenAI deal, NVIDIA partnership, and the highest AI-revenue growth among legacy enterprise software. PNTHR holds ORCL as the re-rating mega-cap AI play.' },
       { ticker: 'IBM', name: 'IBM Corporation', thesis: 'IBM offers watsonx AI platform plus quantum computing leadership. Enterprise AI plus quantum optionality. PNTHR holds IBM as a diversified mega-cap AI play with quantum upside.' },
+      { ticker: 'SAP', name: 'SAP SE', thesis: 'SAP is the backbone of global enterprise resource planning, running the financial and operational core of much of the Fortune 500. Its Business AI and Joule agent layer embed generative and agentic AI across that mission-critical install base, monetizing AI on top of the world\'s most entrenched enterprise data. PNTHR holds SAP as the largest enterprise-software platform turning its data gravity into an AI moat.' },
     ],
   },
   {
@@ -278,6 +278,9 @@ export const SECTORS = [
       { ticker: 'SOUN', name: 'SoundHound AI', thesis: 'SoundHound AI is the voice AI pure-play with disclosed NVIDIA stake, automotive voice AI and enterprise conversational AI. PNTHR holds SOUN as a high-beta voice-AI lottery ticket.' },
       { ticker: 'CDW', name: 'CDW Corporation', thesis: 'CDW is the leading IT distribution channel for AI servers and infrastructure to enterprise. AI hardware buildout flows through CDW\'s warehouses. PNTHR holds CDW as the AI IT distribution and channel pure play.' },
       { ticker: 'PRO', name: 'PROS Holdings Inc.', thesis: 'PROS Holdings delivers AI-powered pricing and revenue management software for airlines, B2B, and hospitality. Their machine learning optimizes billions of pricing decisions daily. PNTHR holds PRO as a focused AI dynamic-pricing pure play.' },
+      { ticker: 'ACN', name: 'Accenture plc', thesis: 'Accenture is the implementation layer of the enterprise AI revolution. As the Global 2000 races to deploy generative and agentic AI, Accenture captures the consulting, integration, and managed-services dollars, with partnerships spanning OpenAI, Microsoft, Databricks, and Palantir and a multi-billion-dollar generative-AI bookings run-rate. PNTHR holds ACN as the dominant services name turning AI ambition into deployed enterprise systems.' },
+      { ticker: 'FIG', name: 'Figma, Inc.', thesis: 'Figma is the collaborative design platform that runs product and creative work for a generation of teams. With Figma Make and on-canvas AI agents that generate, edit, and prototype designs from natural language, Figma is embedding agentic AI directly into the creative workflow. PNTHR holds FIG as a marquee AI-design platform with a deep collaboration moat and a clear agentic roadmap.' },
+      { ticker: 'SHOP', name: 'Shopify Inc.', thesis: 'Shopify powers commerce for millions of merchants and is building the agentic-commerce rails of the AI era, from AI storefront and marketing tools for sellers to protocols that let AI assistants transact directly. As shopping migrates into ChatGPT, Copilot, and Gemini, Shopify is positioned as the merchant-side infrastructure of AI-driven retail. PNTHR holds SHOP as a leading platform on the front line of agentic commerce.' },
     ],
   },
   {
@@ -297,6 +300,8 @@ export const SECTORS = [
       { ticker: 'TENB', name: 'Tenable Holdings', thesis: 'Tenable leads in AI-augmented vulnerability management and exposure management. PNTHR holds TENB as a focused vulnerability-management AI play.' },
       { ticker: 'RPD', name: 'Rapid7 Inc.', thesis: 'Rapid7 delivers AI-augmented security operations and threat detection. PNTHR holds RPD as a focused security-operations AI play.' },
       { ticker: 'QLYS', name: 'Qualys Inc.', thesis: 'Qualys provides cloud-native AI-augmented vulnerability and compliance management. PNTHR holds QLYS as a focused cloud-security AI play.' },
+      { ticker: 'NTSK', name: 'Netskope, Inc.', thesis: 'Netskope is an AI-native cloud security and SASE platform, securing data and access across the cloud, web, and private applications for thousands of enterprises. Its single-pass architecture applies real-time AI to classify data and stop threats inline, a capability that grows more critical as enterprises pipe sensitive data into AI models. PNTHR holds NTSK as a high-growth cloud-security leader filling a clear gap alongside Palo Alto, Zscaler, and CrowdStrike.' },
+      { ticker: 'SAIL', name: 'SailPoint, Inc.', thesis: 'SailPoint is the leader in identity security and governance, controlling who, and increasingly what, can access enterprise systems. As autonomous AI agents proliferate inside the enterprise, machine and agent identity becomes a critical new attack surface that SailPoint is built to govern. PNTHR holds SAIL as the identity-security backbone of the agentic AI era.' },
     ],
   },
   {
@@ -311,6 +316,7 @@ export const SECTORS = [
       { ticker: 'MGNI', name: 'Magnite Inc.', thesis: 'Magnite is the largest independent sell-side ad platform, AI-driven CTV and programmatic advertising. PNTHR holds MGNI as a focused supply-side ad-tech AI play.' },
       { ticker: 'PUBM', name: 'PubMatic Inc.', thesis: 'PubMatic operates an AI-driven sell-side ad platform with strong CTV growth. PNTHR holds PUBM as a small-cap sell-side ad-tech AI play.' },
       { ticker: 'CRTO', name: 'Criteo SA', thesis: 'Criteo provides AI-driven retail media and performance advertising. PNTHR holds CRTO as a focused retail-media AI play.' },
+      { ticker: 'MNTN', name: 'MNTN, Inc.', thesis: 'MNTN is a performance Connected-TV advertising platform that uses AI to target, optimize, and measure television campaigns the way digital marketers run search and social, with QuickFrame AI tooling that generates video creative at scale. PNTHR holds MNTN as an AI-driven ad-tech name riding the shift of brand budgets into measurable, programmatic streaming TV.' },
     ],
   },
   {
@@ -341,9 +347,8 @@ export const SECTORS = [
       { ticker: 'WIX', name: 'Wix.com Ltd', thesis: 'Wix integrates AI website builder and content generation. PNTHR holds WIX as a focused web-AI play.' },
       { ticker: 'GLBE', name: 'Global-E Online', thesis: 'Global-E delivers AI-driven cross-border ecommerce optimization. PNTHR holds GLBE as a focused ecommerce-AI play.' },
       { ticker: 'TOST', name: 'Toast Inc.', thesis: 'Toast provides AI-augmented restaurant operations platform. PNTHR holds TOST as a focused restaurant-AI play.' },
-      { ticker: 'Z', name: 'Zillow Group', thesis: 'Zillow uses AI for home valuations and personalized real estate search. PNTHR holds Z as a focused real-estate AI play.' },
-      { ticker: 'OPEN', name: 'Opendoor Technologies', thesis: 'Opendoor operates AI-driven iBuying and home transactions. PNTHR holds OPEN as a small-cap real-estate AI optionality bet.' },
       { ticker: 'CSGP', name: 'CoStar Group', thesis: 'CoStar Group delivers AI-augmented commercial real estate data and analytics. PNTHR holds CSGP as a focused commercial-real-estate AI data play.' },
+      { ticker: 'TTAN', name: 'ServiceTitan, Inc.', thesis: 'ServiceTitan is the operating system for the trades, where HVAC, plumbing, electrical, and roofing contractors run scheduling, dispatch, invoicing, and marketing on its cloud platform. Sitting on a proprietary dataset of millions of service jobs, ServiceTitan now ships agentic AI that books calls, optimizes technician routing, and auto-generates quotes. PNTHR holds TTAN as the cleanest pure-play on agentic AI transforming a massive, under-digitized vertical.' },
     ],
   },
   {
@@ -366,6 +371,9 @@ export const SECTORS = [
       { ticker: 'ARCT', name: 'Arcturus Therapeutics', thesis: 'Arcturus develops mRNA therapeutics with AI-augmented design. PNTHR holds ARCT as a focused mRNA-AI biotech.' },
       { ticker: 'MASS', name: '908 Devices', thesis: '908 Devices builds AI-augmented mass spectrometry analytical instruments. PNTHR holds MASS as a small-cap AI analytics device play.' },
       { ticker: 'NRIX', name: 'Nurix Therapeutics', thesis: 'Nurix uses AI for targeted protein degradation drug discovery. PNTHR holds NRIX as a focused AI-drug-discovery biotech.' },
+      { ticker: 'HTFL', name: 'HeartFlow, Inc.', thesis: 'HeartFlow turns a single CT scan into a personalized, AI-driven model of a patient\'s coronary arteries using computational fluid dynamics and machine learning. With FDA-cleared products and a growing body of clinical evidence, HeartFlow is one of the purest commercial-stage clinical-AI businesses on the market. PNTHR holds HTFL as a flagship AI-medtech name applying real machine learning to a leading cause of death.' },
+      { ticker: 'CAI', name: 'Caris Life Sciences, Inc.', thesis: 'Caris Life Sciences pairs whole-exome and whole-transcriptome molecular profiling with AI and machine learning to guide precision oncology at scale. Its vast, multi-modal clinico-genomic database powers both diagnostics and biopharma drug-discovery partnerships. PNTHR holds CAI as a TechBio leader where genomics and AI converge, a direct peer to Tempus and Guardant.' },
+      { ticker: 'HNGE', name: 'Hinge Health, Inc.', thesis: 'Hinge Health delivers AI-powered digital care for musculoskeletal conditions, using computer vision and machine learning to guide and personalize physical therapy at scale. Profitable and growing, it is one of the more durable digital-health franchises to reach the public market. PNTHR holds HNGE as an AI-care delivery name attacking one of the largest and most expensive categories in healthcare.' },
     ],
   },
   {
@@ -455,10 +463,7 @@ export const SECTORS = [
       { ticker: 'ROK', name: 'Rockwell Automation', thesis: 'Rockwell Automation leads industrial AI automation, factory robots and AI manufacturing software. PNTHR holds ROK as a top-tier industrial-AI Elite holding.' },
       { ticker: 'EMR', name: 'Emerson Electric', thesis: 'Emerson Electric provides AI-augmented industrial automation plus AspenTech AI process modeling. PNTHR holds EMR as a diversified industrial AI play.' },
       { ticker: 'CARR', name: 'Carrier Global', thesis: 'Carrier Global delivers HVAC and refrigeration including AI data center cooling. PNTHR holds CARR as a focused HVAC AI play.' },
-      { ticker: 'NNDM', name: 'Nano Dimension', thesis: 'Nano Dimension builds AI-augmented additive manufacturing systems. PNTHR holds NNDM as a small-cap AI 3D printing play.' },
       { ticker: 'MTLS', name: 'Materialise NV', thesis: 'Materialise provides AI-driven 3D printing software. PNTHR holds MTLS as a focused 3D printing software play.' },
-      { ticker: 'SSYS', name: 'Stratasys Ltd', thesis: 'Stratasys is the leader in industrial 3D printing, AI-augmented additive manufacturing for aerospace and defense. PNTHR holds SSYS as a focused industrial 3D printing play.' },
-      { ticker: 'DDD', name: '3D Systems Corporation', thesis: '3D Systems provides industrial and dental AI-augmented 3D printing. PNTHR holds DDD as a small-cap 3D printing optionality bet.' },
       { ticker: 'MP', name: 'MP Materials', thesis: 'MP Materials operates the only US rare earths mine and is building permanent magnet capacity, critical for AI data center motors, EVs, and defense. PNTHR holds MP as a strategic AI materials play.' },
       { ticker: 'ALB', name: 'Albemarle Corporation', thesis: 'Albemarle is the largest US-listed lithium producer, battery materials for AI grid storage and EVs. PNTHR holds ALB as a strategic AI battery materials play.' },
       { ticker: 'FCX', name: 'Freeport-McMoRan', thesis: 'Freeport-McMoRan is the largest US copper producer, AI data centers consume 6x more copper per square foot than traditional facilities. PNTHR holds FCX as a strategic AI-copper play.' },

@@ -242,17 +242,29 @@ export async function getPnthrTreeState(db) {
   }
   funnel.sort((a, b) => (a.pctToHigh ?? Infinity) - (b.pctToHigh ?? Infinity));   // closest to a new high first; manual (no high) last
 
-  // enrich each card with live price, the engine's 2-week-low stop, and P&L. Real
-  // positions carry your ACTUAL avg cost (so P&L mirrors your account); sim would-buys
-  // carry the simulated entry. Applies to both the strategy book and the manual box.
+  // Your ACTUAL resting broker stops (incl. any you raised manually in TWS). The
+  // effective protective stop = the HIGHER of your broker stop and the engine's 2-week-low
+  // (raise-only / tightest-wins, exactly how live behaves). This is what drives PROTECT,
+  // the shown stop, the risk numbers, and the near-stop warning — so a manual raise above
+  // break-even is reflected immediately.
+  const brokerStops = {};
+  for (const o of (snap.stopOrders || [])) {
+    const t = (o.symbol || o.ticker || '').toUpperCase();
+    if ((o.action || '').toUpperCase() === 'SELL') brokerStops[t] = Math.max(brokerStops[t] || 0, +o.stopPrice || 0);
+  }
+  // enrich each card with live price, the effective stop, and P&L. Real positions carry
+  // your ACTUAL avg cost (so P&L mirrors your account); sim would-buys carry the sim entry.
   const enrich = (p) => {
     const q = quotes[p.ticker]; const basis = p.avgCost || p.entryPrice || 0;
     const last = q ? +q.price : (basis || 0);
     p.last = last;
-    p.stop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : (p.stop || null);
+    const eng = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : 0;   // engine's 2-week-low (intended trail)
+    const brk = brokerStops[p.ticker] || 0;                                 // your actual resting stop (manual raises included)
+    const eff = Math.max(brk, eng);
+    p.stop = eff > 0 ? +eff.toFixed(2) : (p.stop || null);
     p.pnl = +(((last - basis) * (p.shares || p.totalShares || 0))).toFixed(0);
     p.pnlPct = basis ? +((last / basis - 1) * 100).toFixed(1) : 0;
-    // PROTECT = trailing stop has climbed to/above entry → worst case is a locked profit.
+    // PROTECT = effective stop has reached/passed your entry → worst case is a locked profit.
     p.protected = p.stop != null && basis > 0 && p.stop >= basis;
     p.company = AI_META[p.ticker]?.name || null;
     p.sector  = AI_META[p.ticker]?.sector || null;
@@ -342,12 +354,19 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
   const ymd = today.replaceAll('-', '');
   const lastHeld = cfg.lastHeld || {};
 
-  // refresh the held-context map (avgCost / shares / intended stop) for AI-300 longs
+  // your actual resting broker stops (incl. manual raises). The effective stop is the
+  // HIGHER of your stop and the engine's 2-week-low, so a manual-stop fire is detected too.
+  const brokerStop = {};
+  for (const o of (snap.stopOrders || [])) { const t = (o.symbol || o.ticker || '').toUpperCase(); if ((o.action || '').toUpperCase() === 'SELL') brokerStop[t] = Math.max(brokerStop[t] || 0, +o.stopPrice || 0); }
+
+  // refresh the held-context map (avgCost / shares / effective stop) for AI-300 longs
   const curHeld = {};
   for (const p of (snap.positions || [])) {
     const t = (p.symbol || p.ticker || '').toUpperCase(); const sh = p.position ?? p.shares;
     if (!AI_META[t] || !(sh > 0)) continue;
-    curHeld[t] = { avgCost: +p.avgCost || 0, shares: sh, stop: lows[t] ? +(lows[t] - 0.01).toFixed(2) : (lastHeld[t]?.stop ?? null) };
+    const eng = lows[t] ? +(lows[t] - 0.01).toFixed(2) : 0;
+    const eff = Math.max(brokerStop[t] || 0, eng);
+    curHeld[t] = { avgCost: +p.avgCost || 0, shares: sh, stop: eff > 0 ? +eff.toFixed(2) : (lastHeld[t]?.stop ?? null) };
   }
 
   let recorded = 0;

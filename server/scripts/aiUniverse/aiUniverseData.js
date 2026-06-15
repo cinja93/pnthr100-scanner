@@ -2,7 +2,7 @@
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
 // 312 holdings across 16 sectors. Last updated: 2026-06-15.
 //
-// v3.7 (2026-06-15): +12 ADDs — UBER (S5), SAP (S6), ACN/FIG/SHOP (S7), NTSK/SAIL (S8),
+// v3.7 (2026-06-15): +12 ADDs — UBER (S5), SAP/ACN (S6), FIG/SHOP (S7), NTSK/SAIL (S8),
 //   MNTN (S9), TTAN (S11), HTFL/CAI/HNGE (S12). -12 REMOVEs — D (NEE acquisition), AES (GIP/EQT
 //   take-private), CHPT/BLNK/EVGO/PLUG (EV-charging & hydrogen, non-AI), HIVE (BTC miner, thin AI),
 //   OPEN/Z (proptech) from S11, DDD/NNDM/SSYS (3D printing) from S16. Net 312 → 312. totalHoldings
@@ -236,6 +236,7 @@ export const SECTORS = [
       { ticker: 'ORCL', name: 'Oracle Corporation', thesis: 'Oracle Cloud Infrastructure is the surprise AI cloud winner, direct OpenAI deal, NVIDIA partnership, and the highest AI-revenue growth among legacy enterprise software. PNTHR holds ORCL as the re-rating mega-cap AI play.' },
       { ticker: 'IBM', name: 'IBM Corporation', thesis: 'IBM offers watsonx AI platform plus quantum computing leadership. Enterprise AI plus quantum optionality. PNTHR holds IBM as a diversified mega-cap AI play with quantum upside.' },
       { ticker: 'SAP', name: 'SAP SE', thesis: 'SAP is the backbone of global enterprise resource planning, running the financial and operational core of much of the Fortune 500. Its Business AI and Joule agent layer embed generative and agentic AI across that mission-critical install base, monetizing AI on top of the world\'s most entrenched enterprise data. PNTHR holds SAP as the largest enterprise-software platform turning its data gravity into an AI moat.' },
+      { ticker: 'ACN', name: 'Accenture plc', thesis: 'Accenture is the implementation layer of the enterprise AI revolution. As the Global 2000 races to deploy generative and agentic AI, Accenture captures the consulting, integration, and managed-services dollars, with partnerships spanning OpenAI, Microsoft, Databricks, and Palantir and a multi-billion-dollar generative-AI bookings run-rate. PNTHR holds ACN as the dominant services name turning AI ambition into deployed enterprise systems.' },
     ],
   },
   {
@@ -278,7 +279,6 @@ export const SECTORS = [
       { ticker: 'SOUN', name: 'SoundHound AI', thesis: 'SoundHound AI is the voice AI pure-play with disclosed NVIDIA stake, automotive voice AI and enterprise conversational AI. PNTHR holds SOUN as a high-beta voice-AI lottery ticket.' },
       { ticker: 'CDW', name: 'CDW Corporation', thesis: 'CDW is the leading IT distribution channel for AI servers and infrastructure to enterprise. AI hardware buildout flows through CDW\'s warehouses. PNTHR holds CDW as the AI IT distribution and channel pure play.' },
       { ticker: 'PRO', name: 'PROS Holdings Inc.', thesis: 'PROS Holdings delivers AI-powered pricing and revenue management software for airlines, B2B, and hospitality. Their machine learning optimizes billions of pricing decisions daily. PNTHR holds PRO as a focused AI dynamic-pricing pure play.' },
-      { ticker: 'ACN', name: 'Accenture plc', thesis: 'Accenture is the implementation layer of the enterprise AI revolution. As the Global 2000 races to deploy generative and agentic AI, Accenture captures the consulting, integration, and managed-services dollars, with partnerships spanning OpenAI, Microsoft, Databricks, and Palantir and a multi-billion-dollar generative-AI bookings run-rate. PNTHR holds ACN as the dominant services name turning AI ambition into deployed enterprise systems.' },
       { ticker: 'FIG', name: 'Figma, Inc.', thesis: 'Figma is the collaborative design platform that runs product and creative work for a generation of teams. With Figma Make and on-canvas AI agents that generate, edit, and prototype designs from natural language, Figma is embedding agentic AI directly into the creative workflow. PNTHR holds FIG as a marquee AI-design platform with a deep collaboration moat and a clear agentic roadmap.' },
       { ticker: 'SHOP', name: 'Shopify Inc.', thesis: 'Shopify powers commerce for millions of merchants and is building the agentic-commerce rails of the AI era, from AI storefront and marketing tools for sellers to protocols that let AI assistants transact directly. As shopping migrates into ChatGPT, Copilot, and Gemini, Shopify is positioned as the merchant-side infrastructure of AI-driven retail. PNTHR holds SHOP as a leading platform on the front line of agentic commerce.' },
     ],

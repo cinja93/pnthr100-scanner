@@ -9,6 +9,12 @@ import { AumTracker, ForwardProjection } from './AmbushPage';
 
 const TREE_CAGR = 45.6;   // 1× no-pyramid backtest CAGR (conservative; 2× ≈ +104%). Hypothetical / survivorship-flattered.
 const fmt = (n) => '$' + Math.round(n).toLocaleString();
+const agoStr = (iso) => {                                  // "2h 14m ago" / "8m ago"
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!(ms >= 0)) return 'just now';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m ago` : `${m}m ago`;
+};
 
 // ── Exit-proximity warnings on held cards (Scott 2026-06-14) ────────────────
 // A "stock in play" (DEVOUR / PROTECT card) flashes to warn how close it is to
@@ -203,6 +209,38 @@ function DevourCard({ p, onClick }) {
   );
 }
 
+// A name that got stopped out in the last 24h. Stays RED on the page so a stop
+// hit can't be missed (the live position itself vanishes the instant it sells).
+function StoppedCard({ s, onClick }) {
+  const loss = s.pnl ?? null;
+  const pnlColor = (loss ?? 0) >= 0 ? '#22c55e' : '#ef4444';
+  return (
+    <div onClick={onClick} className="tree-pulse" title={`Stopped out ${agoStr(s.stoppedAt)} · click for daily + weekly charts`}
+      style={{ cursor: 'pointer', background: '#1c0d0d', border: '1px solid #ef4444', borderRadius: 10, padding: '12px 14px', minWidth: 210, animation: 'treestopflash 0.85s ease-in-out infinite' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#7f1d1d', border: '1px solid #ef4444', color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{s.ticker}</span>
+          <span style={{ color: '#ef4444', fontSize: 11, fontWeight: 700 }}>🛑 STOPPED OUT</span>
+        </span>
+        {loss != null && <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{loss >= 0 ? '+' : ''}{fmt(loss)}</span>}
+      </div>
+      {(s.company || s.sector) && (
+        <div style={{ marginTop: 6, lineHeight: 1.3 }}>
+          {s.company && <div style={{ color: '#bbb', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={s.company}>{s.company}</div>}
+          {s.sector && <div style={{ color: '#f87171', fontSize: 10, letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={`AI 300 sector: ${s.sector}`}>{s.sector}</div>}
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: 8, fontSize: 12, fontFamily: 'monospace', color: '#ccc' }}>
+        <span>Shares <b style={{ color: '#fff' }}>{s.shares}</b></span>
+        <span>Exit <b style={{ color: '#fff' }}>{s.exitPrice != null ? `$${s.exitPrice.toFixed(2)}` : '--'}</b></span>
+        <span>Avg <b style={{ color: '#fff' }}>{s.avgCost != null ? `$${s.avgCost.toFixed(2)}` : '--'}</b></span>
+        <span>Stop <b style={{ color: '#ef4444' }}>{s.stop != null ? `$${s.stop.toFixed(2)}` : '--'}</b></span>
+      </div>
+      <div style={{ color: '#9a6565', fontSize: 10, marginTop: 8 }}>Stopped {agoStr(s.stoppedAt)} · stays 24h</div>
+    </div>
+  );
+}
+
 export default function PnthrTreePage() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -281,6 +319,7 @@ export default function PnthrTreePage() {
   const positions = data?.positions || [];
   const protectedPos = positions.filter(p => p.protected);
   const devourPos = positions.filter(p => !p.protected);
+  const recentStops = data?.recentStops || [];
   // Devour roll-up: total open P&L, and total $ at risk if every stop fired (current price → stop).
   const devourPnl = devourPos.reduce((a, p) => a + (p.pnl || 0), 0);
   const devourRisk = devourPos.reduce((a, p) => {
@@ -367,6 +406,14 @@ export default function PnthrTreePage() {
         {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{protectedPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(protectedPos.map(x => x.ticker), p.ticker)} />)}</div>}
       </div>
+
+      {/* RECENTLY STOPPED — stop hit in the last 24h; stays red so it can't be missed */}
+      {recentStops.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <h3 style={{ color: '#ef4444', fontSize: 13, letterSpacing: '0.08em' }}>🛑 RECENTLY STOPPED — LAST 24H ({recentStops.length})</h3>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{recentStops.map((s, i) => <StoppedCard key={i} s={s} onClick={() => openChart([s.ticker], s.ticker)} />)}</div>
+        </div>
+      )}
 
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>

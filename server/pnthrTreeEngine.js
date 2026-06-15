@@ -244,13 +244,91 @@ export async function getPnthrTreeState(db) {
     positions.sort((a, b) => (a.seenAt ?? Infinity) - (b.seenAt ?? Infinity));
   } catch { positions.forEach(p => { p.newToday = false; }); }
 
+  // ── Recently stopped (last 24h) — red cards that stay visible after a stop hit ─
+  // Aggregated per ticker (partial fills collapse to one card); only TRUE stop hits
+  // get a card, and a name that was stopped then re-entered (now held) drops off.
+  let recentStops = [];
+  try {
+    const since = new Date(Date.now() - 24 * 3600 * 1000);
+    const heldTickers = new Set(positions.map(p => p.ticker));
+    const exitDocs = await db.collection('pnthr_tree_exits').find({ recordedAt: { $gte: since } }).toArray();
+    const byT = {};
+    for (const x of exitDocs) {
+      if (!x.ticker) continue;
+      const a = byT[x.ticker] || (byT[x.ticker] = { ticker: x.ticker, shares: 0, gross: 0, pnl: 0, stop: x.stop ?? null, avgCost: x.avgCost ?? null, stopHit: false, recordedAt: x.recordedAt, company: x.company || AI_META[x.ticker]?.name || null, sector: x.sector || AI_META[x.ticker]?.sector || null });
+      a.shares += x.shares || 0; a.gross += (+x.exitPrice || 0) * (x.shares || 0); a.pnl += x.pnl || 0;
+      if (x.stopHit === true) a.stopHit = true;
+      if (new Date(x.recordedAt) > new Date(a.recordedAt)) a.recordedAt = x.recordedAt;
+    }
+    recentStops = Object.values(byT)
+      .filter(a => a.stopHit && !heldTickers.has(a.ticker))
+      .map(a => ({ ticker: a.ticker, shares: a.shares, exitPrice: a.shares ? +(a.gross / a.shares).toFixed(2) : null, stop: a.stop, avgCost: a.avgCost, pnl: a.pnl, company: a.company, sector: a.sector, stoppedAt: a.recordedAt }))
+      .sort((a, b) => new Date(b.stoppedAt) - new Date(a.stoppedAt));
+  } catch { recentStops = []; }
+
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
   const grossUsed = positions.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
   return {
-    mode: cfg.mode, nav, funnel, positions, counts,
+    mode: cfg.mode, nav, funnel, positions, counts, recentStops,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
     updatedAt: new Date().toISOString(),
   };
+}
+
+// ── Stop-out capture (for the 24h "recently stopped" red cards) ──────────────
+// When a live position is stopped out, the broker-resting stop sells it and the
+// name VANISHES from the IBKR snapshot — the card would silently disappear. So we
+// persist each stop-out and keep showing it red for 24h (Scott 2026-06-14).
+//
+// Detection is EXEC-DRIVEN (positive evidence only): we record today's SELL fills
+// of Tree-managed longs, idempotent by execId. We do NOT infer an exit from a
+// position simply being absent — an empty/stale snapshot would then mass-record
+// false exits (the old cascade trap). A fill counts as a STOP HIT when its price
+// is at/below the resting stop; a manual profit-sell (well above the stop) is not
+// flagged and gets no red card. avgCost/stop come from cfg.lastHeld, which we
+// refresh here each tick so P&L survives after the position goes flat.
+// This function enqueues NOTHING — it is display-only on the trading side.
+const EXITS = 'pnthr_tree_exits';
+async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
+  const today = etDateStr();
+  const ymd = today.replaceAll('-', '');
+  const lastHeld = cfg.lastHeld || {};
+
+  // refresh the held-context map (avgCost / shares / intended stop) for AI-300 longs
+  const curHeld = {};
+  for (const p of (snap.positions || [])) {
+    const t = (p.symbol || p.ticker || '').toUpperCase(); const sh = p.position ?? p.shares;
+    if (!AI_META[t] || !(sh > 0)) continue;
+    curHeld[t] = { avgCost: +p.avgCost || 0, shares: sh, stop: lows[t] ? +(lows[t] - 0.01).toFixed(2) : (lastHeld[t]?.stop ?? null) };
+  }
+
+  let recorded = 0;
+  for (const e of (snap.latestExecutions || [])) {
+    if (String(e.side || '').toUpperCase() !== 'SLD') continue;           // sells only
+    const t = (e.symbol || '').toUpperCase();
+    if (!AI_META[t] || excl.has(t)) continue;                             // Tree-managed names only
+    if (e.time && !String(e.time).replace(/[^0-9]/g, '').startsWith(ymd)) continue;  // today's fills only (feed can carry a prior session)
+    const ctx = lastHeld[t] || curHeld[t] || {};
+    const exitPrice = +e.price || 0, sharesSold = +e.shares || 0;
+    const stop = ctx.stop ?? null, avgCost = ctx.avgCost ?? null;
+    const stopHit = (stop > 0 && exitPrice > 0) ? exitPrice <= stop * 1.01 : null;   // at/below the stop (1% slack for gaps)
+    const r = await db.collection(EXITS).updateOne(
+      { execId: e.execId },
+      { $setOnInsert: {
+          execId: e.execId, ticker: t, exitPrice, shares: sharesSold, avgCost, stop, stopHit,
+          pnl: (avgCost != null && exitPrice > 0) ? +((exitPrice - avgCost) * sharesSold).toFixed(0) : null,
+          company: AI_META[t]?.name || null, sector: AI_META[t]?.sector || null,
+          mode: 'live', execTime: e.time || null, recordedAt: new Date(),
+        } },
+      { upsert: true },
+    );
+    if (r.upsertedCount) recorded++;
+  }
+
+  await db.collection(CFG).updateOne({}, { $set: { lastHeld: curHeld } }, { upsert: true });
+  // keep the collection bounded — the page only ever shows the last 24h
+  await db.collection(EXITS).deleteMany({ recordedAt: { $lt: new Date(Date.now() - 7 * 24 * 3600 * 1000) } }).catch(() => {});
+  return recorded;
 }
 
 // ── Engine tick — paper records / live places orders on new 52wk highs ───────
@@ -328,6 +406,11 @@ export async function runPnthrTreeTick(db) {
         const pnl = +((exitPx - p.avgCost) * p.totalShares).toFixed(2);
         await db.collection(POS).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitDate: new Date().toISOString().slice(0, 10), pnl, closedAt: new Date() } });
         await db.collection(TRADES).insertOne({ ticker: p.ticker, direction: 'LONG', entryPrice: p.entryPrice, exitPrice: exitPx, shares: p.totalShares, pnl, exitReason: 'STOP', mode: 'paper', entryDate: p.entryDate, exitDate: new Date().toISOString().slice(0, 10), createdAt: new Date() });
+        // mirror into pnthr_tree_exits so the 24h red "recently stopped" card works in paper too (paper exits are always stop hits)
+        await db.collection(EXITS).updateOne({ paperExitId: String(p._id) }, { $setOnInsert: {
+          paperExitId: String(p._id), ticker: p.ticker, exitPrice: exitPx, shares: p.totalShares, avgCost: p.avgCost, stop: trailed, stopHit: true, pnl,
+          company: AI_META[p.ticker]?.name || null, sector: AI_META[p.ticker]?.sector || null, mode: 'paper', recordedAt: new Date(),
+        } }, { upsert: true });
         actions.push({ type: 'PAPER_EXIT', ticker: p.ticker, exitPx, pnl });
       }
     }
@@ -346,6 +429,9 @@ export async function runPnthrTreeTick(db) {
         actions.push({ type: 'LIVE_TRAIL', ticker: t, newStop, from: cur });
       }
     }
+    // Record any stop-outs so they stay on the page as red cards for 24h (enqueues nothing).
+    try { const n = await captureTreeStopOuts(db, cfg, snap, lows, excl); if (n) actions.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
+    catch (e) { console.error('[Tree] stop-out capture failed:', e.message); }
   }
 
   await db.collection(CFG).updateOne({}, { $set: { lastTick: new Date(), lastActions: actions.slice(0, 50) } }, { upsert: true });

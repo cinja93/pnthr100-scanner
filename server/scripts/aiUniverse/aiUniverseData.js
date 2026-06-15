@@ -1,7 +1,10 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 312 holdings across 16 sectors. Last updated: 2026-06-15.
+// 315 holdings across 16 sectors. Last updated: 2026-06-15.
 //
+// v3.8 (2026-06-15): +3 to S1 — RMBS (Rambus, memory-interface IP), ATEYY (Advantest ADR,
+//   semiconductor test equipment), BESIY (BE Semiconductor ADR, advanced-packaging/hybrid-bonding
+//   equipment). ATEYY/BESIY are US-listed OTC ADRs, verified tradeable w/ FMP history. 312 → 315.
 // v3.7 (2026-06-15): +12 ADDs — UBER (S5), SAP/ACN (S6), FIG/SHOP (S7), NTSK/SAIL (S8),
 //   MNTN (S9), TTAN (S11), HTFL/CAI/HNGE (S12). -12 REMOVEs — D (NEE acquisition), AES (GIP/EQT
 //   take-private), CHPT/BLNK/EVGO/PLUG (EV-charging & hydrogen, non-AI), HIVE (BTC miner, thin AI),
@@ -25,9 +28,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v3.7',
+  version: 'v3.8',
   date: 'June 2026',
-  totalHoldings: 312,
+  totalHoldings: 315,
   totalSectors: 16,
 };
 
@@ -94,6 +97,9 @@ export const SECTORS = [
       { ticker: 'TSEM', name: 'Tower Semiconductor Ltd.', thesis: 'Tower Semiconductor is a specialty analog foundry fabricating sensors, power management, and RF chips critical to AI edge devices and autonomous systems. Their analog expertise complements digital AI compute. PNTHR holds TSEM as a focused specialty-foundry AI-analog play.' },
       { ticker: 'UMC', name: 'United Microelectronics Corp.', thesis: 'UMC is a leading mature-node foundry supplying chips for IoT, automotive, and industrial AI applications. As AI extends beyond data centers into edge and embedded systems, UMC\'s capacity becomes strategic. PNTHR holds UMC as a mature-node foundry play on the AI edge buildout.' },
       { ticker: 'SIMO', name: 'Silicon Motion Technology Corp.', thesis: 'Silicon Motion designs NAND flash controllers for SSDs powering AI data centers and edge storage. As AI training and inference demand faster storage I/O, SIMO\'s controller IP becomes critical infrastructure. PNTHR holds SIMO as a focused AI storage-controller pure play.' },
+      { ticker: 'RMBS', name: 'Rambus Inc.', thesis: 'Rambus designs the high-speed memory interface chips and IP that move data between AI processors and memory: memory controllers, HBM3/HBM4 and DDR5 interface IP, CXL solutions, and security IP, all licensed into the chips and modules feeding AI servers. As HBM and memory bandwidth become the gating constraint on AI training, Rambus collects royalty and product revenue on the bottleneck. PNTHR holds RMBS as a high-margin, IP-rich play on the memory-interface layer of AI compute.' },
+      { ticker: 'ATEYY', name: 'Advantest Corporation', thesis: 'Advantest is the global leader in semiconductor automated test equipment (ATE), the systems that test every advanced logic and memory chip before it ships. AI accelerators and HBM stacks need far more test time and complexity, driving a structural up-cycle in test demand that Advantest and Teradyne split between them. PNTHR holds ATEYY (the US-listed ADR) as a picks-and-shovels leader on the test bottleneck of AI silicon.' },
+      { ticker: 'BESIY', name: 'BE Semiconductor Industries N.V.', thesis: 'BE Semiconductor (Besi) builds the back-end assembly and advanced-packaging equipment, including the hybrid-bonding tools, that stitch AI chips and HBM stacks into the dense packages modern accelerators require. As performance gains shift from transistor scaling to advanced packaging (chiplets, 3D stacking, hybrid bonding), Besi sits on the leading edge of the packaging-equipment wave. PNTHR holds BESIY (the US-listed ADR) as a high-margin specialist on the advanced-packaging frontier of AI compute.' },
     ],
   },
   {

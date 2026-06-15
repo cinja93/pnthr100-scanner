@@ -391,12 +391,24 @@ export default function PnthrTreePage() {
         <span style={{ color: '#555' }}>Backtest hypothetical &amp; survivorship-flattered (current AI-300 names). Not a track record.</span>
       </div>
 
+      {/* Categorized open P&L — TREE strategy + IBKR (manual) = Total (matches your IBKR account) */}
+      {data && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#0c140e', border: '1px solid #14331f', borderRadius: 8, marginBottom: 8 }}>
+          <span style={{ color: '#888', fontSize: 12 }} title="TREE strategy positions (Devour + Protect)">TREE P&amp;L <b style={{ color: (data.treePnl || 0) >= 0 ? '#22c55e' : '#ef4444' }}>{(data.treePnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.treePnl || 0))}</b></span>
+          <span style={{ color: '#555' }}>+</span>
+          <span style={{ color: '#888', fontSize: 12 }} title="Your manual / off-strategy holdings — in IBKR but not part of the TREE strategy (e.g. SPCX)">IBKR P&amp;L <b style={{ color: (data.manualPnl || 0) >= 0 ? '#facc15' : '#ef4444' }}>{(data.manualPnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.manualPnl || 0))}</b></span>
+          <span style={{ color: '#555' }}>=</span>
+          <span style={{ color: '#bbb', fontSize: 12 }}>Total P&amp;L <b style={{ color: (data.openPnl || 0) >= 0 ? '#22c55e' : '#ef4444', fontSize: 15 }}>{(data.openPnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.openPnl || 0))}</b> <span style={{ color: '#555' }}>= your IBKR account</span></span>
+          {!!data.simPnl && <span style={{ color: '#666', fontSize: 11 }}>· sim would-buys {data.simPnl >= 0 ? '+' : '-'}{fmt(Math.abs(data.simPnl))} (hypothetical, not in IBKR)</span>}
+        </div>
+      )}
+
       {/* DEVOUR — held, trailing stop still below entry (capital at risk) */}
       <div style={{ marginTop: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid #1c3a28', paddingBottom: 6, marginBottom: 10 }}>
           <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0 }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
           <div style={{ display: 'flex', gap: 20, fontSize: 12, fontFamily: 'monospace' }}>
-            <span style={{ color: '#888' }}>Open P&amp;L <b style={{ color: devourPnl >= 0 ? '#22c55e' : '#ef4444' }}>{devourPnl >= 0 ? '+' : '-'}{fmt(Math.abs(devourPnl))}</b></span>
+            <span style={{ color: '#888' }}>Devour P&amp;L <b style={{ color: devourPnl >= 0 ? '#22c55e' : '#ef4444' }}>{devourPnl >= 0 ? '+' : '-'}{fmt(Math.abs(devourPnl))}</b></span>
             <span style={{ color: '#888' }}>Total risk if all stopped <b style={{ color: '#facc15' }}>-{fmt(devourRisk)}</b> <span style={{ color: '#555' }}>({nav > 0 ? (devourRisk / nav * 100).toFixed(1) : '0'}% of NAV)</span></span>
           </div>
         </div>

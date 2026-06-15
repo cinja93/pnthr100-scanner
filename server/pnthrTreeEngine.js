@@ -195,7 +195,7 @@ export async function getPnthrTreeState(db) {
   const realRaw = [];
   for (const p of (snap.positions || [])) {
     const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
-    if (sh > 0) realRaw.push({ ticker: t, shares: sh, avgCost: p.avgCost ?? p.avgPrice, real: true });
+    if (sh > 0) realRaw.push({ ticker: t, shares: sh, avgCost: p.avgCost ?? p.avgPrice, ibkrPnl: +p.unrealizedPNL || 0, ibkrLast: +p.marketPrice || 0, real: true });
   }
   const realHeld = new Set(realRaw.map(p => p.ticker));
   let simRaw = [];
@@ -252,17 +252,20 @@ export async function getPnthrTreeState(db) {
     const t = (o.symbol || o.ticker || '').toUpperCase();
     if ((o.action || '').toUpperCase() === 'SELL') brokerStops[t] = Math.max(brokerStops[t] || 0, +o.stopPrice || 0);
   }
-  // enrich each card with live price, the effective stop, and P&L. Real positions carry
-  // your ACTUAL avg cost (so P&L mirrors your account); sim would-buys carry the sim entry.
+  // enrich each card with price, the effective stop, and P&L. REAL positions mirror IBKR
+  // EXACTLY — its own mark (marketPrice) and unrealized P&L — so the page matches your
+  // account to the dollar. SIM would-buys are hypothetical, so they use the live FMP price.
   const enrich = (p) => {
     const q = quotes[p.ticker]; const basis = p.avgCost || p.entryPrice || 0;
-    const last = q ? +q.price : (basis || 0);
+    const fmpLast = q ? +q.price : 0;
+    const last = p.real ? (p.ibkrLast || fmpLast || basis) : (fmpLast || basis);
     p.last = last;
     const eng = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : 0;   // engine's 2-week-low (intended trail)
     const brk = brokerStops[p.ticker] || 0;                                 // your actual resting stop (manual raises included)
     const eff = Math.max(brk, eng);
     p.stop = eff > 0 ? +eff.toFixed(2) : (p.stop || null);
-    p.pnl = +(((last - basis) * (p.shares || p.totalShares || 0))).toFixed(0);
+    p.pnl = p.real ? Math.round(p.ibkrPnl || 0)                            // IBKR truth for real positions → matches your account
+                   : +(((last - basis) * (p.shares || p.totalShares || 0))).toFixed(0);
     p.pnlPct = basis ? +((last / basis - 1) * 100).toFixed(1) : 0;
     // PROTECT = effective stop has reached/passed your entry → worst case is a locked profit.
     p.protected = p.stop != null && basis > 0 && p.stop >= basis;
@@ -328,8 +331,17 @@ export async function getPnthrTreeState(db) {
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
   const allBook = [...positions, ...manualTrades];   // leverage counts the whole displayed book
   const grossUsed = allBook.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
+  // Categorized P&L, all from IBKR's own marks so they match your account to the dollar:
+  //   treePnl   = TREE strategy positions (Devour + Protect)
+  //   manualPnl = your manual / off-strategy holdings (Manual box, e.g. SPCX) — "IBKR P&L"
+  //   openPnl   = treePnl + manualPnl = TOTAL = your full IBKR account
+  // simPnl (hypothetical would-buys) is tracked separately so the total never drifts from real.
+  const treePnl = Math.round(positions.filter(p => p.real).reduce((a, p) => a + (p.pnl || 0), 0));
+  const manualPnl = Math.round(manualTrades.reduce((a, p) => a + (p.pnl || 0), 0));
+  const simPnl = Math.round(positions.filter(p => p.sim).reduce((a, p) => a + (p.pnl || 0), 0));
+  const openPnl = treePnl + manualPnl;
   return {
-    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops,
+    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
     updatedAt: new Date().toISOString(),
   };

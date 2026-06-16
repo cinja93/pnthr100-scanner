@@ -16,18 +16,23 @@ dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { calcCommission, calcSlippage } from './costEngine.js';
+import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
 const LOOKBACK_52W = 252, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
 const START = '2023-01-03';
+const END = '2026-06-11';                    // frozen at go-live, same as build_tree_baseline
 const MAINT_LEVELS = [0.25, 0.30, 0.35];   // maintenance-margin thresholds to test
 
 const db = await connectToDatabase();
+// Universe = CURRENT AI-300 index members only (matches build_tree_baseline + the live engine).
+const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
 const docs = await db.collection('pnthr_ai_bt_candles').find({}).toArray();
 const T = {}; const allDatesSet = new Set();
 for (const d of docs) {
+  if (!AI_SET.has(d.ticker)) continue;       // current index members only
   const bars = (d.daily || []).map(b => ({ date: b.date, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume || 0 }))
-    .filter(b => b.l > 0 && b.c > 0).sort((a, b) => a.date.localeCompare(b.date));
+    .filter(b => b.l > 0 && b.c > 0 && b.date <= END).sort((a, b) => a.date.localeCompare(b.date));
   if (bars.length < LOOKBACK_52W + 5) continue;
   const n = bars.length;
   const hi52 = new Array(n).fill(null), loStop = new Array(n).fill(null), adv20 = new Array(n).fill(0);

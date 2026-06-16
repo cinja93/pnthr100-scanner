@@ -16,6 +16,7 @@ import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { calcCommission, calcSlippage } from './costEngine.js';
 import { computeInputHash } from '../treeBaselineGuard.js';   // single shared fingerprint of the backtest inputs
+import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
 const LOOKBACK_52W = 252, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
@@ -29,9 +30,15 @@ const END = '2026-06-11';
 const db = await connectToDatabase();
 
 // ── load + precompute ───────────────────────────────────────────────────────
+// Universe = CURRENT AI-300 index members only (matches the live engine + the disclosure).
+// Previously this traded EVERY candle doc, including ~19 names removed from the index (delisted
+// CYBR/ABB, non-AI CHPT/PLUG, etc.) — names the live strategy never trades. Filtering to actual
+// members makes the backtest faithful to the strategy it claims to represent.
+const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
 const docs = await db.collection('pnthr_ai_bt_candles').find({}).toArray();
 const T = {}; const allDatesSet = new Set();
 for (const d of docs) {
+  if (!AI_SET.has(d.ticker)) continue;   // current index members only
   const bars = (d.daily || []).map(b => ({ date: b.date, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume || 0 }))
     .filter(b => b.l > 0 && b.c > 0 && b.date <= END).sort((a, b) => a.date.localeCompare(b.date));
   if (bars.length < LOOKBACK_52W + 5) continue;

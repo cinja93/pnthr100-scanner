@@ -13,10 +13,13 @@
 // the guard and the generator can never disagree by replica drift.
 import crypto from 'crypto';
 import fs from 'fs';
+import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
-// MUST match build_tree_baseline.mjs: same freeze date + same min-history filter (LOOKBACK_52W+5).
+// MUST match build_tree_baseline.mjs: same universe (current AI-300 members), freeze date,
+// and min-history filter (LOOKBACK_52W+5).
 const END = '2026-06-11';
 const MIN_BARS = 252 + 5;
+const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
 const BASELINE_PATH = new URL('./data/treeProjectionBaseline.json', import.meta.url).pathname;
 
 // Canonical fingerprint of every candle series the backtest consumes (frozen window only).
@@ -26,6 +29,7 @@ export async function computeInputHash(db) {
   const docs = await db.collection('pnthr_ai_bt_candles').find({}).toArray();
   const parts = [];
   for (const d of docs) {
+    if (!AI_SET.has(d.ticker)) continue;   // current index members only (matches the backtest universe)
     const bars = (d.daily || [])
       .filter(b => +b.low > 0 && +b.close > 0 && b.date <= END)
       .sort((a, b) => a.date.localeCompare(b.date));

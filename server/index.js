@@ -33,6 +33,7 @@ import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
 import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, refreshDeactivatedTickers } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
+import { runCarnivoreDailyUpdate } from './carnivoreDailyJob.js';
 import { runSplitMaintenance } from './splitMaintenanceService.js';
 import { runAiUniverseHealthCheck, loadDeactivatedTickers } from './aiUniverseHealthJob.js';
 import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalanceWeightsNow, runPnthrAi300DailyAppend, clearPnthrAi300Cache } from './pnthrAi300Service.js';
@@ -6527,6 +6528,14 @@ cron.schedule('15 16 * * 1-5', async () => {
       console.log('[AI Universe Daily] starting cron...');
       await runAiUniverseDailyUpdate();
     } catch (e) { console.error('[CRON] AI Universe daily update failed:', e.message); }
+    // 679 / Carnivore candle refresh — keeps pnthr_bt_candles (+ weekly) current so the
+    // per-ticker dual-pane chart draws continuous bars to today instead of a frozen tail
+    // + one synthetic live bar (the phantom-gap Scott flagged 2026-06-16). Also refreshes
+    // the SPY/QQQ benchmark bars ambushIrService reads. Had NO recurring updater before.
+    try {
+      console.log('[Carnivore Daily] starting cron...');
+      await runCarnivoreDailyUpdate();
+    } catch (e) { console.error('[CRON] Carnivore daily update failed:', e.message); }
     // Chain the PNTHR AI 300 index rebuild — constituent bars are now fresh
     // so this is the right moment. Idempotent + monthly rebalance handled
     // automatically by the build script (first trading day of month).

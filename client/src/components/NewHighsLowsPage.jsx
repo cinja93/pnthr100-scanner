@@ -4,7 +4,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchNewHighsLows } from '../services/api';
 import PageHeader from './PageHeader';
-import ChartModal from './ChartModal';
 import AiTickerChartModal from './AiTickerChartModal';
 
 const GREEN = { bg: 'rgba(34,197,94,0.14)', border: 'rgba(34,197,94,0.55)', text: '#86efac' };
@@ -59,7 +58,7 @@ export default function NewHighsLowsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [chart, setChart] = useState(null); // { universe, tickers, index }
+  const [chart, setChart] = useState(null); // { tickers, index }
 
   const load = useCallback(async () => {
     try { setData(await fetchNewHighsLows()); setError(null); }
@@ -68,8 +67,10 @@ export default function NewHighsLowsPage() {
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 60000); return () => clearInterval(id); }, [load]);
 
-  const openCarn = (tickers, index) => setChart({ universe: 'carnivore', tickers, index });
-  const openAi = (tickers, index) => setChart({ universe: 'ai300', tickers, index });
+  // Both universes use the SAME modern daily+weekly chart modal. getAiStockChartData
+  // auto-detects AI-300 vs 679/ETF (right candles collection + sector-tuned EMA + gate),
+  // so a Carnivore badge opens the identical view as an AI-300 badge (Scott 2026-06-16).
+  const openChart = (tickers, index) => setChart({ tickers, index });
 
   return (
     <div style={{ padding: '0 4px' }}>
@@ -88,20 +89,12 @@ export default function NewHighsLowsPage() {
         <div style={{ color: '#ef4444', padding: 20 }}>Error: {error}</div>
       ) : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <Column title="Carnivore" subtitle="S&P 500 + S&P 400 (MidCap)" data={data?.carnivore} onPick={openCarn} />
-          <Column title="AI 300" subtitle="PNTHR AI Universe" data={data?.ai300} onPick={openAi} />
+          <Column title="Carnivore" subtitle="S&P 500 + S&P 400 (MidCap)" data={data?.carnivore} onPick={openChart} />
+          <Column title="AI 300" subtitle="PNTHR AI Universe" data={data?.ai300} onPick={openChart} />
         </div>
       )}
 
-      {chart && chart.universe === 'carnivore' && (
-        <ChartModal
-          stocks={chart.tickers.map(t => ({ ticker: t }))}
-          initialIndex={chart.index}
-          earnings={{}}
-          onClose={() => setChart(null)}
-        />
-      )}
-      {chart && chart.universe === 'ai300' && (
+      {chart && (
         <AiTickerChartModal
           tickers={chart.tickers}
           initialIndex={chart.index}

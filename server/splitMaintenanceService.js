@@ -140,6 +140,13 @@ async function resyncTicker(db, split) {
 
   const old = await db.collection(DAILY_COLL).findOne({ ticker: t });
 
+  // Never fabricate an AI-collection doc for a non-AI ticker. 679-only names get
+  // flagged here via flagSuspectSplit (divergence) by the Carnivore daily appender;
+  // without this guard the swap below would upsert e.g. BKNG/CVNA into
+  // pnthr_ai_bt_candles and pollute the AI universe. The 679 repair (runSplitMaintenance
+  // → resyncCarnivoreSplit) handles those. Returns ready so it isn't a blocker.
+  if (!old && !universeTickers().has(t)) return { ready: true, action: 'not-in-AI' };
+
   // Preserve the stored series' depth: parts of the universe were extended
   // back past the standard 2022-11-30 anchor (most go to 2022-01-03). A
   // re-sync that re-pulled from the anchor would silently truncate that
@@ -221,19 +228,37 @@ export async function runSplitMaintenance() {
   const today = etDateStr();
   const due = await db.collection(COLL).find({ status: 'pending', date: { $lte: today } }).toArray();
 
+  // 679 / Carnivore re-sync lives in carnivoreDailyJob (dynamic import → no cycle).
+  // A ticker can be in the AI collection, the 679 collection, or BOTH (e.g. KLAC).
+  // We repair every collection it lives in and only mark the split 'resynced' once
+  // ALL present collections are ready — so a name is never half-repaired.
+  const { resyncCarnivoreSplit } = await import('./carnivoreDailyJob.js');
   const resynced = [], waiting = [];
   for (const split of due) {
-    let res;
-    try { res = await resyncTicker(db, split); }
-    catch (e) { res = { ready: false, note: `error: ${e.message}` }; }
+    const t = split.ticker;
+    let aiRes;
+    try { aiRes = await resyncTicker(db, split); }
+    catch (e) { aiRes = { ready: false, note: `AI error: ${e.message}` }; }
+
+    let carnRes = null;
+    const in679 = await db.collection('pnthr_bt_candles').findOne({ ticker: t }, { projection: { _id: 1 } });
+    if (in679) {
+      try { carnRes = await resyncCarnivoreSplit(db, t); }
+      catch (e) { carnRes = { ready: false, note: `679 error: ${e.message}` }; }
+    }
+
+    const parts = [['AI', aiRes], ['679', carnRes]].filter(([, r]) => r);
+    const allReady = parts.every(([, r]) => r.ready);
+    const note = parts.map(([c, r]) => `${c}:${r.ready ? (r.action || `ok ${r.bars || ''}`).trim() : r.note}`).join(' | ');
+
     await db.collection(COLL).updateOne(
       { _id: split._id },
-      res.ready
-        ? { $set: { status: 'resynced', resyncedAt: new Date(), note: `${res.action} (${res.bars} bars)` }, $inc: { attempts: 1 } }
-        : { $set: { lastAttemptAt: new Date(), note: res.note }, $inc: { attempts: 1 } },
+      allReady
+        ? { $set: { status: 'resynced', resyncedAt: new Date(), note }, $inc: { attempts: 1 } }
+        : { $set: { lastAttemptAt: new Date(), note }, $inc: { attempts: 1 } },
     );
-    (res.ready ? resynced : waiting).push(`${split.ticker}: ${res.ready ? res.action : res.note}`);
-    console.log(`[Splits] ${split.ticker} ${split.date} → ${res.ready ? `RESYNCED (${res.action})` : `still pending — ${res.note}`}`);
+    (allReady ? resynced : waiting).push(`${t}: ${note}`);
+    console.log(`[Splits] ${t} ${split.date} → ${allReady ? 'RESYNCED' : 'still pending'} — ${note}`);
   }
   exclCache = null;   // re-read exclusions on next engine tick
 

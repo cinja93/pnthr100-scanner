@@ -1,7 +1,9 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 315 holdings across 16 sectors. Last updated: 2026-06-15.
+// 316 holdings across 16 sectors. Last updated: 2026-06-16.
 //
+// v3.9 (2026-06-16): +1 to S4 — RXT (Rackspace, managed multi-cloud pivoting to AI hosting;
+//   high-beta deep-value turnaround that re-rated off a sub-dollar base in 2026). 315 → 316.
 // v3.8 (2026-06-15): +3 to S1 — RMBS (Rambus, memory-interface IP), ATEYY (Advantest ADR,
 //   semiconductor test equipment), BESIY (BE Semiconductor ADR, advanced-packaging/hybrid-bonding
 //   equipment). ATEYY/BESIY are US-listed OTC ADRs, verified tradeable w/ FMP history. 312 → 315.
@@ -28,9 +30,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v3.8',
+  version: 'v3.9',
   date: 'June 2026',
-  totalHoldings: 315,
+  totalHoldings: 316,
   totalSectors: 16,
 };
 
@@ -192,6 +194,7 @@ export const SECTORS = [
       { ticker: 'AKAM', name: 'Akamai Technologies', thesis: 'Akamai is repositioning from CDN to edge AI compute and security. Distributed AI inference is the future. PNTHR holds AKAM as an edge-AI evolution play.' },
       { ticker: 'AMT', name: 'American Tower', thesis: 'American Tower owns the cell towers and edge data center sites where 5G + AI inference will be deployed. Structural AI edge tailwind. PNTHR holds AMT as a tower REIT with AI-edge optionality.' },
       { ticker: 'CCI', name: 'Crown Castle', thesis: 'Crown Castle owns US towers and fiber networks supporting 5G and edge AI. PNTHR holds CCI as the second leg of our tower-REIT AI-edge book.' },
+      { ticker: 'RXT', name: 'Rackspace Technology, Inc.', thesis: 'Rackspace is a managed multi-cloud provider repositioning toward AI hosting and inference services, a deep-value turnaround that re-rated sharply in 2026 off a sub-dollar base on its AI-cloud pivot. PNTHR holds RXT as a high-beta AI-cloud-pivot speculative position, alongside the neocloud and Bitcoin-to-AI hosting names in this sector.' },
     ],
   },
   {

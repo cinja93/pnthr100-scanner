@@ -631,6 +631,7 @@ export async function getPnthrTreeProjection(db) {
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
     forward,
     metrics: proj.metrics || null,
+    metricsGross: proj.metricsGross || null,   // GROSS tiles (AumTracker renders a 2nd row when present)
     cashLedger: loadCashLedger(),
     meta: { backtestEndNav: projected.length ? projected[projected.length - 1].value : proj.backtestEndNav, tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure },
   };

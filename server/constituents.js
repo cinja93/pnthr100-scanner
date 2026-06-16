@@ -86,7 +86,11 @@ const FALLBACK_SUPPLEMENTS = [
 ];
 
 // Tickers to exclude from the universe (e.g. going private, data quality issues)
-const EXCLUDED_TICKERS = new Set(["EA"]);
+// HOLX/CTRA/BK: FMP marks them isActivelyTrading=false with frozen quotes (last trades
+// 2026-04-07 / 05-07 / 06-12) — delisted/acquired on FMP's side, no live data. Excluded
+// 2026-06-16 (Scott) so they drop from the scanner + New Highs/Lows; their stale candle
+// docs were also deleted from pnthr_bt_candles / _weekly / pnthr_gap_risk.
+const EXCLUDED_TICKERS = new Set(["EA", "HOLX", "CTRA", "BK"]);
 
 // Populate the weekly cache — dynamically builds the universe from index constituents
 // If the S&P 500 + NASDAQ 100 + Dow 30 don't reach BASE_TARGET, fills the gap from S&P 400

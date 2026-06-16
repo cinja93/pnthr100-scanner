@@ -678,7 +678,7 @@ function ChartPanel({
           <span style={{ color: '#888' }}>Risk <strong style={{ color: '#dc2626' }}>${sizePanel.risk$.toLocaleString()}</strong></span>
           <span style={{ color: '#888' }}>Vit <strong style={{ color: '#fff' }}>{(sizePanel.vitalityPct * 100).toFixed(1)}%</strong></span>
           {sizePanel.gapPct > 0 && (
-            <span style={{ color: '#f59e0b' }}>GAP {(sizePanel.gapPct * 100).toFixed(0)}% · {sizePanel.gapMult.toFixed(2)}×</span>
+            <span style={{ color: '#f59e0b' }}>GAP {sizePanel.gapPct.toFixed(1)}% · {sizePanel.gapMult.toFixed(2)}×</span>
           )}
         </div>
       )}

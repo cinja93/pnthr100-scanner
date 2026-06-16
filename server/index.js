@@ -6536,6 +6536,14 @@ cron.schedule('15 16 * * 1-5', async () => {
       console.log('[Carnivore Daily] starting cron...');
       await runCarnivoreDailyUpdate();
     } catch (e) { console.error('[CRON] Carnivore daily update failed:', e.message); }
+    // Reproducibility guard: after splits + candle refreshes, verify the FROZEN Tree backtest's
+    // inputs haven't changed (a split re-sync rewriting pre-go-live history would silently make
+    // the dashboard backtest stale). Alarms + flags the SAME day instead of surfacing weeks later.
+    try {
+      const { connectToDatabase: cdb } = await import('./database.js');
+      const { checkTreeBaselineDrift } = await import('./treeBaselineGuard.js');
+      await checkTreeBaselineDrift(await cdb());
+    } catch (e) { console.error('[CRON] Tree baseline drift check failed:', e.message); }
     // Chain the PNTHR AI 300 index rebuild — constituent bars are now fresh
     // so this is the right moment. Idempotent + monthly rebalance handled
     // automatically by the build script (first trading day of month).

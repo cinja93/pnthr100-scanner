@@ -6,6 +6,8 @@
  "backtestStartNav": 100000,
  "backtestEndNav": 895315,
  "tradingDays": 863,
+ "inputHash": "ea46b9ce289f76495ef75c7d36cceb5df1790a74",
+ "inputNames": 325,
  "metrics": {
   "netReturnPct": 795.3,
   "cagrPct": 89.3,

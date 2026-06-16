@@ -401,6 +401,11 @@ export default function PnthrTreePage() {
       </div>
 
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
+      {data?.baselineDrift?.drifted && (
+        <div style={{ background: '#3b0d0d', border: '2px solid #ef4444', borderRadius: 8, padding: '10px 14px', marginTop: 10, color: '#fca5a5', fontSize: 12, fontWeight: 600 }}>
+          🔴 BACKTEST DRIFT — the data behind the backtest numbers below changed since they were locked (likely a split re-sync). The displayed backtest is now STALE and must be regenerated + verified. Last checked {data.baselineDrift.checkedAt ? new Date(data.baselineDrift.checkedAt).toLocaleString() : '—'}.
+        </div>
+      )}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
       {mode === 'paper' && simCount > 0 && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>

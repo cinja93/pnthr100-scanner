@@ -343,6 +343,7 @@ export async function getPnthrTreeState(db) {
   return {
     mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
+    baselineDrift: cfg.baselineDrift || null,   // drift guard flag — page shows a banner if the backtest baseline went stale
     updatedAt: new Date().toISOString(),
   };
 }

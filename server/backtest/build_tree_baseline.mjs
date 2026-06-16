@@ -15,6 +15,7 @@ dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { calcCommission, calcSlippage } from './costEngine.js';
+import { computeInputHash } from '../treeBaselineGuard.js';   // single shared fingerprint of the backtest inputs
 
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
 const LOOKBACK_52W = 252, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
@@ -166,6 +167,7 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
 const metrics = computeMetrics(equity, 'pnl', maxDDfrac, maxDDdollar);              // NET (dashboard headline)
 const grossMetrics = computeMetrics(equityGross, 'pnlGross', maxDDfracG, maxDDdollarG);  // GROSS (before costs)
 const factors = equity.map((e, i) => ({ i, date: e.date, factor: +(e.eq / NAV0).toFixed(6) }));  // projection uses NET curve
+const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs so the drift guard can detect future data changes
 
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
@@ -175,6 +177,8 @@ const out = {
   backtestStartNav: NAV0,
   backtestEndNav: metrics.endingEquity,
   tradingDays: factors.length,
+  inputHash: inputFingerprint.hash,     // fingerprint of the candle inputs (drift guard)
+  inputNames: inputFingerprint.names,
   metrics,                     // NET (dashboard headline)
   metricsGross: grossMetrics,  // GROSS (before commission + slippage) — frontend renders a 2nd row when present
   costs: { commission: Math.round(totalComm), slippage: Math.round(totalSlip) },

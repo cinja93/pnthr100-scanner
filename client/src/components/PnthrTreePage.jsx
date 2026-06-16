@@ -167,6 +167,7 @@ function Badge({ f, onClick }) {
 }
 
 function DevourCard({ p, onClick, offStrategy }) {
+  const sim = !!p.sim;                                                     // PAPER simulated would-buy — NOT a real IBKR position
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   const shares = p.shares || p.totalShares;
   const last = p.last ?? (p.avgCost || p.entryPrice);
@@ -181,18 +182,19 @@ function DevourCard({ p, onClick, offStrategy }) {
   const nearBreakeven = (!offStrategy && avg > 0 && last != null) ? Math.abs(last - avg) / avg <= NEAR_BE_PCT : false;
   const warn = nearStop ? 'stop' : (nearBreakeven ? 'be' : null);
 
-  const borderColor = offStrategy ? '#b45309' : warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#3b82f6' : '#22c55e');
-  const bgColor     = offStrategy ? '#1a1304' : warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#0d1626' : '#0e1a12');
+  const borderColor = sim ? '#3b82f6' : offStrategy ? '#b45309' : warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#3b82f6' : '#22c55e');
+  const bgColor     = sim ? '#0b1626' : offStrategy ? '#1a1304' : warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#0d1626' : '#0e1a12');
   const flashAnim   = offStrategy ? undefined
                     : warn === 'stop' ? 'treestopflash 0.85s ease-in-out infinite'
                     : warn === 'be'   ? 'treebeflash 1.1s ease-in-out infinite'
                     : (p.newToday ? 'treecardflash 1.1s ease-in-out infinite' : undefined);
   return (
-    <div onClick={onClick} className="tree-pulse" title={offStrategy ? 'Off strategy — Tree does not trade this; you manage it. Click for charts.' : (p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts')} style={{ cursor: 'pointer', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, ...(flashAnim ? { animation: flashAnim } : {}) }}>
+    <div onClick={onClick} className="tree-pulse" title={sim ? 'PAPER — simulated would-buy recorded by the paper engine. Hypothetical only: no order was placed and this is NOT a position in IBKR. Click for charts.' : offStrategy ? 'Off strategy — Tree does not trade this; you manage it. Click for charts.' : (p.newToday ? 'NEW today · click for daily + weekly charts' : 'Click for daily + weekly charts')} style={{ cursor: 'pointer', background: bgColor, border: `1px ${sim ? 'dashed' : 'solid'} ${borderColor}`, borderRadius: 10, padding: '12px 14px', minWidth: 210, opacity: sim ? 0.94 : 1, ...(flashAnim ? { animation: flashAnim } : {}) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: offStrategy ? '#7c4a03' : '#16a34a', border: `1px solid ${offStrategy ? '#f59e0b' : '#22c55e'}`, color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
-          <span style={{ color: offStrategy ? '#f59e0b' : (prot ? '#60a5fa' : '#22c55e'), fontSize: 11 }}>{offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
+          <span style={{ background: sim ? '#1e3a8a' : offStrategy ? '#7c4a03' : '#16a34a', border: `1px solid ${sim ? '#3b82f6' : offStrategy ? '#f59e0b' : '#22c55e'}`, color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
+          <span style={{ color: sim ? '#60a5fa' : offStrategy ? '#f59e0b' : (prot ? '#60a5fa' : '#22c55e'), fontSize: 11 }}>{sim ? 'PAPER LONG' : offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
+          {sim && <span title="Simulated would-buy recorded by the paper engine — NOT a real position in IBKR; no order was placed." style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>PAPER</span>}
           {p.early && !offStrategy && <span title="You bought this before the engine's signal (a new 52-week high). The tag clears the moment the strategy triggers the buy." style={{ background: '#f59e0b', color: '#1a1200', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>EARLY</span>}
           {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
           {warn === 'stop' && <span title={`Within ${(NEAR_STOP_PCT * 100).toFixed(0)}% of the stop ($${p.stop?.toFixed(2)}) — exit imminent`} style={{ background: '#ef4444', color: '#1a0000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>⚠ NEAR STOP</span>}
@@ -330,16 +332,48 @@ export default function PnthrTreePage() {
   const devourPos = positions.filter(p => !p.protected);
   const recentStops = data?.recentStops || [];
   const manualTrades = data?.manualTrades || [];
+  // sim = the paper engine's hypothetical would-buys (PAPER mode only); real = your
+  // actual IBKR holdings. Kept strictly distinct so a simulation can never read as real.
+  const simCount = positions.filter(p => p.sim).length;
+  const realCount = positions.filter(p => p.real).length;
   // Devour roll-up: total open P&L, and total $ at risk if every stop fired (current price → stop).
   const devourPnl = devourPos.reduce((a, p) => a + (p.pnl || 0), 0);
   const devourRisk = devourPos.reduce((a, p) => {
     const last = p.last ?? (p.avgCost || p.entryPrice);
     return a + ((p.stop != null && last != null) ? (last - p.stop) * (p.shares || p.totalShares || 0) : 0);
   }, 0);
+  // These roll-ups sum every Devour card; when any are paper sims the totals are
+  // partly/wholly hypothetical, so label them rather than let them read as real $.
+  const devourAllSim = devourPos.length > 0 && devourPos.every(p => p.sim);
+  const devourHasSim = devourPos.some(p => p.sim);
   const attack = funnel.filter(f => f.state === 'attack' && !f.held);
   const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
   const stalking = funnel.filter(f => f.state === 'stalking' && !f.held).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const nav = data?.nav || 0;
+
+  // Render a position section: REAL (IBKR) cards first, then a clearly-labeled,
+  // dash-bordered PAPER group for simulated would-buys. A hypothetical can never be
+  // mistaken for a real holding — compliance-critical for a regulated fund (2026-06-16).
+  const cardRow = { display: 'flex', gap: 12, flexWrap: 'wrap' };
+  const renderPositions = (list) => {
+    const navTickers = list.map(x => x.ticker);
+    const real = list.filter(p => !p.sim);
+    const sim = list.filter(p => p.sim);
+    return (
+      <>
+        {real.length > 0 && <div style={cardRow}>{real.map((p, i) => <DevourCard key={'r' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} />)}</div>}
+        {sim.length > 0 && (
+          <div style={{ marginTop: real.length ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7, color: '#93c5fd', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <span style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>PAPER</span>
+              simulated would-buys — hypothetical, not in IBKR ({sim.length})
+            </div>
+            <div style={cardRow}>{sim.map((p, i) => <DevourCard key={'s' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} />)}</div>
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="pnthr-tree-root" style={{ padding: '20px 26px', color: '#e6e6e6' }}>
@@ -368,6 +402,11 @@ export default function PnthrTreePage() {
 
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
+      {mode === 'paper' && simCount > 0 && (
+        <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
+          📝 PAPER TRADE mode — {simCount} simulated would-buy{simCount === 1 ? '' : 's'} shown below (dashed blue cards with a “PAPER” tag). These are hypothetical, place NO real orders, and are NOT positions in your IBKR account. {realCount === 0 ? 'Your real IBKR account is currently flat.' : 'Your real holdings are the solid-bordered cards.'}
+        </div>
+      )}
 
       {/* Projected vs Actual AUM + PNTHR Goals — Tree's OWN backtest; each collapsible */}
       <div style={{ marginTop: 14 }}>
@@ -414,7 +453,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 20 }}>
         <h3 style={{ color: '#60a5fa', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
         {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{protectedPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(protectedPos.map(x => x.ticker), p.ticker)} />)}</div>}
+          renderPositions(protectedPos)}
       </div>
 
       {/* RECENTLY STOPPED — stop hit in the last 24h; stays red so it can't be missed (sits with PROTECT) */}
@@ -428,14 +467,17 @@ export default function PnthrTreePage() {
       {/* DEVOUR — held, trailing stop still below entry (capital at risk). Shown after PROTECT. */}
       <div style={{ marginTop: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid #1c3a28', paddingBottom: 6, marginBottom: 10 }}>
-          <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0 }}>DEVOUR — POSITIONS, RISK ON ({devourPos.length})</h3>
+          <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            DEVOUR — POSITIONS, RISK ON ({devourPos.length})
+            {devourHasSim && <span title="These Devour figures include paper simulations — hypothetical, not real IBKR risk." style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 4, letterSpacing: '0.05em' }}>{devourAllSim ? 'ALL PAPER' : 'INCL. PAPER'}</span>}
+          </h3>
           <div style={{ display: 'flex', gap: 20, fontSize: 12, fontFamily: 'monospace' }}>
-            <span style={{ color: '#888' }}>Devour P&amp;L <b style={{ color: devourPnl >= 0 ? '#22c55e' : '#ef4444' }}>{devourPnl >= 0 ? '+' : '-'}{fmt(Math.abs(devourPnl))}</b></span>
-            <span style={{ color: '#888' }}>Total risk if all stopped <b style={{ color: '#facc15' }}>-{fmt(devourRisk)}</b> <span style={{ color: '#555' }}>({nav > 0 ? (devourRisk / nav * 100).toFixed(1) : '0'}% of NAV)</span></span>
+            <span style={{ color: '#888' }}>{devourAllSim ? 'Paper P&L' : 'Devour P&L'} <b style={{ color: devourPnl >= 0 ? '#22c55e' : '#ef4444' }}>{devourPnl >= 0 ? '+' : '-'}{fmt(Math.abs(devourPnl))}</b>{devourAllSim && <span style={{ color: '#555' }}> (sim)</span>}</span>
+            <span style={{ color: '#888' }}>{devourAllSim ? 'Paper risk if all stopped' : 'Total risk if all stopped'} <b style={{ color: '#facc15' }}>-{fmt(devourRisk)}</b> <span style={{ color: '#555' }}>({nav > 0 ? (devourRisk / nav * 100).toFixed(1) : '0'}% of NAV){devourAllSim ? ', hypothetical' : ''}</span></span>
           </div>
         </div>
         {devourPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>No positions with open risk.</div> :
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{devourPos.map((p, i) => <DevourCard key={i} p={p} onClick={() => openChart(devourPos.map(x => x.ticker), p.ticker)} />)}</div>}
+          renderPositions(devourPos)}
       </div>
 
       {/* ATTACK — new highs */}

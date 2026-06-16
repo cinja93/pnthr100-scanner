@@ -617,6 +617,14 @@ export async function getPnthrTreeProjection(db) {
   const elapsed = Math.min(weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
   const projectedToday = +(startAum * Math.pow(dailyCagr, elapsed)).toFixed(0);
   const onTrackPct = projectedToday > 0 ? +(((nav / projectedToday) - 1) * 100).toFixed(1) : 0;
+  // Pace vs schedule: the projection curve is weekday-spaced (1 step ≈ 1 trading day), so the
+  // index where projected first reaches today's actual AUM, minus today's index, = trading days
+  // ahead (+) or behind (-). Recomputed every poll, so it tracks as Actual AUM moves.
+  let paceIdx = projected.findIndex(p => p.value >= nav);
+  if (paceIdx < 0) paceIdx = projected.length - 1;                 // AUM above the whole curve → cap at the end
+  const aheadOfSchedule = (projected.length && paceIdx >= 0)
+    ? { date: projected[paceIdx].date, tradingDays: paceIdx - elapsed, ahead: (paceIdx - elapsed) >= 0 }
+    : null;
   const projFwd = N ? simulateForward(projectedToday, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
   const actFwd = N ? simulateForward(nav, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
   const forward = {
@@ -627,7 +635,7 @@ export async function getPnthrTreeProjection(db) {
 
   return {
     anchor: { startDate, startAum: +(+startAum).toFixed(0) },
-    current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+nav).toFixed(0), onTrackPct },
+    current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+nav).toFixed(0), onTrackPct, aheadOfSchedule },
     projected,
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
     forward,

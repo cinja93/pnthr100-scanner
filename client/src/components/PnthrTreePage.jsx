@@ -213,7 +213,7 @@ function DevourCard({ p, onClick, offStrategy }) {
         <span>Avg <b style={{ color: '#fff' }}>${(p.avgCost || p.entryPrice)?.toFixed(2)}</b></span>
         <span>Stop <b style={{ color: prot ? '#22c55e' : '#ef4444' }}>${p.stop?.toFixed(2)}</b></span>
         <span>Risk/sh <b style={{ color: '#facc15' }}>${rps != null ? rps.toFixed(2) : '--'}</b></span>
-        <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b></span>
+        <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b>{p.riskPct != null && totalRisk != null ? <span style={{ color: '#a16207' }}> · {p.riskPct}% NAV</span> : null}</span>
       </div>
     </div>
   );
@@ -453,6 +453,26 @@ export default function PnthrTreePage() {
         </div>
       )}
 
+      {/* TOTAL RISK (heat) — your real account vs the strategy's book. Heat = $ you'd give back if every
+          stop fired (price − stop) × shares, shown $ and % of NAV. Whether carrying less is a WIN depends
+          on return too — that's scored per-trade in the scorecard (next build). */}
+      {data?.totalRisk && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#140f0c', border: '1px solid #3a2410', borderRadius: 8, marginBottom: 8 }}>
+          <span style={{ color: '#888', fontSize: 12 }} title="What the strategy's book would lose if every stop fired (paper sim in paper mode, your real book once live)">
+            Strategy risk <b style={{ color: '#facc15' }}>{fmt(data.totalRisk.strategy)}</b> <span style={{ color: '#a16207' }}>({data.totalRisk.strategyPct}% of NAV)</span>
+          </span>
+          <span style={{ color: '#555' }}>vs</span>
+          <span style={{ color: '#888', fontSize: 12 }} title="What YOUR real account would give back if every position stopped from here">
+            Your risk <b style={{ color: data.totalRisk.actual <= data.totalRisk.strategy ? '#22c55e' : '#ef4444' }}>{fmt(data.totalRisk.actual)}</b> <span style={{ color: data.totalRisk.actual <= data.totalRisk.strategy ? '#4ade80' : '#f87171' }}>({data.totalRisk.actualPct}% of NAV)</span>
+          </span>
+          <span style={{ color: '#666', fontSize: 11 }}>
+            {data.totalRisk.actual < data.totalRisk.strategy ? `carrying ${fmt(data.totalRisk.strategy - data.totalRisk.actual)} less heat than the strategy`
+              : data.totalRisk.actual > data.totalRisk.strategy ? `carrying ${fmt(data.totalRisk.actual - data.totalRisk.strategy)} more heat than the strategy`
+              : 'matching the strategy’s heat'}
+          </span>
+        </div>
+      )}
+
       {/* PROTECT — trailing stop has reached/passed entry → worst case is a locked profit. Shown FIRST. */}
       <div style={{ marginTop: 20 }}>
         <h3 style={{ color: '#60a5fa', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
@@ -486,7 +506,7 @@ export default function PnthrTreePage() {
 
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>
-        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 52-WEEK HIGHS ({attack.length})</h3>
+        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS ({attack.length})</h3>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
           <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} />)}</div>}
       </div>

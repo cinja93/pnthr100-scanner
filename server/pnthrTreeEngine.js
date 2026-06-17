@@ -272,6 +272,10 @@ export async function getPnthrTreeState(db) {
     p.pnlPct = basis ? +((last / basis - 1) * 100).toFixed(1) : 0;
     // PROTECT = effective stop has reached/passed your entry → worst case is a locked profit.
     p.protected = p.stop != null && basis > 0 && p.stop >= basis;
+    // Total Risk (heat) = $ you'd give back if stopped from here = (last − stop) × shares; also as % of NAV.
+    const shx = p.shares || p.totalShares || 0;
+    p.riskNow = (p.stop != null && last > p.stop) ? Math.round((last - p.stop) * shx) : 0;
+    p.riskPct = nav > 0 ? +((p.riskNow / nav) * 100).toFixed(2) : 0;
     p.company = AI_META[p.ticker]?.name || null;
     p.sector  = AI_META[p.ticker]?.sector || null;
   };
@@ -343,8 +347,17 @@ export async function getPnthrTreeState(db) {
   const manualPnl = Math.round(manualTrades.reduce((a, p) => a + (p.pnl || 0), 0));
   const simPnl = Math.round(positions.filter(p => p.sim).reduce((a, p) => a + (p.pnl || 0), 0));
   const openPnl = treePnl + manualPnl;
+  // ── Total Risk (heat) roll-up: ACTUAL (your real positions) vs STRATEGY (what the engine's
+  //    book carries — the paper sim in paper mode, the real positions once live). $ and % of NAV.
+  const sumRisk = (arr) => arr.reduce((a, p) => a + (p.riskNow || 0), 0);
+  const actualRiskNow = sumRisk(positions.filter(p => p.real));
+  const strategyRiskNow = sumRisk(cfg.mode === 'paper' ? positions.filter(p => p.sim) : positions.filter(p => p.real));
+  const totalRisk = {
+    actual: actualRiskNow, actualPct: +((actualRiskNow / (nav || 1)) * 100).toFixed(2),
+    strategy: strategyRiskNow, strategyPct: +((strategyRiskNow / (nav || 1)) * 100).toFixed(2),
+  };
   return {
-    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl,
+    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl, totalRisk,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
     baselineDrift: cfg.baselineDrift || null,   // drift guard flag — page shows a banner if the backtest baseline went stale
     updatedAt: new Date().toISOString(),

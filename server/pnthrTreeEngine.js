@@ -205,13 +205,17 @@ export async function getPnthrTreeState(db) {
   if (cfg.mode === 'paper') {
     simRaw = (await db.collection(POS).find({ status: 'ACTIVE' }).toArray())
       .filter(p => !realHeld.has(p.ticker))     // your real account always takes precedence
-      .map(p => ({ ticker: p.ticker, shares: p.totalShares || p.shares, avgCost: p.avgCost || p.entryPrice, entryPrice: p.entryPrice, sim: true }));
+      .map(p => ({ ticker: p.ticker, shares: p.totalShares || p.shares, avgCost: p.avgCost || p.entryPrice, entryPrice: p.entryPrice, createdAt: p.createdAt, sim: true }));
   }
   // off-strategy = a held name Tree never trades (ENGINE_EXCLUDE like SPCX, or non-AI-300)
   const offStrategy = (t) => excl.has(t) || !AI_META[t];
   let positions = [], manualTrades = [];
   for (const p of [...realRaw, ...simRaw]) (offStrategy(p.ticker) ? manualTrades : positions).push(p);
   const held = new Set([...realRaw, ...simRaw].map(p => p.ticker));   // everything displayed is "held" for the funnel
+
+  // ATTACK trigger times (written by the 2-min tick) — when each new-high signal first fired.
+  const attackSeen = {};
+  for (const d of await db.collection('pnthr_tree_attack_seen').find({}).toArray()) attackSeen[d.ticker] = d.firstAttackAt;
 
   const funnel = [];
   for (const t of AI_TICKERS) {
@@ -241,6 +245,7 @@ export async function getPnthrTreeState(db) {
       pctToHigh: +(((priorHigh - price) / priorHigh) * 100).toFixed(2),
       changePct: +q.changesPercentage || 0, state, held: held.has(t),
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
+      attackAt: state === 'attack' ? (attackSeen[t] || null) : null,   // when this new-high signal first fired
     });
   }
   funnel.sort((a, b) => (a.pctToHigh ?? Infinity) - (b.pctToHigh ?? Infinity));   // closest to a new high first; manual (no high) last
@@ -312,7 +317,11 @@ export async function getPnthrTreeState(db) {
     }
     const gone = seenDocs.filter(d => !heldNow.has(d.ticker)).map(d => d.ticker);
     if (gone.length) await db.collection('pnthr_tree_seen').deleteMany({ ticker: { $in: gone } });
-    positions.forEach(p => { p.newToday = seen[p.ticker] === seenToday; p.seenAt = seenAt[p.ticker] || 0; });
+    positions.forEach(p => {
+      p.newToday = seen[p.ticker] === seenToday; p.seenAt = seenAt[p.ticker] || 0;
+      // when the trade occurred: paper → the sim buy's createdAt; real → first-seen-held (best available proxy)
+      p.boughtAt = p.sim ? (p.createdAt || null) : (seenAt[p.ticker] ? new Date(seenAt[p.ticker]) : null);
+    });
     positions.sort((a, b) => (a.seenAt ?? Infinity) - (b.seenAt ?? Infinity));
   } catch { positions.forEach(p => { p.newToday = false; p.early = false; }); }
 
@@ -457,6 +466,19 @@ async function captureTreeFills(db, cfg, snap) {
   return n;
 }
 
+// ── ATTACK trigger-time ledger ───────────────────────────────────────────────
+// Records WHEN each name first fired the ATTACK signal (hit a new 42wk high while we don't
+// hold it). Written ONLY by the 2-min tick — page-independent, reliable to ~2 min — so the
+// trigger time is correct even if no one is viewing the page. getPnthrTreeState only READS it.
+// A name's stamp clears once it leaves ATTACK (bought → DEVOUR, or pulled back), so a fresh
+// re-entry gets a fresh trigger time.
+const ATTACK_SEEN = 'pnthr_tree_attack_seen';
+async function stampAttackSeen(db, tickers) {
+  const now = new Date();
+  for (const t of tickers) await db.collection(ATTACK_SEEN).updateOne({ ticker: t }, { $setOnInsert: { ticker: t, firstAttackAt: now } }, { upsert: true });
+  await db.collection(ATTACK_SEEN).deleteMany(tickers.length ? { ticker: { $nin: tickers } } : {});
+}
+
 // ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
@@ -492,6 +514,7 @@ export async function runPnthrTreeTick(db) {
   const grossCap = MAX_GROSS_X * nav;
 
   // 1) ENTRIES — any AI-300 name at a NEW intraday 42wk high we don't already hold
+  const attackFired = [];   // names firing the ATTACK signal this tick (new 42wk high, not held) — for trigger timestamps
   for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
     if (excl.has(t)) continue;   // manual-only (IPO seasoning / split re-sync pending) → don't trade
@@ -499,6 +522,7 @@ export async function runPnthrTreeTick(db) {
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
     const priorHigh = highs[t];   // real prior 42wk high (excl today)
     if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 42wk high
+    attackFired.push(t);   // a new 42wk high we don't hold → ATTACK; record its trigger time after the loop
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const { shares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
     if (!stop || shares < 1) continue;
@@ -521,6 +545,8 @@ export async function runPnthrTreeTick(db) {
       actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: t, shares, price, stop });
     }
   }
+
+  await stampAttackSeen(db, attackFired).catch((e) => console.error('[Tree] attack-seen stamp failed:', e.message));
 
   // 2) MANAGE — trail the 2-week stop; paper exits on stop (live stops rest at the broker)
   if (cfg.mode === 'paper') {

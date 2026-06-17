@@ -8,6 +8,15 @@ import { AumTracker, ForwardProjection } from './AmbushPage';
 // Modes: OFF · PAPER TRADE · AUTO-EXECUTE.  Auto requires confirmation (real orders).
 
 const fmt = (n) => '$' + Math.round(n).toLocaleString();
+// ET clock for signal/trade timestamps — time only if today, else "M/D h:mm".
+const clockET = (d) => {
+  if (!d) return '';
+  const dt = new Date(d); if (isNaN(dt)) return '';
+  const time = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  const dayET = dt.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  return dayET === todayET ? time : dt.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'America/New_York' }) + ' ' + time;
+};
 const agoStr = (iso) => {                                  // "2h 14m ago" / "8m ago"
   const ms = Date.now() - new Date(iso).getTime();
   if (!(ms >= 0)) return 'just now';
@@ -161,6 +170,7 @@ function Badge({ f, onClick }) {
           {f.stop != null && <span style={{ color: f.state === 'attack' ? '#fecaca' : '#f87171' }}>stop ${f.stop.toFixed(2)}</span>}
         </>
       )}
+      {f.attackAt && <span style={{ opacity: 0.85, fontSize: 10 }} title="When this 42-week-high signal first fired (ET)">⚡{clockET(f.attackAt)}</span>}
     </span>
   );
 }
@@ -215,6 +225,7 @@ function DevourCard({ p, onClick, offStrategy }) {
         <span>Risk/sh <b style={{ color: '#facc15' }}>${rps != null ? rps.toFixed(2) : '--'}</b></span>
         <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b>{p.riskPct != null && totalRisk != null ? <span style={{ color: '#a16207' }}> · {p.riskPct}% NAV</span> : null}</span>
       </div>
+      {p.boughtAt && <div style={{ marginTop: 6, fontSize: 10, color: '#7a7a7a', fontFamily: 'monospace' }} title="When this position was purchased (ET)">Bought {clockET(p.boughtAt)}</div>}
     </div>
   );
 }
@@ -497,7 +508,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid #1c3a28', paddingBottom: 6, marginBottom: 10 }}>
           <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            DEVOUR — POSITIONS, RISK ON ({devourPos.length})
+            DEVOUR — POSITIONS, RISK ON · PURCHASED ({devourPos.length})
             {devourHasSim && <span title="These Devour figures include paper simulations — hypothetical, not real IBKR risk." style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 4, letterSpacing: '0.05em' }}>{devourAllSim ? 'ALL PAPER' : 'INCL. PAPER'}</span>}
           </h3>
           <div style={{ display: 'flex', gap: 20, fontSize: 12, fontFamily: 'monospace' }}>
@@ -511,7 +522,7 @@ export default function PnthrTreePage() {
 
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>
-        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS ({attack.length})</h3>
+        <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS · READY FOR PURCHASE ({attack.length})</h3>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
           <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} />)}</div>}
       </div>

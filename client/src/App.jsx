@@ -1763,7 +1763,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Bond Yields — treasury yields + shock detection */}
           {renderPage === 'bondHeat' && <BondHeatPage />}
 
-          {/* New Highs/Lows — intraday 52-week highs/lows, Carnivore + AI 300 */}
+          {/* New Highs — intraday new highs: Carnivore 4-week, AI 300 42-week (lows removed) */}
           {renderPage === 'newHighsLows' && <NewHighsLowsPage />}
 
 

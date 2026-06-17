@@ -690,6 +690,12 @@ export async function getPnthrTreeProjection(db) {
   const projected = dates.map((date, i) => ({ date, value: +(startAum * Math.pow(dailyCagr, i)).toFixed(0) }));
 
   const elapsed = Math.min(weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
+  // "If we keep pace with the plan from here" — extend the ACTUAL line forward (dotted green on
+  // the chart) starting at TODAY's real AUM (nav) and compounding at the same backtest daily CAGR.
+  // Anchored at your current (ahead/behind) point, so it runs parallel to the blue, offset by how
+  // far ahead you are today. (Once there's enough live history we can switch this to your OWN
+  // realized pace — for now 5 days is too short to annualize.)
+  const actualProjected = projected.slice(elapsed).map((p, k) => ({ date: p.date, value: +(nav * Math.pow(dailyCagr, k)).toFixed(0) }));
   const projectedToday = +(startAum * Math.pow(dailyCagr, elapsed)).toFixed(0);
   const onTrackPct = projectedToday > 0 ? +(((nav / projectedToday) - 1) * 100).toFixed(1) : 0;
   // Pace vs schedule: the projection curve is weekday-spaced (1 step ≈ 1 trading day), so the
@@ -713,6 +719,7 @@ export async function getPnthrTreeProjection(db) {
     current: { date: todayISO, projectedAum: projectedToday, actualAum: +(+nav).toFixed(0), onTrackPct, aheadOfSchedule },
     projected,
     actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+    actualProjected,   // dotted green: keep-pace-with-the-plan from today's actual AUM
     forward,
     metrics: proj.metrics || null,
     metricsGross: proj.metricsGross || null,   // GROSS tiles (AumTracker renders a 2nd row when present)

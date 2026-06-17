@@ -463,12 +463,12 @@ function fmtAum(n) {
   return '$' + v.toFixed(0);
 }
 
-function AumChart({ projected, actual }) {
+function AumChart({ projected, actual, actualProjected }) {
   if (!projected?.length) return null;
   const W = 1000, H = 230, padL = 6, padR = 6, padT = 12, padB = 24;
-  const proj = projected, act = actual || [];
-  const maxV = Math.max(...proj.map(p => p.value), ...act.map(a => a.value));
-  const minV = Math.min(proj[0].value, ...act.map(a => a.value));
+  const proj = projected, act = actual || [], actProj = actualProjected || [];
+  const maxV = Math.max(...proj.map(p => p.value), ...act.map(a => a.value), ...actProj.map(a => a.value));
+  const minV = Math.min(proj[0].value, ...act.map(a => a.value), ...actProj.map(a => a.value));
   const anchor = new Date(proj[0].date + 'T12:00:00');
   const last = new Date(proj[proj.length - 1].date + 'T12:00:00');
   const span = (last - anchor) || 1;
@@ -479,6 +479,8 @@ function AumChart({ projected, actual }) {
   const projPts = proj.filter((_, i) => i % step === 0 || i === proj.length - 1)
     .map(p => `${xd(p.date).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
   const actPts = act.map(a => `${xd(a.date).toFixed(1)},${y(a.value).toFixed(1)}`).join(' ');
+  const actProjPts = actProj.filter((_, i) => i % step === 0 || i === actProj.length - 1)
+    .map(a => `${xd(a.date).toFixed(1)},${y(a.value).toFixed(1)}`).join(' ');
   const yearTicks = [];
   for (let yr = anchor.getFullYear(); yr <= last.getFullYear(); yr++) yearTicks.push(yr);
   return (
@@ -500,6 +502,7 @@ function AumChart({ projected, actual }) {
         return <text key={i} x={xp} y={H - 6} fill="#555" fontSize="11" textAnchor="middle">{yr}</text>;
       })}
       <polyline points={projPts} fill="none" stroke="#3b82f6" strokeWidth="2" />
+      {actProjPts && <polyline points={actProjPts} fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="2 5" opacity="0.85" />}
       {actPts && <polyline points={actPts} fill="none" stroke="#22c55e" strokeWidth="2.5" />}
     </svg>
   );
@@ -822,11 +825,12 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
   const chartBlock = showChart && (
     <>
       <div style={{ marginTop: 10 }}>
-        <AumChart projected={projected} actual={actual} />
+        <AumChart projected={projected} actual={actual} actualProjected={projection.actualProjected} />
       </div>
-      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2 }}>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#888', marginTop: 2, flexWrap: 'wrap' }}>
         <span><span style={{ color: '#3b82f6' }}>━</span> Projected (backtest)</span>
         <span><span style={{ color: '#22c55e' }}>━</span> Actual (your account)</span>
+        {projection.actualProjected?.length > 0 && <span><span style={{ color: '#22c55e' }}>┄</span> If you keep pace (at plan CAGR from today)</span>}
       </div>
     </>
   );

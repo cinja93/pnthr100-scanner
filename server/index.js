@@ -2651,6 +2651,11 @@ app.post('/api/admin/pnthr-tree/record-daily-log', authenticateJWT, requireAdmin
   try { const db = await connectToDatabase(); res.json(await recordTreeDailyLog(db)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
+// Risk Scorecard — your managed trades vs the untouched strategy (return-per-drawdown, %). Forward-only.
+app.get('/api/pnthr-tree/scorecard', authenticateJWT, async (req, res) => {
+  try { const db = await connectToDatabase(); const { getPnthrTreeScorecard } = await import('./pnthrTreeScorecard.js'); res.json(await getPnthrTreeScorecard(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // Standalone auto-execute trigger (runs against latest existing orders doc)
 app.post('/api/admin/run-ai-auto-execute', authenticateJWT, requireAdmin, async (req, res) => {

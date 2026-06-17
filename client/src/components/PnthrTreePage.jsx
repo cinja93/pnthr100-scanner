@@ -261,6 +261,7 @@ export default function PnthrTreePage() {
   const [splitMsg, setSplitMsg] = useState(null);
   const [dailyLog, setDailyLog] = useState(null);       // null = closed; array = open modal
   const [logBusy, setLogBusy] = useState(false);
+  const [scorecard, setScorecard] = useState(null);     // Risk Scorecard (forward-only)
 
   const openDailyLog = async () => {
     setDailyLog([]);   // open immediately, fill when loaded
@@ -291,6 +292,10 @@ export default function PnthrTreePage() {
   useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
   useEffect(() => {
     const go = () => fetchPnthrTreeProjection().then(setProjection).catch(() => {});
+    go(); const id = setInterval(go, 60000); return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    const go = () => apiFetch(`${API_BASE}/api/pnthr-tree/scorecard`, { headers: authHeaders() }).then(r => r.ok ? r.json() : null).then(setScorecard).catch(() => {});
     go(); const id = setInterval(go, 60000); return () => clearInterval(id);
   }, []);
 
@@ -532,6 +537,51 @@ export default function PnthrTreePage() {
         <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, A→Z ({stalking.length})</h3>
         <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(stalking.map(x => x.ticker), f.ticker)} />)}</div>
       </div>
+
+      {/* RISK SCORECARD — forward-only: did your active management beat the strategy on return-per-drawdown? */}
+      {scorecard && (
+        <div style={{ marginTop: 18, border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', background: '#0c0c0c' }}>
+          <h3 style={{ color: '#e6e6e6', fontSize: 13, letterSpacing: '0.08em', margin: '0 0 8px' }}>🎯 RISK SCORECARD — your management vs the strategy</h3>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12, color: '#ccc', marginBottom: 8 }}>
+            <span title="Peak-to-trough of your real AUM since live tracking began">Your max drawdown <b style={{ color: '#22c55e' }}>{scorecard.portfolio?.actualMaxDDPct}%</b></span>
+            <span style={{ color: '#555' }}>vs</span>
+            <span title="The backtest's max drawdown — the number you're trying to beat by managing risk">Backtest <b style={{ color: '#facc15' }}>{scorecard.portfolio?.backtestDDPct}%</b></span>
+            <span style={{ color: '#666', fontSize: 11 }}>· tracking since {scorecard.portfolio?.since || '—'} ({scorecard.portfolio?.aumDays || 0} days)</span>
+          </div>
+          {(scorecard.counts.WIN + scorecard.counts.MIXED + scorecard.counts.LOSS) > 0 && (
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
+              <span style={{ color: '#22c55e' }}>WIN {scorecard.counts.WIN}</span>
+              <span style={{ color: '#facc15' }}>MIXED {scorecard.counts.MIXED}</span>
+              <span style={{ color: '#ef4444' }}>LOSS {scorecard.counts.LOSS}</span>
+            </div>
+          )}
+          {scorecard.scored.length > 0 ? (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {scorecard.scored.map((s, i) => {
+                const v = s.score?.verdict;
+                const c = v === 'WIN' ? '#22c55e' : v === 'LOSS' ? '#ef4444' : '#facc15';
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontFamily: 'monospace', fontSize: 12, padding: '6px 10px', background: '#121212', border: '1px solid #222', borderRadius: 8 }}>
+                    <span style={{ fontWeight: 800, color: '#fff', minWidth: 52 }}>{s.ticker}</span>
+                    {v ? <span style={{ background: c + '22', color: c, border: `1px solid ${c}66`, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4 }}>{v}{s.score.edgePct != null ? ` ${s.score.edgePct >= 0 ? '+' : ''}${s.score.edgePct}%` : ''}</span>
+                       : <span style={{ color: '#888', fontSize: 11 }}>no strategy match</span>}
+                    <span style={{ color: '#7fcf9f' }}>you: {s.returnPct >= 0 ? '+' : ''}{s.returnPct}% · {s.ddPct}% DD</span>
+                    {s.strategy && <span style={{ color: '#999' }}>strategy: {s.strategy.returnPct >= 0 ? '+' : ''}{s.strategy.returnPct}% · {s.strategy.ddPct}% DD</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ color: '#777', fontSize: 12 }}>No trades to score yet — fills recorded: <b style={{ color: '#aaa' }}>{scorecard.fillsRecorded}</b>. Scores each trade as you make it (return-per-drawdown vs the strategy).</div>
+          )}
+          {scorecard.strategyOnly.length > 0 && (
+            <div style={{ marginTop: 8, color: '#777', fontSize: 11 }}>
+              Strategy benchmark (engine trades — the bar to beat): {scorecard.strategyOnly.slice(0, 6).map(s => `${s.ticker} ${s.returnPct >= 0 ? '+' : ''}${s.returnPct}%/${s.ddPct}%DD`).join(' · ')}
+            </div>
+          )}
+          <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>{scorecard.note}</div>
+        </div>
+      )}
 
       <div style={{ color: '#555', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
         Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.

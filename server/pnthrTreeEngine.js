@@ -427,6 +427,36 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
   return recorded;
 }
 
+// ── FILL LEDGER (forward-recording for the Risk Scorecard) ────────────────────
+// Persists EVERY entry (BOT) and exit (SLD) fill on a Tree-universe (AI-300) name,
+// idempotent by execId, so we can reconstruct each of your real trades — including
+// scaling in/out — and score how you managed risk vs the untouched strategy. Best-effort
+// on IBKR's execution feed (same source the exit-capture uses); runs every tick so fills
+// are caught within ~2 min. Forward-only: it captures from the moment it deploys (your
+// fast 3-day flurry before this can't be reconstructed and is intentionally not backfilled).
+const FILLS = 'pnthr_tree_fills';
+async function captureTreeFills(db, cfg, snap) {
+  const ymd = etDateStr().replaceAll('-', '');
+  let n = 0;
+  for (const e of (snap.latestExecutions || [])) {
+    const side = String(e.side || '').toUpperCase();                       // BOT (buy) | SLD (sell)
+    if (side !== 'BOT' && side !== 'SLD') continue;
+    const t = (e.symbol || '').toUpperCase();
+    if (!AI_META[t]) continue;                                             // Tree universe (AI-300) only — what the strategy also trades
+    if (e.time && !String(e.time).replace(/[^0-9]/g, '').startsWith(ymd)) continue;   // today's fills only (feed can carry a prior session)
+    const r = await db.collection(FILLS).updateOne(
+      { execId: e.execId },
+      { $setOnInsert: {
+          execId: e.execId, ticker: t, side, price: +e.price || 0, shares: Math.abs(+e.shares || 0),
+          date: etDateStr(), execTime: e.time || null, mode: cfg.mode, recordedAt: new Date(),
+        } },
+      { upsert: true },
+    );
+    if (r.upsertedCount) n++;
+  }
+  return n;
+}
+
 // ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
@@ -535,6 +565,9 @@ export async function runPnthrTreeTick(db) {
   // in paper this is the only thing that touches the real account, and it is read-only.
   try { const n = await captureTreeStopOuts(db, cfg, snap, lows, excl); if (n) actions.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
   catch (e) { console.error('[Tree] stop-out capture failed:', e.message); }
+  // Fill ledger (entries + exits) for the Risk Scorecard — forward-recording, both modes, read-only.
+  try { const n = await captureTreeFills(db, cfg, snap); if (n) actions.push({ type: 'FILLS_RECORDED', count: n }); }
+  catch (e) { console.error('[Tree] fill capture failed:', e.message); }
 
   await db.collection(CFG).updateOne({}, { $set: { lastTick: new Date(), lastActions: actions.slice(0, 50) } }, { upsert: true });
   return { mode: cfg.mode, actions };

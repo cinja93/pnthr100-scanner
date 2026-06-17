@@ -3,9 +3,13 @@
  "strategy": "AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap",
  "disclosure": "Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.",
  "version": "tree-2026-06-11",
+ "backtestStart": "2023-01-03",
+ "backtestEnd": "2026-06-11",
  "backtestStartNav": 100000,
  "backtestEndNav": 1105214,
  "tradingDays": 863,
+ "avgHoldDays": 18.2,
+ "medianHoldDays": 15,
  "inputHash": "033c821fe9612e6c54a24853d52c295ea668328c",
  "inputNames": 308,
  "metrics": {

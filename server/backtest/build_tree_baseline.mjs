@@ -93,7 +93,9 @@ function closePos(t, exitPx, date) {
   totalComm += comm; totalSlip += slip;
   const gross = (exitPx - p.fill) * p.sh; realizedGross += gross;       // gross: no costs
   const pnl = gross - comm - slip; realized += pnl;                     // net: minus costs
-  closed.push({ ticker: t, pnl, pnlGross: gross }); delete positions[t];
+  const ei = T[t]?.idxByDate[p.entryDate], xi = T[t]?.idxByDate[date];  // hold time in TRADING days (bar-index delta)
+  const holdDays = (ei != null && xi != null) ? (xi - ei) : null;
+  closed.push({ ticker: t, pnl, pnlGross: gross, holdDays }); delete positions[t];
 }
 
 for (const date of allDates) {
@@ -179,6 +181,11 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
     startNav: NAV0,
   };
 }
+// Hold time across all closed trades (winners + losers), in trading days. Same for net/gross
+// (identical trades). Right-skewed — winners ride, losers cut — so report mean AND median.
+const holds = closed.map(c => c.holdDays).filter(h => h != null).sort((a, b) => a - b);
+const avgHoldDays = holds.length ? +(holds.reduce((a, b) => a + b, 0) / holds.length).toFixed(1) : null;
+const medianHoldDays = holds.length ? holds[Math.floor(holds.length / 2)] : null;
 const metrics = computeMetrics(equity, 'pnl', maxDDfrac, maxDDdollar);              // NET (dashboard headline)
 const grossMetrics = computeMetrics(equityGross, 'pnlGross', maxDDfracG, maxDDdollarG);  // GROSS (before costs)
 const factors = equity.map((e, i) => ({ i, date: e.date, factor: +(e.eq / NAV0).toFixed(6) }));  // projection uses NET curve
@@ -189,9 +196,13 @@ const out = {
   strategy: 'AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap',
   disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
+  backtestStart: equity[0].date,        // first session traded (frozen)
+  backtestEnd: lastDate,                // last session before go-live (frozen at 2026-06-11)
   backtestStartNav: NAV0,
   backtestEndNav: metrics.endingEquity,
   tradingDays: factors.length,
+  avgHoldDays,                          // mean trading days held per closed trade
+  medianHoldDays,                       // median trading days held (less skewed by long winners)
   inputHash: inputFingerprint.hash,     // fingerprint of the candle inputs (drift guard)
   inputNames: inputFingerprint.names,
   metrics,                     // NET (dashboard headline)

@@ -891,6 +891,15 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       ) : (
         metricTiles(projection.metrics, 'Net')
       ))}
+
+      {/* Context facts: backtest window, average hold time, and when live (actual) tracking began */}
+      {(projection.meta?.backtestStart || projection.meta?.avgHoldDays != null || projection.meta?.actualStart) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', color: '#777', fontSize: 11, marginTop: 10, paddingTop: 8, borderTop: '1px solid #1e1e1e' }}>
+          {projection.meta?.backtestStart && <span>Backtest: <b style={{ color: '#aaa' }}>{projection.meta.backtestStart} → {projection.meta.backtestEnd}</b></span>}
+          {projection.meta?.avgHoldDays != null && <span>Avg hold: <b style={{ color: '#aaa' }}>{projection.meta.avgHoldDays} trading days</b> (~{(projection.meta.avgHoldDays / 5).toFixed(1)} wks · median {projection.meta.medianHoldDays})</span>}
+          {projection.meta?.actualStart && <span>Live tracking since: <b style={{ color: '#22c55e' }}>{projection.meta.actualStart}</b></span>}
+        </div>
+      )}
       </div>
 
       {!hideForward && <ForwardProjection forward={projection.forward} />}

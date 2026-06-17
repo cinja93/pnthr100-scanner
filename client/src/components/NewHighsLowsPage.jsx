@@ -47,18 +47,21 @@ const AI_METRICS = {
 };
 
 function Badge({ item, tone, onClick }) {
+  const buyStop = item.shares > 0 ? ` · buy ${item.shares}sh · stop $${(+item.stop).toFixed(2)} · risk $${item.risk}` : '';
   return (
     <span
       onClick={onClick}
-      title={`${item.ticker} — $${(+item.price).toFixed(2)} (${item.changePct >= 0 ? '+' : ''}${(+item.changePct).toFixed(1)}%) · click to chart`}
+      title={`${item.ticker} — $${(+item.price).toFixed(2)} (${item.changePct >= 0 ? '+' : ''}${(+item.changePct).toFixed(1)}%)${buyStop} · click to chart`}
       style={{
-        display: 'inline-flex', alignItems: 'baseline', gap: 6, cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
         background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text,
         borderRadius: 6, padding: '4px 9px', fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
       }}
     >
-      {item.ticker}
-      <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.75 }}>${(+item.price).toFixed(2)}</span>
+      <span>{item.ticker}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>${(+item.price).toFixed(2)}</span>
+      {item.shares > 0 && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5, fontSize: 11, fontWeight: 700 }}>{item.shares}sh</span>}
+      {item.stop != null && <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>stop ${(+item.stop).toFixed(2)}</span>}
     </span>
   );
 }

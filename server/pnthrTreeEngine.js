@@ -87,7 +87,7 @@ const AI_TICKERS = (() => {
 })();
 
 // ── NAV (same source the Ambush/Elite pages use) ────────────────────────────
-async function getNav(db) {
+export async function getNav(db) {
   let nav = 80200;
   try {
     const cfg = await db.collection('pnthr_ambush_config').findOne({});
@@ -135,7 +135,7 @@ async function priorBands(db, tickers, excl) {
   return { highs, lows, lastClose };
 }
 
-function sizeFor(nav, price, stop) {
+export function sizeFor(nav, price, stop) {
   if (!(stop > 0) || !(price > stop)) return { shares: 0, rps: 0, risk: 0 };
   const rps = price - stop;
   const shares = Math.min(Math.floor(nav * VITALITY_PCT / rps), Math.floor(nav * TICKER_CAP_PCT / price));

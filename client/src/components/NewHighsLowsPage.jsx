@@ -12,22 +12,38 @@ const GREEN = { bg: 'rgba(34,197,94,0.14)', border: 'rgba(34,197,94,0.55)', text
 
 // Backtest metrics for buying each new-high signal (hypothetical, survivorship-flattered — see desc).
 const CARN_METRICS = {
-  period: '2019 → 2026 · full history, incl. COVID + the 2022 bear',
+  dates: '2019-02-01 → 2026-06-11',
+  window: '~7.3 yrs · full history — COVID crash, the 2022 bear, and the AI bull',
+  scan: 'LIVE: current S&P 500 + S&P 400 (MidCap) members whose intraday high today has reached a NEW 4-week high (≥ the highest high of the prior 20 trading days, today excluded).',
   rows: [
     ['Net return', '+1,115%'], ['CAGR', '40.4%'], ['Sharpe', '1.00'], ['Sortino', '1.42'],
     ['Profit factor', '1.51x'], ['Calmar', '0.77'], ['Max drawdown', '52.5%'],
     ['Win rate', '41%'], ['Trades', '2,081'], ['vs SPY', 'SPY +173%'],
   ],
-  desc: 'Current S&P 500 + S&P 400 (MidCap) members making a NEW 4-week high today. The backtest buys each new 4-week high and trails a 2-week-low stop (2% NAV risk / 10% cap per name, 2× gross cap). Hypothetical & survivorship-flattered (current members only); not a track record.',
+  specs: [
+    'Entry — buy the breakout: resting buy-stop at the prior 4-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',
+    'Exit — trailing stop at the lowest low of the prior 10 trading days (2 weeks) − $0.01, ratcheted up; exit when the day breaks it',
+    'Sizing — 2% of NAV risked per name (off the stop), capped at 10% of NAV per name · 2× gross cap',
+    'Costs — IBKR commission + 5 bps slippage per leg',
+    'Universe — current members only → SURVIVORSHIP-FLATTERED. Hypothetical backtest on $100K, not a track record.',
+  ],
 };
 const AI_METRICS = {
-  period: '2023-01-03 → 2026-06-11 · the live PNTHR Tree window',
+  dates: '2023-01-03 → 2026-06-11',
+  window: '~3.45 yrs · the live PNTHR Tree window (AI-300 data begins 2022, so this is a shorter, mostly-bull window — not directly comparable to Carnivore’s full cycle)',
+  scan: 'LIVE: current PNTHR AI-300 index members whose intraday high today has reached a NEW 42-week high (≥ the highest high of the prior 210 trading days, today excluded). This is the live PNTHR Tree entry signal.',
   rows: [
     ['Net return', '+1,005%'], ['CAGR', '101.2%'], ['Sharpe', '1.48'], ['Sortino', '2.18'],
     ['Profit factor', '2.16x'], ['Calmar', '2.06'], ['Max drawdown', '49.2%'],
     ['Win rate', '44%'], ['Trades', '933'], ['vs SPY', 'SPY +94%'],
   ],
-  desc: 'Current PNTHR AI-300 index members making a NEW 42-week high today — this is the live PNTHR Tree entry signal. Same 2-week-low trailing stop & sizing. Hypothetical & survivorship-flattered; frozen at go-live. Not a track record.',
+  specs: [
+    'Entry — buy the breakout: resting buy-stop at the prior 42-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',
+    'Exit — trailing stop at the lowest low of the prior 10 trading days (2 weeks) − $0.01, ratcheted up; exit when the day breaks it',
+    'Sizing — 2% of NAV risked per name (off the stop), capped at 10% of NAV per name · 2× gross cap',
+    'Costs — IBKR commission + 5 bps slippage per leg',
+    'Universe — current AI-300 members only → SURVIVORSHIP-FLATTERED. Hypothetical backtest on $100K, frozen at go-live. Not a track record.',
+  ],
 };
 
 function Badge({ item, tone, onClick }) {
@@ -50,8 +66,13 @@ function Badge({ item, tone, onClick }) {
 function MetricsBlock({ metrics }) {
   return (
     <div style={{ background: '#0b0b0b', border: '1px solid #1c2a1c', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
-      <div style={{ color: '#86efac', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', marginBottom: 2 }}>BACKTEST · BUY THIS SIGNAL</div>
-      <div style={{ color: '#666', fontSize: 10, marginBottom: 8 }}>{metrics.period}</div>
+      {/* What the column is showing, live */}
+      <div style={{ color: '#86efac', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', marginBottom: 2 }}>LOOKING AT (LIVE)</div>
+      <div style={{ color: '#aaa', fontSize: 11, marginBottom: 10, lineHeight: 1.45 }}>{metrics.scan}</div>
+      {/* Backtest period + metrics */}
+      <div style={{ color: '#86efac', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em' }}>BACKTEST · BUY THIS SIGNAL</div>
+      <div style={{ color: '#888', fontSize: 11, fontFamily: 'monospace', margin: '2px 0 1px' }}>Dates: <b style={{ color: '#ccc' }}>{metrics.dates}</b></div>
+      <div style={{ color: '#666', fontSize: 10, marginBottom: 8, lineHeight: 1.4 }}>{metrics.window}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: 6 }}>
         {metrics.rows.map(([label, value], i) => (
           <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 6, padding: '5px 8px' }}>
@@ -60,7 +81,11 @@ function MetricsBlock({ metrics }) {
           </div>
         ))}
       </div>
-      <div style={{ color: '#777', fontSize: 10, marginTop: 8, lineHeight: 1.4 }}>{metrics.desc}</div>
+      {/* The exact rules that produced those metrics */}
+      <div style={{ color: '#86efac', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', marginTop: 10, marginBottom: 4 }}>SPECS</div>
+      <ul style={{ margin: 0, paddingLeft: 16, color: '#888', fontSize: 10, lineHeight: 1.5 }}>
+        {metrics.specs.map((s, i) => <li key={i}>{s}</li>)}
+      </ul>
     </div>
   );
 }

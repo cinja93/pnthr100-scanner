@@ -468,13 +468,13 @@ export async function runPnthrTreeTick(db) {
     if (cfg.mode === 'paper') {
       await db.collection(POS).insertOne({
         ticker: t, direction: 'LONG', entryPrice: price, avgCost: price, totalShares: shares, shares,
-        stop, status: 'ACTIVE', mode: 'paper', source: 'TREE_52WH', entryDate: new Date().toISOString().slice(0, 10), createdAt: new Date(),
+        stop, status: 'ACTIVE', mode: 'paper', source: 'TREE_42WH', entryDate: new Date().toISOString().slice(0, 10), createdAt: new Date(),
       });
       actions.push({ type: 'PAPER_ENTRY', ticker: t, shares, price, stop });
     } else if (cfg.mode === 'live') {
       // Bridge BUY_ENTRY places the market buy AND the protective stop in one command (Ambush shape).
       // Requires the bridge running + draining the outbox, and the Ambush engine OFF (no reconcile contention).
-      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: t, shares, price, direction: 'LONG', stopPrice: stop, source: 'TREE_52WH' });
+      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: t, shares, price, direction: 'LONG', stopPrice: stop, source: 'TREE_42WH' });
       actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: t, shares, price, stop });
     }
   }

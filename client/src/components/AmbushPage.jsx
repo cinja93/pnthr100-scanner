@@ -779,17 +779,20 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
     </div>
   );
   const rowLabel = (t) => <div style={{ color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginTop: 12 }}>{t}</div>;
-  // "At MM-DD-YY levels" + "N trading days ahead/behind schedule" — only when the projection
-  // provides it (Tree). Reads current.aheadOfSchedule; dynamic as Actual AUM moves.
+  // ON TRACK line + "At MM-DD-YY levels" + "N trading days ahead/behind schedule" grouped in a
+  // SINGLE outlined box (Tree only — when current.aheadOfSchedule is present). Dynamic as AUM moves.
   const fmtMMDDYY = (d) => { const [y, m, dd] = String(d || '').split('-'); return y ? `${m}-${dd}-${y.slice(2)}` : '—'; };
-  const paceLines = () => {
+  const trackWithPace = (pct) => {
     const a = current.aheadOfSchedule;
-    if (!a || !a.date) return null;
+    if (!a || !a.date) return trackBadge(pct);   // no pace data → original standalone pill
+    const ok = (pct ?? 0) >= 0;
+    const col = ok ? '#22c55e' : '#ef4444';
     const n = Math.abs(a.tradingDays);
     return (
-      <div style={{ fontSize: 11, textAlign: 'center', lineHeight: 1.55, marginTop: 2 }}>
-        <div style={{ color: '#888' }}>At {fmtMMDDYY(a.date)} levels</div>
-        <div style={{ color: a.ahead ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+      <div style={{ border: `1px solid ${col}66`, background: col + '12', borderRadius: 8, padding: '8px 12px', textAlign: 'center', lineHeight: 1.5 }}>
+        <div style={{ color: col, fontWeight: 700, fontSize: 12 }}>{ok ? 'ON TRACK' : 'BEHIND'} {pct >= 0 ? '+' : ''}{pct}% vs backtest</div>
+        <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>At {fmtMMDDYY(a.date)} levels</div>
+        <div style={{ color: a.ahead ? '#22c55e' : '#ef4444', fontWeight: 600, fontSize: 11 }}>
           {n} trading day{n === 1 ? '' : 's'} {a.ahead ? 'ahead of' : 'behind'} schedule
         </div>
       </div>
@@ -867,8 +870,7 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
             <>
               {box('Projected AUM', current.projectedAum, '#3b82f6', () => setTableView('projected'))}
               {box('Actual AUM', current.actualAum, '#22c55e', openActual)}
-              {trackBadge(current.onTrackPct)}
-              {paceLines()}
+              {trackWithPace(current.onTrackPct)}
             </>
           )}
         </div>

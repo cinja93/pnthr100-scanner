@@ -3,7 +3,7 @@
 // server/data/treeProjectionBaseline.json — the same shape Ambush uses, so the
 // AumTracker panel renders Tree's OWN numbers (not Ambush's).
 //
-//   AI-300 · LONG-only · FULL size (no pyramid) · enter on NEW intraday 52wk high
+//   AI-300 · LONG-only · FULL size (no pyramid) · enter on NEW intraday 42wk high (210 trading days)
 //   (resting buy-stop, fill at worse of level/open) · stop = lowest low of prior 10
 //   daily bars − .01, trail up · size = min(2% NAV/risk, 10% NAV/price) · GROSS ≤ 2× NAV.
 //   Executable / no look-ahead. Costs: commission + slippage every leg. SURVIVORSHIP-FLATTERED.
@@ -19,13 +19,20 @@ import { computeInputHash } from '../treeBaselineGuard.js';   // single shared f
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
-const LOOKBACK_52W = 252, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
-const START = '2023-01-03';
+const ENTRY_HIGH_LOOKBACK = +(process.env.LOOKBACK) || 210;   // 42-week high = 210 trading days (LIVE default). Override via LOOKBACK env to sweep (60=12wk … 252=52wk).
+const STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
+const START = process.env.START || '2023-01-03';
 // Backtest END is FROZEN at the last session before go-live (strategy went LIVE Fri 2026-06-12).
 // A backtest must not bleed into the live period, and freezing the endpoint makes the result
 // reproducible — it no longer drifts as new daily bars arrive. Live performance from 06-12
 // onward is the real track record (the dashboard's ACTUAL AUM line), tracked separately.
-const END = '2026-06-11';
+const END = process.env.END || '2026-06-11';
+// Universe knob: 'ai' (default) = current AI-300 members from pnthr_ai_bt_candles;
+// 'carn' = the 679 universe (pnthr_bt_candles, S&P 500 + 400) for out-of-sample validation.
+const UNIVERSE = process.env.UNIVERSE || 'ai';
+const CANDLE_COLL = UNIVERSE === 'carn' ? 'pnthr_bt_candles' : 'pnthr_ai_bt_candles';
+// ETFs/indexes living in the 679 collection that must never be traded as stocks.
+const ETF_EXCLUDE = new Set(['SPY','QQQ','DIA','IWM','XLK','XLF','XLE','XLV','XLY','XLP','XLI','XLB','XLU','XLRE','XLC','SMH','VOO','VTI']);
 
 const db = await connectToDatabase();
 
@@ -35,17 +42,18 @@ const db = await connectToDatabase();
 // CYBR/ABB, non-AI CHPT/PLUG, etc.) — names the live strategy never trades. Filtering to actual
 // members makes the backtest faithful to the strategy it claims to represent.
 const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
-const docs = await db.collection('pnthr_ai_bt_candles').find({}).toArray();
+const docs = await db.collection(CANDLE_COLL).find({}).toArray();
 const T = {}; const allDatesSet = new Set();
 for (const d of docs) {
-  if (!AI_SET.has(d.ticker)) continue;   // current index members only
+  if (UNIVERSE === 'ai' && !AI_SET.has(d.ticker)) continue;   // current index members only
+  if (UNIVERSE === 'carn' && ETF_EXCLUDE.has(d.ticker)) continue;   // 679: skip ETFs/indexes
   const bars = (d.daily || []).map(b => ({ date: b.date, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume || 0 }))
     .filter(b => b.l > 0 && b.c > 0 && b.date <= END).sort((a, b) => a.date.localeCompare(b.date));
-  if (bars.length < LOOKBACK_52W + 5) continue;
+  if (bars.length < ENTRY_HIGH_LOOKBACK + 5) continue;
   const n = bars.length;
   const hi52 = new Array(n).fill(null), loStop = new Array(n).fill(null), adv20 = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
-    if (i >= LOOKBACK_52W) { let mh = -Infinity; for (let j = i - LOOKBACK_52W; j < i; j++) if (bars[j].h > mh) mh = bars[j].h; hi52[i] = mh; }
+    if (i >= ENTRY_HIGH_LOOKBACK) { let mh = -Infinity; for (let j = i - ENTRY_HIGH_LOOKBACK; j < i; j++) if (bars[j].h > mh) mh = bars[j].h; hi52[i] = mh; }
     if (i >= STOP_LOOKBACK) { let sl = Infinity; for (let j = i - STOP_LOOKBACK; j < i; j++) if (bars[j].l < sl) sl = bars[j].l; loStop[i] = sl; }
     if (i >= 20) { let v = 0; for (let j = i - 20; j < i; j++) v += bars[j].v; adv20[i] = v / 20; }
     allDatesSet.add(bars[i].date);
@@ -100,7 +108,7 @@ for (const date of allDates) {
   const curEq = equityAt(mark);
   for (const t of Object.keys(T)) {
     if (positions[t]) continue;
-    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null || i < LOOKBACK_52W) continue;
+    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null || i < ENTRY_HIGH_LOOKBACK) continue;
     const bar = tk.bars[i];
     if (tk.hi52[i] == null || bar.h < tk.hi52[i] + 0.01 || tk.loStop[i] == null) continue;
     const trig = +(tk.hi52[i] + 0.01).toFixed(2);
@@ -178,7 +186,7 @@ const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs
 
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
-  strategy: 'AI-300 · LONG-only · new intraday 52wk high · daily-10 stop · 2% risk / 10% cap · 2× gross cap',
+  strategy: 'AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap',
   disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
   backtestStartNav: NAV0,
@@ -192,7 +200,7 @@ const out = {
   factors,
 };
 const outPath = new URL('../data/treeProjectionBaseline.json', import.meta.url).pathname;
-fs.writeFileSync(outPath, JSON.stringify(out, null, 1));
+if (process.env.NO_WRITE !== '1') fs.writeFileSync(outPath, JSON.stringify(out, null, 1));   // NO_WRITE=1 → sweep mode, never overwrite the live baseline
 
 console.log('\n  ════ TREE BASELINE WRITTEN ════');
 console.log('  ' + outPath);

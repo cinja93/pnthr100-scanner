@@ -76,7 +76,7 @@ export function calcCommission(shares, price) {
 // BL entry: pay slightly more. BL exit: receive slightly less.
 // SS entry: receive slightly less. SS exit: pay slightly more to cover.
 
-const SLIPPAGE_BPS = 5;   // basis points per leg
+const SLIPPAGE_BPS = +(process.env.SLIPPAGE_BPS) || 5;   // basis points per leg (default 5; override via env for slippage stress tests)
 
 /**
  * Calculate slippage cost for one order leg.

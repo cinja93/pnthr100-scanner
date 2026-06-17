@@ -1,7 +1,7 @@
 // server/pnthrTreeEngine.js
-// ── PNTHR TREE — 52-week-high momentum engine ───────────────────────────────
+// ── PNTHR TREE — 42-week-high momentum engine ───────────────────────────────
 // Strategy (Scott 2026-06-11): AI-300, LONG-only. Enter FULL SIZE the moment a name
-// makes a NEW INTRADAY 52-week high (no pyramid — tested best). Stop = 2-week lowest-low,
+// makes a NEW INTRADAY 42-week high (no pyramid — tested best). Stop = 2-week lowest-low,
 // trailed up. Risk-based sizing (2% NAV/name, capped 10% NAV/name).
 //
 // Modes:  'off'  — nothing fires (default)
@@ -24,9 +24,12 @@ const TRADES = 'pnthr_tree_trades';
 
 const VITALITY_PCT   = 0.02;   // risk budget per name
 const TICKER_CAP_PCT = 0.10;   // max position value per name
-const APPROACH_PCT   = 0.01;   // within 1% of the 52wk high → "approaching" (flashing)
+const APPROACH_PCT   = 0.01;   // within 1% of the 42wk high → "approaching" (flashing)
 const STOP_LOOKBACK  = 10;     // 2 trading weeks
-const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes today)
+const ENTRY_HIGH_LOOKBACK = 210;   // 42-week high lookback: 210 trading days of PRIOR bars (excludes today).
+                                   // Switched from 52wk/252d on 2026-06-17 — the 42wk high beat the 52wk on return,
+                                   // Sharpe, Sortino, Calmar AND drawdown, and held up OUT-OF-SAMPLE (679 universe +
+                                   // 2020-22 COVID/bear regime) as a stable plateau, not a curve-fit spike.
 
 // ── Engine exclude (MANUAL-ONLY tickers) ─────────────────────────────────────
 // Tickers the engine must IGNORE in funnel / entry / stop-management — trade them
@@ -34,7 +37,7 @@ const LOOKBACK_52W   = 252;    // 52-week high lookback (PRIOR bars, excludes to
 //   (a) split-stale candles: a pending/just-applied split makes the live (broker)
 //       price a fraction of our cached candles, so the engine would set a 2wk-low
 //       stop at the OLD scale, ABOVE the market = instant liquidation; and
-//   (b) brand-new IPOs with no/insufficient history: no real 52wk high to break and
+//   (b) brand-new IPOs with no/insufficient history: no real 42wk high to break and
 //       no 2wk-low to stop against (sizing the model can't compute).
 // Remove a ticker here only once its candles are clean (split re-synced, or ~1yr of
 // history accumulated). While excluded, the engine never enters, exits, or stops it.
@@ -107,7 +110,7 @@ async function fetchQuotes(tickers) {
 }
 
 // Prior-bar bands from the daily backtest candles, EXCLUDING today's forming bar:
-//   highs[t] = max high of the prior ≤252 bars  → the real 52-week high to break (the
+//   highs[t] = max high of the prior ≤210 bars  → the real 42-week high to break (the
 //              ATTACK trigger). NOT FMP's `yearHigh` field — that already absorbs today's
 //              intraday move, so a fresh breakout never registers (it stays "approaching").
 //   lows[t]  = min low of the prior ≤10 bars    → the 2-week trailing-stop reference.
@@ -121,11 +124,11 @@ async function priorBands(db, tickers, excl) {
     const bars = (d.daily || []).filter(b => b.date < today && +b.high > 0 && +b.low > 0)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!bars.length) continue;
-    const hi = bars.slice(-LOOKBACK_52W), lo = bars.slice(-STOP_LOOKBACK);
-    // A real 52-week high needs a FULL year of bars. Without this guard a fresh IPO
-    // (e.g. QNT, ~6 bars) would set its "52wk high" to a few-days high and falsely
+    const hi = bars.slice(-ENTRY_HIGH_LOOKBACK), lo = bars.slice(-STOP_LOOKBACK);
+    // A real 42-week high needs the full ~42 weeks (210 bars) of history. Without this guard a fresh IPO
+    // (e.g. QNT, ~6 bars) would set its "42wk high" to a few-days high and falsely
     // trigger ATTACK. No high → the name is skipped from the funnel until it seasons.
-    if (bars.length >= LOOKBACK_52W) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
+    if (bars.length >= ENTRY_HIGH_LOOKBACK) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
     if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
     lastClose[d.ticker] = +bars[bars.length - 1].close;   // for the live-price sanity net
   }
@@ -214,7 +217,7 @@ export async function getPnthrTreeState(db) {
   for (const t of AI_TICKERS) {
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
-    const priorHigh = highs[t];   // real prior 52wk high (excl today) — see priorBands
+    const priorHigh = highs[t];   // real prior 42wk high (excl today) — see priorBands
     if (!(price > 0)) continue;
     if (!(priorHigh > 0)) {
       // MANUAL-ONLY names (ENGINE_EXCLUDE or <1yr of bars, e.g. SPCX/QNT IPOs): still
@@ -229,7 +232,7 @@ export async function getPnthrTreeState(db) {
       continue;
     }
     let state = 'stalking';
-    if (dayHigh >= priorHigh + 0.01) state = 'attack';                 // broke the prior 52wk high today
+    if (dayHigh >= priorHigh + 0.01) state = 'attack';                 // broke the prior 42wk high today
     else if (price >= priorHigh * (1 - APPROACH_PCT)) state = 'approaching';
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const sz = stop ? sizeFor(nav, price, stop) : { shares: 0, rps: 0, risk: 0 };
@@ -277,7 +280,7 @@ export async function getPnthrTreeState(db) {
 
   // ── NEW-today flash + "Early" latch ─────────────────────────────────────────
   // Early = a strategy position you bought BEFORE the engine's signal (it has not yet
-  // made a new 52-week high while you've held it). The moment it does ("the strategy
+  // made a new 42-week high while you've held it). The moment it does ("the strategy
   // DID recommend it"), the latch flips and Early drops PERMANENTLY for this holding.
   // Engine sim-buys are recommended by definition → never Early. Resets on exit.
   const seenToday = etDateStr();
@@ -411,7 +414,7 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
   return recorded;
 }
 
-// ── Engine tick — paper records / live places orders on new 52wk highs ───────
+// ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
   if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
@@ -445,14 +448,14 @@ export async function runPnthrTreeTick(db) {
   }
   const grossCap = MAX_GROSS_X * nav;
 
-  // 1) ENTRIES — any AI-300 name at a NEW intraday 52wk high we don't already hold
+  // 1) ENTRIES — any AI-300 name at a NEW intraday 42wk high we don't already hold
   for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
     if (excl.has(t)) continue;   // manual-only (IPO seasoning / split re-sync pending) → don't trade
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
-    const priorHigh = highs[t];   // real prior 52wk high (excl today)
-    if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 52wk high
+    const priorHigh = highs[t];   // real prior 42wk high (excl today)
+    if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 42wk high
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const { shares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
     if (!stop || shares < 1) continue;
@@ -667,7 +670,7 @@ export async function recordTreeDailyLog(db) {
   const isStrategy = (t) => !!AI_META[t] && !excl.has(t);
   // Pull the page's OWN strategy / early / manual classification so the log matches it to
   // the letter. EARLY = a strategy name you bought before the engine's signal (held, not yet
-  // at a new 52wk high). Falls back to strategy/manual for any ticker no longer in the book.
+  // at a new 42wk high). Falls back to strategy/manual for any ticker no longer in the book.
   const catByTicker = {};
   try {
     const st = await getPnthrTreeState(db);

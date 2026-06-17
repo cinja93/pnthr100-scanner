@@ -3,11 +3,10 @@ import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../se
 import AiTickerChartModal from './AiTickerChartModal';
 import { AumTracker, ForwardProjection } from './AmbushPage';
 
-// PNTHR Tree — 52-week-high momentum cockpit.
+// PNTHR Tree — 42-week-high momentum cockpit.
 // Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).
 // Modes: OFF · PAPER TRADE · AUTO-EXECUTE.  Auto requires confirmation (real orders).
 
-const TREE_CAGR = 45.6;   // 1× no-pyramid backtest CAGR (conservative; 2× ≈ +104%). Hypothetical / survivorship-flattered.
 const fmt = (n) => '$' + Math.round(n).toLocaleString();
 const agoStr = (iso) => {                                  // "2h 14m ago" / "8m ago"
   const ms = Date.now() - new Date(iso).getTime();
@@ -152,8 +151,8 @@ function Badge({ f, onClick }) {
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
     <span className="tree-pulse" style={style} onClick={onClick} title={f.manual
-      ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 52wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
-      : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 52wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
+      ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 42wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
+      : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 42wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
       {f.manual && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5, color: '#facc15', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>MANUAL</span>}
       {(f.state === 'attack' || f.state === 'approaching') && f.shares > 0 && (
@@ -195,7 +194,7 @@ function DevourCard({ p, onClick, offStrategy }) {
           <span style={{ background: sim ? '#1e3a8a' : offStrategy ? '#7c4a03' : '#16a34a', border: `1px solid ${sim ? '#3b82f6' : offStrategy ? '#f59e0b' : '#22c55e'}`, color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
           <span style={{ color: sim ? '#60a5fa' : offStrategy ? '#f59e0b' : (prot ? '#60a5fa' : '#22c55e'), fontSize: 11 }}>{sim ? 'PAPER LONG' : offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
           {sim && <span title="Simulated would-buy recorded by the paper engine — NOT a real position in IBKR; no order was placed." style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>PAPER</span>}
-          {p.early && !offStrategy && <span title="You bought this before the engine's signal (a new 52-week high). The tag clears the moment the strategy triggers the buy." style={{ background: '#f59e0b', color: '#1a1200', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>EARLY</span>}
+          {p.early && !offStrategy && <span title="You bought this before the engine's signal (a new 42-week high). The tag clears the moment the strategy triggers the buy." style={{ background: '#f59e0b', color: '#1a1200', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>EARLY</span>}
           {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
           {warn === 'stop' && <span title={`Within ${(NEAR_STOP_PCT * 100).toFixed(0)}% of the stop ($${p.stop?.toFixed(2)}) — exit imminent`} style={{ background: '#ef4444', color: '#1a0000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>⚠ NEAR STOP</span>}
           {warn === 'be' && <span title={`Within ${(NEAR_BE_PCT * 100).toFixed(2)}% of break-even ($${avg?.toFixed(2)}) — trade at scratch`} style={{ background: '#facc15', color: '#1a1500', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>≈ BREAK-EVEN</span>}
@@ -296,7 +295,7 @@ export default function PnthrTreePage() {
   }, []);
 
   const setMode = async (mode) => {
-    if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 52-week high. Make sure Ambush & Elite are OFF (one engine per account). Proceed?')) return;
+    if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 42-week high. Make sure Ambush & Elite are OFF (one engine per account). Proceed?')) return;
     setBusy(true);
     try {
       const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/mode`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
@@ -390,7 +389,7 @@ export default function PnthrTreePage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0b3d2e', paddingBottom: 10 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, color: '#22c55e' }}>🌳 PNTHR Tree</h1>
-          <div style={{ color: '#888', fontSize: 12 }}>AI-300 · 52-week-high momentum · full size, 2-week-low trailing stop</div>
+          <div style={{ color: '#888', fontSize: 12 }}>AI-300 · 42-week-high momentum · full size, 2-week-low trailing stop</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {busy && <span style={{ color: '#888', fontSize: 11 }}>saving…</span>}
@@ -406,7 +405,7 @@ export default function PnthrTreePage() {
           🔴 BACKTEST DRIFT — the data behind the backtest numbers below changed since they were locked (likely a split re-sync). The displayed backtest is now STALE and must be regenerated + verified. Last checked {data.baselineDrift.checkedAt ? new Date(data.baselineDrift.checkedAt).toLocaleString() : '—'}.
         </div>
       )}
-      {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 52-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
+      {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 42-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
       {mode === 'paper' && simCount > 0 && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
           📝 PAPER TRADE mode — {simCount} simulated would-buy{simCount === 1 ? '' : 's'} shown below (dashed blue cards with a “PAPER” tag). These are hypothetical, place NO real orders, and are NOT positions in your IBKR account. {realCount === 0 ? 'Your real IBKR account is currently flat.' : 'Your real holdings are the solid-bordered cards.'}

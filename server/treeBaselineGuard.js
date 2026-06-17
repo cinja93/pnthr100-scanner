@@ -16,9 +16,9 @@ import fs from 'fs';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 
 // MUST match build_tree_baseline.mjs: same universe (current AI-300 members), freeze date,
-// and min-history filter (LOOKBACK_52W+5).
+// and min-history filter (ENTRY_HIGH_LOOKBACK+5). Lookback is the 42-week high (210 trading days).
 const END = '2026-06-11';
-const MIN_BARS = 252 + 5;
+const MIN_BARS = 210 + 5;
 const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
 const BASELINE_PATH = new URL('./data/treeProjectionBaseline.json', import.meta.url).pathname;
 

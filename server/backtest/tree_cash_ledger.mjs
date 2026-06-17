@@ -19,7 +19,7 @@ import { calcCommission, calcSlippage } from './costEngine.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
-const LOOKBACK_52W = 252, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
+const ENTRY_HIGH_LOOKBACK = 210, STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;   // 42-week high (210 trading days) — matches the live engine
 const START = '2023-01-03';
 const END = '2026-06-11';                    // frozen at go-live, same as build_tree_baseline
 const MAINT_LEVELS = [0.25, 0.30, 0.35];   // maintenance-margin thresholds to test
@@ -33,11 +33,11 @@ for (const d of docs) {
   if (!AI_SET.has(d.ticker)) continue;       // current index members only
   const bars = (d.daily || []).map(b => ({ date: b.date, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume || 0 }))
     .filter(b => b.l > 0 && b.c > 0 && b.date <= END).sort((a, b) => a.date.localeCompare(b.date));
-  if (bars.length < LOOKBACK_52W + 5) continue;
+  if (bars.length < ENTRY_HIGH_LOOKBACK + 5) continue;
   const n = bars.length;
   const hi52 = new Array(n).fill(null), loStop = new Array(n).fill(null), adv20 = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
-    if (i >= LOOKBACK_52W) { let mh = -Infinity; for (let j = i - LOOKBACK_52W; j < i; j++) if (bars[j].h > mh) mh = bars[j].h; hi52[i] = mh; }
+    if (i >= ENTRY_HIGH_LOOKBACK) { let mh = -Infinity; for (let j = i - ENTRY_HIGH_LOOKBACK; j < i; j++) if (bars[j].h > mh) mh = bars[j].h; hi52[i] = mh; }
     if (i >= STOP_LOOKBACK) { let sl = Infinity; for (let j = i - STOP_LOOKBACK; j < i; j++) if (bars[j].l < sl) sl = bars[j].l; loStop[i] = sl; }
     if (i >= 20) { let v = 0; for (let j = i - 20; j < i; j++) v += bars[j].v; adv20[i] = v / 20; }
     allDatesSet.add(bars[i].date);
@@ -85,7 +85,7 @@ for (const date of allDates) {
   // 2. entries (buy → cash out), gross-capped at 2× equity
   for (const t of Object.keys(T)) {
     if (positions[t]) continue;
-    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null || i < LOOKBACK_52W) continue;
+    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null || i < ENTRY_HIGH_LOOKBACK) continue;
     const bar = tk.bars[i];
     if (tk.hi52[i] == null || bar.h < tk.hi52[i] + 0.01 || tk.loStop[i] == null) continue;
     const trig = +(tk.hi52[i] + 0.01).toFixed(2);

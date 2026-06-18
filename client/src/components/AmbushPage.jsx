@@ -784,26 +784,33 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
       ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
     ];
-    // Extra WINNER + positive tiles (data-gated → only the Tree baseline carries these; Ambush unaffected)
-    if (m.avgUpMonthPct != null) tiles.push(['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e', 'best +' + (m.bestMonthPct ?? 0) + '%']);
+    // Extra per-trade WINNER tiles (data-gated → only the Tree baseline carries these; Ambush
+    // unaffected). NOTE: monthly-path stats (Avg Up / Best Month) are intentionally NOT here —
+    // the gross curve = net + fees-added-back inflates the base and distorts monthly %, so those
+    // live NET-only in the monthly/risk panel. These two are per-trade (price-based) → valid per stream.
     if (m.avgWinPct != null) tiles.push(['Avg Win', '+' + m.avgWinPct + '%', '#22c55e', '+$' + Math.round(m.avgWinDollar).toLocaleString()]);
     if (m.winnerHoldDays != null) tiles.push(['Avg Winner Hold', m.winnerHoldDays + ' days', '#22c55e', 'median ' + m.winnerHoldMed]);
     return tileGrid(tiles, oneLine);
   };
   // Drawdown / risk profile panel (NET) — rendered only when the baseline carries monthly stats.
+  // Full monthly + risk profile — reported NET only (the gross monthly % is distorted by the
+  // fee-add-back, so we show the honest net figure once rather than a misleading gross column).
   const riskPanel = (m) => (
     <div style={{ border: '1px solid #b45309', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
-      {rowLabel('LOSERS & DRAWDOWN PROFILE (NET, after fees)')}
+      {rowLabel('MONTHLY & RISK PROFILE (NET, after fees)')}
       {tileGrid([
+        ['Avg Month', '+' + m.avgMonthPct + '%', '#22c55e', 'positive ' + m.positiveMonthsPct + '%'],
+        ['Best Month', '+' + m.bestMonthPct + '%', '#22c55e'],
+        ['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e'],
+        ['Avg Down Month', m.avgDownMonthPct + '%', '#f59e0b', 'when red'],
         ['Avg Loss', m.avgLossPct + '%', '#f59e0b', m.avgLossDollar != null ? '-$' + Math.abs(Math.round(m.avgLossDollar)).toLocaleString() : null],
         ['Avg Loser Hold', m.loserHoldDays + ' days', '#f59e0b', 'median ' + m.loserHoldMed],
         ['Max Monthly DD', m.maxMonthlyDDPct + '%', '#ef4444', 'worst month'],
-        ['Avg Down Month', m.avgDownMonthPct + '%', '#f59e0b', 'when red'],
         ['Avg Within-Month Dip', m.avgWithinMonthDipPct + '%', '#f59e0b', 'mid-month'],
         ['Worst 30 Days', m.worstRolling30Pct + '%', '#ef4444', 'rolling'],
         ['Worst Stretch', m.worstStretchPct + '%', '#ef4444', 'peak→trough'],
         ['Max Drawdown', '-' + Math.abs(m.maxDDPct).toFixed(1) + '%', '#ef4444', 'all-time'],
-      ], true, '#3a2a12')}
+      ], false, '#3a2a12')}
     </div>
   );
   const rowLabel = (t) => <div style={{ color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginTop: 12 }}>{t}</div>;

@@ -739,15 +739,50 @@ export function CashLedgerModal({ data, onClose }) {
   );
 }
 
+// Strip the Net/Gross prefix so 'Net CAGR' / 'Gross CAGR' share one definition.
+const baseKey = (l) => String(l).replace(/^(Net|Gross)\s+/, '');
+// "How this is calculated" copy for the ⓘ on each metric tile.
+const METRIC_INFO = {
+  'Total Return': 'Ending equity ÷ $100K start − 1 — the full cumulative gain over the backtest window.',
+  'CAGR': 'Compound annual growth rate: (ending ÷ $100K) ^ (1 ÷ years) − 1. Smooths the total return into a per-year rate.',
+  'Sharpe': 'Mean daily return ÷ standard deviation of daily returns, annualized (× √252). Reward per unit of total volatility.',
+  'Sortino': 'Like Sharpe, but divides by downside deviation only (negative days), annualized. Reward per unit of harmful volatility.',
+  'Profit Factor': 'Gross profit ÷ gross loss across all closed trades. 2.2× means $2.20 won for every $1.00 lost.',
+  'Calmar': 'CAGR ÷ max drawdown. Return earned per unit of worst-case peak-to-trough loss.',
+  'Recovery Factor': 'Total net profit ÷ max drawdown (in dollars). How many times over the strategy earned back its deepest drawdown.',
+  'Positive Months': 'Share of calendar months that closed higher than the prior month-end.',
+  'Win Rate': 'Share of closed trades that were profitable. A low win rate is fine when payoff (avg win ÷ avg loss) is high.',
+  'Total Closed': 'Number of round-trip trades closed over the backtest.',
+  'Ending Equity': 'Account value at the end of the backtest, compounding from the $100K start.',
+  'Alpha vs S&P': 'Ending equity minus what $100K would be worth if it had simply tracked the S&P 500 over the same window — dollars earned above the index.',
+  'Avg Win': 'Average gain on winning trades — the price move from entry to exit (% and $). Price-based, so it reads the same net or gross.',
+  'Avg Winner Hold': 'Average number of trading days a winning trade was held (entry to exit), shown with the median.',
+  'Avg Month': 'Average of every monthly return. "positive X%" is the share of months that finished up.',
+  'Best Month': 'The single best calendar-month return over the backtest.',
+  'Avg Up Month': 'Average return across only the months that finished positive.',
+  'Avg Down Month': 'Average return across only the months that finished negative.',
+  'Avg Loss': 'Average loss on losing trades (% and $). Most are small breakeven-snap scratch exits.',
+  'Avg Loser Hold': 'Average number of trading days a losing trade was held, with the median. Losers are cut quickly.',
+  'Max Monthly DD': 'The worst single calendar-month return in the backtest.',
+  'Avg Within-Month Dip': 'For each month, its worst peak-to-trough dip on daily closes, then averaged — the typical drawdown felt inside a month.',
+  'Worst 30 Days': 'The worst peak-to-trough decline over any rolling 30-calendar-day window.',
+  'Worst Stretch': 'The deepest peak-to-trough decline measured on month-end values (a multi-month drawdown).',
+  'Max Drawdown': 'The largest peak-to-trough decline on the daily equity curve over the entire backtest.',
+};
+
 export function AumTracker({ projection, hideForward, cashLedger, onActualTable }) {
   // onActualTable (optional): overrides the Actual AUM box click — the Tree page
   // uses it to open its IBKR-truth daily trade log instead of the plain table.
   const [showChart, setShowChart] = useState(false);
   const [tableView, setTableView] = useState(null);
   const [showLedger, setShowLedger] = useState(false);
+  const [infoMetric, setInfoMetric] = useState(null);   // metric whose "how it's calculated" popover is open
   const openActual = onActualTable || (() => setTableView('actual'));
   if (!projection?.current) return null;
   const { current, projected, actual, anchor } = projection;
+  // Tree carries the extra monthly/winner fields → use the aligned fixed-column grid only there;
+  // Ambush keeps its original stretch layout untouched.
+  const treeLayout = projection.metrics?.maxMonthlyDDPct != null;
   const box = (label, value, color, onClick) => (
     <div onClick={onClick} title="Click for the full table" style={{ cursor: 'pointer', background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 14px', minWidth: 175 }}>
       <div style={{ color: '#888', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -758,13 +793,23 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
   );
   // One row of hedge-fund metric cards for a given metrics object (Net or Gross).
   // shared card renderer (one tile)
+  // Fixed 14-column grid (gap 8px) shared by all 3 panels → tiles are identical width and the
+  // 11 monthly tiles line up under the first 11 columns of the 14-tile NET/GROSS rows.
   const tileGrid = (tiles, oneLine, accent) => (
-    <div style={{ display: 'flex', flexWrap: oneLine ? 'nowrap' : 'wrap', gap: 8, marginTop: 6 }}>
+    <div style={{ display: 'flex', flexWrap: treeLayout ? 'wrap' : (oneLine ? 'nowrap' : 'wrap'), gap: 8, marginTop: 6 }}>
       {tiles.map(([label, value, color, sub], i) => (
-        <div key={i} style={{ background: '#121212', border: `1px solid ${accent || '#222'}`, borderRadius: 8, padding: '8px 10px', minWidth: oneLine ? 0 : 96, flex: oneLine ? '1 1 0' : '1 1 auto', overflow: 'hidden' }}>
-          <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
-          <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
-          {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
+        <div key={i} style={{ background: '#121212', border: `1px solid ${accent || '#222'}`, borderRadius: 8, padding: '8px 10px', overflow: 'hidden',
+          ...(treeLayout ? { flexGrow: 0, flexShrink: 0, flexBasis: 'calc((100% - 116px) / 14)', minWidth: 0 } : { minWidth: oneLine ? 0 : 96, flex: oneLine ? '1 1 0' : '1 1 auto' }) }}>
+          {/* header: label + ⓘ. minHeight reserves 2 lines so the values below line up across all tiles. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4, minHeight: 22 }}>
+            <span style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</span>
+            {METRIC_INFO[baseKey(label)] && (
+              <span onClick={(e) => { e.stopPropagation(); setInfoMetric(baseKey(label)); }} title="How this is calculated"
+                style={{ cursor: 'pointer', color: '#5a5a5a', fontSize: 11, lineHeight: 1, flexShrink: 0 }}>ⓘ</span>
+            )}
+          </div>
+          <div style={{ color, fontSize: 17, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+          {sub && <div style={{ color: '#555', fontSize: 9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
         </div>
       ))}
     </div>
@@ -788,8 +833,11 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
     // unaffected). NOTE: monthly-path stats (Avg Up / Best Month) are intentionally NOT here —
     // the gross curve = net + fees-added-back inflates the base and distorts monthly %, so those
     // live NET-only in the monthly/risk panel. These two are per-trade (price-based) → valid per stream.
-    if (m.avgWinPct != null) tiles.push(['Avg Win', '+' + m.avgWinPct + '%', '#22c55e', '+$' + Math.round(m.avgWinDollar).toLocaleString()]);
-    if (m.winnerHoldDays != null) tiles.push(['Avg Winner Hold', m.winnerHoldDays + ' days', '#22c55e', 'median ' + m.winnerHoldMed]);
+    // Avg Win / Winner Hold are per-trade (price-based), so we show ONE value (NET) in BOTH rows
+    // rather than a trivially-different gross figure — same number on net and gross by design.
+    const w = projection.metrics;
+    if (w?.avgWinPct != null) tiles.push(['Avg Win', '+' + w.avgWinPct + '%', '#22c55e', '+$' + Math.round(w.avgWinDollar).toLocaleString()]);
+    if (w?.winnerHoldDays != null) tiles.push(['Avg Winner Hold', w.winnerHoldDays + 'd', '#22c55e', 'median ' + w.winnerHoldMed]);
     return tileGrid(tiles, oneLine);
   };
   // Drawdown / risk profile panel (NET) — rendered only when the baseline carries monthly stats.
@@ -804,7 +852,7 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
         ['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e'],
         ['Avg Down Month', m.avgDownMonthPct + '%', '#f59e0b', 'when red'],
         ['Avg Loss', m.avgLossPct + '%', '#f59e0b', m.avgLossDollar != null ? '-$' + Math.abs(Math.round(m.avgLossDollar)).toLocaleString() : null],
-        ['Avg Loser Hold', m.loserHoldDays + ' days', '#f59e0b', 'median ' + m.loserHoldMed],
+        ['Avg Loser Hold', m.loserHoldDays + 'd', '#f59e0b', 'median ' + m.loserHoldMed],
         ['Max Monthly DD', m.maxMonthlyDDPct + '%', '#ef4444', 'worst month'],
         ['Avg Within-Month Dip', m.avgWithinMonthDipPct + '%', '#f59e0b', 'mid-month'],
         ['Worst 30 Days', m.worstRolling30Pct + '%', '#ef4444', 'rolling'],
@@ -946,6 +994,18 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       {!hasGross && chartBlock}
       {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}
       {showLedger && cashLedger && <CashLedgerModal data={cashLedger} onClose={() => setShowLedger(false)} />}
+      {infoMetric && (
+        <div onClick={() => setInfoMetric(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#111', border: '1px solid #333', borderRadius: 10, padding: '18px 20px', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+              <div style={{ color: '#fcf000', fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{infoMetric}</div>
+              <span onClick={() => setInfoMetric(null)} style={{ cursor: 'pointer', color: '#888', fontSize: 14 }}>✕</span>
+            </div>
+            <div style={{ color: '#ccc', fontSize: 13, lineHeight: 1.55, marginTop: 10 }}>{METRIC_INFO[infoMetric] || 'No description available.'}</div>
+            <div style={{ color: '#555', fontSize: 10, marginTop: 12, fontStyle: 'italic' }}>Backtest is survivorship-flattered and hypothetical · net of costs unless the row is labeled GROSS.</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

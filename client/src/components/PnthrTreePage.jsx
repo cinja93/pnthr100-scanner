@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { AumTracker, ForwardProjection } from './AmbushPage';
@@ -274,6 +274,16 @@ export default function PnthrTreePage() {
   const [dailyLog, setDailyLog] = useState(null);       // null = closed; array = open modal
   const [logBusy, setLogBusy] = useState(false);
   const [scorecard, setScorecard] = useState(null);     // Risk Scorecard (forward-only)
+  const [openDays, setOpenDays] = useState(() => new Set());   // which savings days are expanded
+  const seenLatestDay = useRef(null);
+  // Default: only the latest trading day expanded. When a NEW latest day appears (tomorrow),
+  // collapse the rest and open just that one — "show only the present day of trading".
+  useEffect(() => {
+    const days = [...new Set((scorecard?.roundTrips || []).map(rt => rt.exitDate))].sort();
+    const latest = days[days.length - 1];
+    if (latest && seenLatestDay.current !== latest) { seenLatestDay.current = latest; setOpenDays(new Set([latest])); }
+  }, [scorecard]);
+  const toggleDay = (d) => setOpenDays(prev => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
 
   const openDailyLog = async () => {
     setDailyLog([]);   // open immediately, fill when loaded
@@ -567,27 +577,53 @@ export default function PnthrTreePage() {
               <span style={{ color: '#ef4444' }}>LOSS {scorecard.counts.LOSS}</span>
             </div>
           )}
-          {scorecard.savings && scorecard.roundTrips?.length > 0 && (
-            <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
-                <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 TRADE-SKILL SAVINGS</span>
-                <span title="Round trip: (your exit price − your re-entry price) × shares, summed across every exit-and-reenter. Positive = you bought back lower; negative = you re-entered higher (the move ran away).">
-                  net <b style={{ color: scorecard.savings.totalSaved >= 0 ? '#22c55e' : '#ef4444' }}>{scorecard.savings.totalSaved >= 0 ? '+$' : '−$'}{Math.abs(scorecard.savings.totalSaved).toLocaleString()}</b>
-                </span>
-                <span style={{ color: '#777', fontSize: 11 }}>{scorecard.roundTrips.length} round trips · {scorecard.savings.wins} saved / {scorecard.savings.costs} cost{scorecard.savings.openTrips ? ` · ${scorecard.savings.openTrips} re-entry still open` : ''}</span>
+          {scorecard.savings && scorecard.roundTrips?.length > 0 && (() => {
+            // Group every round trip by its EXIT day (the day the round trip was initiated), newest first.
+            const byDay = {};
+            for (const rt of scorecard.roundTrips) (byDay[rt.exitDate] ||= []).push(rt);
+            const days = Object.keys(byDay).sort((a, b) => String(b).localeCompare(String(a)));
+            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
+            return (
+              <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
+                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 TRADE-SKILL SAVINGS</span>
+                  <span title="Round trip: (your exit price − your re-entry price) × shares, summed across every exit-and-reenter. Positive = you bought back lower; negative = you re-entered higher (the move ran away). Grouped by the day you exited.">
+                    net <b style={{ color: scorecard.savings.totalSaved >= 0 ? '#22c55e' : '#ef4444' }}>{money(scorecard.savings.totalSaved)}</b>
+                  </span>
+                  <span style={{ color: '#777', fontSize: 11 }}>{scorecard.roundTrips.length} round trips · {scorecard.savings.wins} saved / {scorecard.savings.costs} cost{scorecard.savings.openTrips ? ` · ${scorecard.savings.openTrips} re-entry still open` : ''}</span>
+                </div>
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {days.map((day) => {
+                    const trips = byDay[day].slice().sort((a, b) => a.savings - b.savings);   // biggest cost first within the day
+                    const dayPnl = trips.reduce((s, rt) => s + rt.savings, 0);
+                    const isOpen = openDays.has(day);
+                    return (
+                      <div key={day} style={{ border: '1px solid #1c1c1c', borderRadius: 6, background: '#0e0e0e' }}>
+                        <div onClick={() => toggleDay(day)} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
+                          <span style={{ color: '#888', width: 10 }}>{isOpen ? '▾' : '▸'}</span>
+                          <span style={{ fontWeight: 800, color: '#ddd' }}>{day}</span>
+                          <span style={{ color: '#666', fontSize: 11 }}>{trips.length} trade{trips.length === 1 ? '' : 's'}</span>
+                          <span style={{ marginLeft: 'auto', fontWeight: 800, color: dayPnl >= 0 ? '#22c55e' : '#ef4444' }}>{money(dayPnl)}</span>
+                        </div>
+                        {isOpen && (
+                          <div style={{ display: 'grid', gap: 4, padding: '0 10px 8px 24px' }}>
+                            {trips.map((rt, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
+                                <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{rt.ticker}</span>
+                                <span>sold ${rt.exitPx} {String(rt.exitDate).slice(5)} → re-bought ${rt.reentryPx} {String(rt.reentryDate).slice(5)}{rt.reentryOpen ? ' (open)' : ''}</span>
+                                <span style={{ color: '#777' }}>{rt.shares}sh</span>
+                                <span style={{ marginLeft: 'auto', color: rt.savings >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{rt.savings >= 0 ? 'saved ' : 'cost '}{money(rt.savings)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
-                {scorecard.roundTrips.slice(0, 8).map((rt, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
-                    <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{rt.ticker}</span>
-                    <span>sold ${rt.exitPx} {String(rt.exitDate).slice(5)} → re-bought ${rt.reentryPx} {String(rt.reentryDate).slice(5)}{rt.reentryOpen ? ' (open)' : ''}</span>
-                    <span style={{ color: '#777' }}>{rt.shares}sh</span>
-                    <span style={{ color: rt.savings >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{rt.savings >= 0 ? 'saved +$' : 'cost −$'}{Math.abs(rt.savings).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
           {scorecard.scored.length > 0 ? (
             <div style={{ display: 'grid', gap: 6 }}>
               {scorecard.scored.map((s, i) => {

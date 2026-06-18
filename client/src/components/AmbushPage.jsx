@@ -784,19 +784,22 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
       ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
     ];
-    // Extra tiles (data-gated → only the Tree baseline carries these; Ambush unaffected)
-    if (m.avgUpMonthPct != null) tiles.push(['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e', 'best ' + (m.bestMonthPct != null ? '+' + m.bestMonthPct + '%' : '—')]);
-    if (projection.meta?.avgHoldDays != null) tiles.push(['Avg Hold', projection.meta.avgHoldDays + ' days', '#e6e6e6', 'median ' + projection.meta.medianHoldDays]);
+    // Extra WINNER + positive tiles (data-gated → only the Tree baseline carries these; Ambush unaffected)
+    if (m.avgUpMonthPct != null) tiles.push(['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e', 'best +' + (m.bestMonthPct ?? 0) + '%']);
+    if (m.avgWinPct != null) tiles.push(['Avg Win', '+' + m.avgWinPct + '%', '#22c55e', '+$' + Math.round(m.avgWinDollar).toLocaleString()]);
+    if (m.winnerHoldDays != null) tiles.push(['Avg Winner Hold', m.winnerHoldDays + ' days', '#22c55e', 'median ' + m.winnerHoldMed]);
     return tileGrid(tiles, oneLine);
   };
   // Drawdown / risk profile panel (NET) — rendered only when the baseline carries monthly stats.
   const riskPanel = (m) => (
     <div style={{ border: '1px solid #b45309', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
-      {rowLabel('DRAWDOWN & RISK PROFILE (NET, after fees)')}
+      {rowLabel('LOSERS & DRAWDOWN PROFILE (NET, after fees)')}
       {tileGrid([
+        ['Avg Loss', m.avgLossPct + '%', '#f59e0b', m.avgLossDollar != null ? '-$' + Math.abs(Math.round(m.avgLossDollar)).toLocaleString() : null],
+        ['Avg Loser Hold', m.loserHoldDays + ' days', '#f59e0b', 'median ' + m.loserHoldMed],
         ['Max Monthly DD', m.maxMonthlyDDPct + '%', '#ef4444', 'worst month'],
         ['Avg Down Month', m.avgDownMonthPct + '%', '#f59e0b', 'when red'],
-        ['Avg Within-Month Dip', m.avgWithinMonthDipPct + '%', '#f59e0b', 'typical mid-month'],
+        ['Avg Within-Month Dip', m.avgWithinMonthDipPct + '%', '#f59e0b', 'mid-month'],
         ['Worst 30 Days', m.worstRolling30Pct + '%', '#ef4444', 'rolling'],
         ['Worst Stretch', m.worstStretchPct + '%', '#ef4444', 'peak→trough'],
         ['Max Drawdown', '-' + Math.abs(m.maxDDPct).toFixed(1) + '%', '#ef4444', 'all-time'],

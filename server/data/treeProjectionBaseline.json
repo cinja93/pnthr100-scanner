@@ -37,7 +37,19 @@
   "worstStretchPct": -43,
   "bestMonthPct": 73.7,
   "avgUpMonthPct": 21,
-  "avgMonthPct": 7.9
+  "avgMonthPct": 7.9,
+  "winnersN": 381,
+  "losersN": 970,
+  "avgWinPct": 22.1,
+  "avgWinDollar": 4999,
+  "winnerHoldDays": 26.5,
+  "winnerHoldMed": 24,
+  "largestWinPct": 735.7,
+  "avgLossPct": -3.9,
+  "avgLossDollar": -879,
+  "loserHoldDays": 6.3,
+  "loserHoldMed": 5,
+  "largestLossPct": -62.1
  },
  "metricsGross": {
   "netReturnPct": 1070.3,
@@ -64,7 +76,19 @@
   "worstStretchPct": -40.6,
   "bestMonthPct": 69.5,
   "avgUpMonthPct": 19.5,
-  "avgMonthPct": 7.8
+  "avgMonthPct": 7.8,
+  "winnersN": 382,
+  "losersN": 969,
+  "avgWinPct": 22,
+  "avgWinDollar": 5003,
+  "winnerHoldDays": 26.5,
+  "winnerHoldMed": 24,
+  "largestWinPct": 735.7,
+  "avgLossPct": -3.9,
+  "avgLossDollar": -865,
+  "loserHoldDays": 6.3,
+  "loserHoldMed": 5,
+  "largestLossPct": -62.1
  },
  "costs": {
   "commission": 6965,

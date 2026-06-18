@@ -100,7 +100,8 @@ function closePos(t, exitPx, date) {
   const pnl = gross - comm - slip; realized += pnl;                     // net: minus costs
   const ei = T[t]?.idxByDate[p.entryDate], xi = T[t]?.idxByDate[date];  // hold time in TRADING days (bar-index delta)
   const holdDays = (ei != null && xi != null) ? (xi - ei) : null;
-  closed.push({ ticker: t, pnl, pnlGross: gross, holdDays }); delete positions[t];
+  const returnPct = p.fill > 0 ? +(((exitPx - p.fill) / p.fill) * 100).toFixed(2) : 0;   // price move %, same net/gross
+  closed.push({ ticker: t, pnl, pnlGross: gross, holdDays, returnPct }); delete positions[t];
 }
 
 for (const date of allDates) {
@@ -172,6 +173,12 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
   const grossWin = wins.reduce((a, t) => a + t[pnlField], 0), grossLoss = Math.abs(losses.reduce((a, t) => a + t[pnlField], 0));
   const pf = grossLoss > 0 ? grossWin / grossLoss : 0;
   const avgWin = wins.length ? grossWin / wins.length : 0, avgLoss = losses.length ? grossLoss / losses.length : 0;
+  // per-trade winner / loser detail (return %, hold days, extremes). avgOf defined below in the
+  // monthly block is hoisted? no — declare a local median helper; reuse simple inline averages.
+  const medOf = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const avgArr = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const winRets = wins.map(t => t.returnPct ?? 0), lossRets = losses.map(t => t.returnPct ?? 0);
+  const winHolds = wins.map(t => t.holdDays).filter(h => h != null), lossHolds = losses.map(t => t.holdDays).filter(h => h != null);
   const maxDDPct = Math.abs(mDDfrac) * 100;
   const monthEnd = {}, monthDays = {};
   for (const e of eqArr) { const k = e.date.slice(0, 7); monthEnd[k] = e.eq; (monthDays[k] ||= []).push(e.eq); }
@@ -214,6 +221,12 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
     bestMonthPct: +Math.max(0, ...mRets).toFixed(1),
     avgUpMonthPct: +avgOf(ups).toFixed(1),
     avgMonthPct: +avgOf(mRets).toFixed(1),
+    // winner / loser per-trade detail
+    winnersN: wins.length, losersN: losses.length,
+    avgWinPct: +avgArr(winRets).toFixed(1), avgWinDollar: Math.round(avgWin),
+    winnerHoldDays: +avgArr(winHolds).toFixed(1), winnerHoldMed: medOf(winHolds), largestWinPct: +(winRets.length ? Math.max(...winRets) : 0).toFixed(1),
+    avgLossPct: +avgArr(lossRets).toFixed(1), avgLossDollar: -Math.round(avgLoss),
+    loserHoldDays: +avgArr(lossHolds).toFixed(1), loserHoldMed: medOf(lossHolds), largestLossPct: +(lossRets.length ? Math.min(...lossRets) : 0).toFixed(1),
   };
 }
 // Hold time across all closed trades (winners + losers), in trading days. Same for net/gross

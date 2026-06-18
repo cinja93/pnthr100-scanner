@@ -21,6 +21,11 @@ import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
 const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
 const ENTRY_HIGH_LOOKBACK = +(process.env.LOOKBACK) || 210;   // 42-week high = 210 trading days (LIVE default). Override via LOOKBACK env to sweep (60=12wk … 252=52wk).
 const STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
+// Breakeven-stop snap (live, Scott 2026-06-18): on a GREEN day (close ≥ open) where open
+// profit ≥ $BE_SNAP_PROFIT, raise the single stop to breakeven (entry fill), raise-only,
+// applied at the close → forward-only. The green DAY is the daily stand-in for the live green
+// completed HOUR (approximate). BE_SNAP=0 reproduces the old no-snap baseline.
+const BE_SNAP_PROFIT = process.env.BE_SNAP != null ? +process.env.BE_SNAP : 250;
 const START = process.env.START || '2023-01-03';
 // Backtest END is FROZEN at the last session before go-live (strategy went LIVE Fri 2026-06-12).
 // A backtest must not bleed into the live period, and freezing the endpoint makes the result
@@ -125,6 +130,18 @@ for (const date of allDates) {
     totalComm += comm; totalSlip += slip; realized -= comm + slip;
     positions[t] = { sh, fill, stop, entryDate: date };
   }
+  // breakeven snap (forward-only: set at the close, governs from the next bar). One stop:
+  // pos.stop is floored at breakeven; the 2-week-low trail still ratchets it up later via max().
+  if (BE_SNAP_PROFIT > 0) {
+    for (const t of Object.keys(positions)) {
+      const tk = T[t]; const i = tk.idxByDate[date]; if (i == null) continue;
+      const bar = tk.bars[i]; const pos = positions[t];
+      if (bar.c < bar.o) continue;                                  // not a green day
+      if ((bar.c - pos.fill) * pos.sh < BE_SNAP_PROFIT) continue;   // not up enough yet
+      const be = +pos.fill.toFixed(2);
+      if (pos.stop == null || be > pos.stop) pos.stop = be;         // raise-only
+    }
+  }
   const eq = equityAt(mark); equity.push({ date, eq });
   if (eq > peak) peak = eq;
   const ddf = (eq - peak) / peak; if (ddf < maxDDfrac) maxDDfrac = ddf;
@@ -193,8 +210,8 @@ const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs
 
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
-  strategy: 'AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap',
-  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
+  strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · breakeven snap (+$${BE_SNAP_PROFIT} & green)`,
+  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
   backtestStart: equity[0].date,        // first session traded (frozen)
   backtestEnd: lastDate,                // last session before go-live (frozen at 2026-06-11)

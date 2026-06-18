@@ -33,13 +33,14 @@ const AI_METRICS = {
   window: '~3.45 yrs · the live PNTHR Tree window (AI-300 data begins 2022, so this is a shorter, mostly-bull window — not directly comparable to Carnivore’s full cycle)',
   scan: 'LIVE: current PNTHR AI-300 index members whose intraday high today has reached a NEW 42-week high (≥ the highest high of the prior 210 trading days, today excluded). This is the live PNTHR Tree entry signal.',
   rows: [
-    ['Net return', '+1,005%'], ['CAGR', '101.2%'], ['Sharpe', '1.48'], ['Sortino', '2.18'],
-    ['Profit factor', '2.16x'], ['Calmar', '2.06'], ['Max drawdown', '49.2%'],
-    ['Win rate', '44%'], ['Trades', '933'], ['vs SPY', 'SPY +94%'],
+    ['Net return', '+1,030%'], ['CAGR', '102.5%'], ['Sharpe', '1.51'], ['Sortino', '2.25'],
+    ['Profit factor', '2.23x'], ['Calmar', '2.02'], ['Max drawdown', '50.7%'],
+    ['Win rate', '28% (5.69x payoff)'], ['Trades', '1,351'], ['vs SPY', 'SPY +94%'],
   ],
   specs: [
     'Entry — buy the breakout: resting buy-stop at the prior 42-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',
     'Exit — trailing stop at the lowest low of the prior 10 trading days (2 weeks) − $0.01, ratcheted up; exit when the day breaks it',
+    'Breakeven snap — once a position is +$250 open with a green completed hour, the one stop jumps to breakeven, then resumes trailing the 10-day low once that climbs above it (backtest models a green-DAY proxy for the live green-HOUR rule)',
     'Sizing — 2% of NAV risked per name (off the stop), capped at 10% of NAV per name · 2× gross cap',
     'Costs — IBKR commission + 5 bps slippage per leg',
     'Universe — current AI-300 members only → SURVIVORSHIP-FLATTERED. Hypothetical backtest on $100K, frozen at go-live. Not a track record.',

@@ -757,28 +757,50 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
     </div>
   );
   // One row of hedge-fund metric cards for a given metrics object (Net or Gross).
-  const metricTiles = (m, kind, oneLine = false) => (
+  // shared card renderer (one tile)
+  const tileGrid = (tiles, oneLine, accent) => (
     <div style={{ display: 'flex', flexWrap: oneLine ? 'nowrap' : 'wrap', gap: 8, marginTop: 6 }}>
-      {[
-        [`${kind} Total Return`, (m.netReturnPct >= 0 ? '+' : '') + Math.round(m.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((m.startNav || 100000) / 1000) + 'K start'],
-        [`${kind} CAGR`, (m.cagrPct >= 0 ? '+' : '') + m.cagrPct + '%', '#22c55e'],
-        ['Sharpe', m.sharpe, '#e6e6e6'],
-        ['Sortino', m.sortino, '#22c55e'],
-        ['Profit Factor', m.profitFactor + 'x', '#22c55e'],
-        ['Calmar', m.calmar, '#e6e6e6'],
-        ['Recovery Factor', m.recoveryFactor + 'x', '#e6e6e6'],
-        ['Positive Months', m.positiveMonthsPct + '%', '#22c55e'],
-        ['Win Rate', m.winRatePct + '%', '#e6e6e6', m.payoff + 'x payoff'],
-        ['Total Closed', Math.round(m.totalClosed).toLocaleString(), '#e6e6e6'],
-        ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
-        ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
-      ].map(([label, value, color, sub], i) => (
-        <div key={i} style={{ background: '#121212', border: '1px solid #222', borderRadius: 8, padding: '8px 10px', minWidth: oneLine ? 0 : 96, flex: oneLine ? '1 1 0' : '1 1 auto', overflow: 'hidden' }}>
+      {tiles.map(([label, value, color, sub], i) => (
+        <div key={i} style={{ background: '#121212', border: `1px solid ${accent || '#222'}`, borderRadius: 8, padding: '8px 10px', minWidth: oneLine ? 0 : 96, flex: oneLine ? '1 1 0' : '1 1 auto', overflow: 'hidden' }}>
           <div style={{ color: '#888', fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.25 }}>{label}</div>
           <div style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</div>
           {sub && <div style={{ color: '#555', fontSize: 9 }}>{sub}</div>}
         </div>
       ))}
+    </div>
+  );
+  const metricTiles = (m, kind, oneLine = false) => {
+    const tiles = [
+      [`${kind} Total Return`, (m.netReturnPct >= 0 ? '+' : '') + Math.round(m.netReturnPct).toLocaleString() + '%', '#22c55e', '$' + Math.round((m.startNav || 100000) / 1000) + 'K start'],
+      [`${kind} CAGR`, (m.cagrPct >= 0 ? '+' : '') + m.cagrPct + '%', '#22c55e'],
+      ['Sharpe', m.sharpe, '#e6e6e6'],
+      ['Sortino', m.sortino, '#22c55e'],
+      ['Profit Factor', m.profitFactor + 'x', '#22c55e'],
+      ['Calmar', m.calmar, '#e6e6e6'],
+      ['Recovery Factor', m.recoveryFactor + 'x', '#e6e6e6'],
+      ['Positive Months', m.positiveMonthsPct + '%', '#22c55e'],
+      ['Win Rate', m.winRatePct + '%', '#e6e6e6', m.payoff + 'x payoff'],
+      ['Total Closed', Math.round(m.totalClosed).toLocaleString(), '#e6e6e6'],
+      ['Ending Equity', fmtAum(m.endingEquity), '#22c55e'],
+      ['Alpha vs S&P', (m.alphaDollar >= 0 ? '+' : '') + fmtAum(m.alphaDollar), '#22c55e'],
+    ];
+    // Extra tiles (data-gated → only the Tree baseline carries these; Ambush unaffected)
+    if (m.avgUpMonthPct != null) tiles.push(['Avg Up Month', '+' + m.avgUpMonthPct + '%', '#22c55e', 'best ' + (m.bestMonthPct != null ? '+' + m.bestMonthPct + '%' : '—')]);
+    if (projection.meta?.avgHoldDays != null) tiles.push(['Avg Hold', projection.meta.avgHoldDays + ' days', '#e6e6e6', 'median ' + projection.meta.medianHoldDays]);
+    return tileGrid(tiles, oneLine);
+  };
+  // Drawdown / risk profile panel (NET) — rendered only when the baseline carries monthly stats.
+  const riskPanel = (m) => (
+    <div style={{ border: '1px solid #b45309', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
+      {rowLabel('DRAWDOWN & RISK PROFILE (NET, after fees)')}
+      {tileGrid([
+        ['Max Monthly DD', m.maxMonthlyDDPct + '%', '#ef4444', 'worst month'],
+        ['Avg Down Month', m.avgDownMonthPct + '%', '#f59e0b', 'when red'],
+        ['Avg Within-Month Dip', m.avgWithinMonthDipPct + '%', '#f59e0b', 'typical mid-month'],
+        ['Worst 30 Days', m.worstRolling30Pct + '%', '#ef4444', 'rolling'],
+        ['Worst Stretch', m.worstStretchPct + '%', '#ef4444', 'peak→trough'],
+        ['Max Drawdown', '-' + Math.abs(m.maxDDPct).toFixed(1) + '%', '#ef4444', 'all-time'],
+      ], true, '#3a2a12')}
     </div>
   );
   const rowLabel = (t) => <div style={{ color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginTop: 12 }}>{t}</div>;
@@ -895,6 +917,9 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       ) : (
         metricTiles(projection.metrics, 'Net')
       ))}
+
+      {/* Drawdown & risk profile (Tree only — data-gated; Ambush baseline lacks these fields) */}
+      {projection.metrics?.maxMonthlyDDPct != null && riskPanel(projection.metrics)}
 
       {/* Context facts: backtest window, average hold time, and when live (actual) tracking began */}
       {(projection.meta?.backtestStart || projection.meta?.avgHoldDays != null || projection.meta?.actualStart) && (

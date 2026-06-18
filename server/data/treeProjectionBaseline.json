@@ -29,7 +29,15 @@
   "alphaDollar": 936233,
   "alphaPct": 936,
   "spyReturnPct": 93.7,
-  "startNav": 100000
+  "startNav": 100000,
+  "maxMonthlyDDPct": -21.5,
+  "avgDownMonthPct": -9.6,
+  "avgWithinMonthDipPct": -12.4,
+  "worstRolling30Pct": -33.7,
+  "worstStretchPct": -43,
+  "bestMonthPct": 73.7,
+  "avgUpMonthPct": 21,
+  "avgMonthPct": 7.9
  },
  "metricsGross": {
   "netReturnPct": 1070.3,
@@ -48,7 +56,15 @@
   "alphaDollar": 976605,
   "alphaPct": 977,
   "spyReturnPct": 93.7,
-  "startNav": 100000
+  "startNav": 100000,
+  "maxMonthlyDDPct": -20.4,
+  "avgDownMonthPct": -9.4,
+  "avgWithinMonthDipPct": -11.8,
+  "worstRolling30Pct": -32.5,
+  "worstStretchPct": -40.6,
+  "bestMonthPct": 69.5,
+  "avgUpMonthPct": 19.5,
+  "avgMonthPct": 7.8
  },
  "costs": {
   "commission": 6965,

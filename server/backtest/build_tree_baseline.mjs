@@ -173,9 +173,18 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
   const pf = grossLoss > 0 ? grossWin / grossLoss : 0;
   const avgWin = wins.length ? grossWin / wins.length : 0, avgLoss = losses.length ? grossLoss / losses.length : 0;
   const maxDDPct = Math.abs(mDDfrac) * 100;
-  const monthEnd = {}; for (const e of eqArr) monthEnd[e.date.slice(0, 7)] = e.eq;
-  const months = Object.keys(monthEnd).sort(); let posM = 0, totM = 0, prev = NAV0;
-  for (const m of months) { const r = monthEnd[m] / prev - 1; if (r > 0) posM++; totM++; prev = monthEnd[m]; }
+  const monthEnd = {}, monthDays = {};
+  for (const e of eqArr) { const k = e.date.slice(0, 7); monthEnd[k] = e.eq; (monthDays[k] ||= []).push(e.eq); }
+  const months = Object.keys(monthEnd).sort(); let posM = 0, totM = 0, prev = NAV0; const mRets = [];
+  for (const m of months) { const r = monthEnd[m] / prev - 1; mRets.push(r * 100); if (r > 0) posM++; totM++; prev = monthEnd[m]; }
+  // monthly risk/return profile
+  const avgOf = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const ups = mRets.filter(r => r > 0), downs = mRets.filter(r => r < 0);
+  const maxMonthlyDD = mRets.length ? Math.min(...mRets) : 0;           // worst single calendar month
+  let mPk = -Infinity, worstStretch = 0; for (const m of months) { const v = monthEnd[m]; if (v > mPk) mPk = v; if (mPk > 0) { const d = (v - mPk) / mPk * 100; if (d < worstStretch) worstStretch = d; } }
+  const intra = []; for (const m of months) { let pk = -Infinity, dd = 0; for (const v of monthDays[m]) { if (v > pk) pk = v; if (pk > 0) { const d = (v - pk) / pk; if (d < dd) dd = d; } } intra.push(dd * 100); }
+  let worstRolling30 = 0;
+  for (let i = 0; i < eqArr.length; i++) { let lp = eqArr[i].eq; for (let j = i; j < eqArr.length; j++) { if ((Date.parse(eqArr[j].date) - Date.parse(eqArr[i].date)) / 86400000 > 31) break; if (eqArr[j].eq > lp) lp = eqArr[j].eq; const d = (eqArr[j].eq - lp) / lp * 100; if (d < worstRolling30) worstRolling30 = d; } }
   const spyFirst = spyAt(firstDate, +1), spyLast = spyAt(lastDate, -1);
   const spyRet = (spyFirst && spyLast) ? (spyLast / spyFirst - 1) : 0;
   const alphaDollar = endEq - NAV0 * (1 + spyRet);
@@ -196,6 +205,15 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
     alphaPct: +((alphaDollar / NAV0) * 100).toFixed(0),
     spyReturnPct: +(spyRet * 100).toFixed(1),
     startNav: NAV0,
+    // monthly risk/return profile (for the dashboard drawdown panel + row tiles)
+    maxMonthlyDDPct: +maxMonthlyDD.toFixed(1),
+    avgDownMonthPct: +avgOf(downs).toFixed(1),
+    avgWithinMonthDipPct: +avgOf(intra).toFixed(1),
+    worstRolling30Pct: +worstRolling30.toFixed(1),
+    worstStretchPct: +worstStretch.toFixed(1),
+    bestMonthPct: +Math.max(0, ...mRets).toFixed(1),
+    avgUpMonthPct: +avgOf(ups).toFixed(1),
+    avgMonthPct: +avgOf(mRets).toFixed(1),
   };
 }
 // Hold time across all closed trades (winners + losers), in trading days. Same for net/gross

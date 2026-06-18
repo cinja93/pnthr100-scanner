@@ -205,7 +205,7 @@ export async function getPnthrTreeState(db) {
   if (cfg.mode === 'paper') {
     simRaw = (await db.collection(POS).find({ status: 'ACTIVE' }).toArray())
       .filter(p => !realHeld.has(p.ticker))     // your real account always takes precedence
-      .map(p => ({ ticker: p.ticker, shares: p.totalShares || p.shares, avgCost: p.avgCost || p.entryPrice, entryPrice: p.entryPrice, createdAt: p.createdAt, sim: true }));
+      .map(p => ({ ticker: p.ticker, shares: p.totalShares || p.shares, avgCost: p.avgCost || p.entryPrice, entryPrice: p.entryPrice, createdAt: p.createdAt, stop: p.stop, sim: true }));
   }
   // off-strategy = a held name Tree never trades (ENGINE_EXCLUDE like SPCX, or non-AI-300)
   const offStrategy = (t) => excl.has(t) || !AI_META[t];
@@ -270,7 +270,7 @@ export async function getPnthrTreeState(db) {
     p.last = last;
     const eng = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : 0;   // engine's 2-week-low (intended trail)
     const brk = brokerStops[p.ticker] || 0;                                 // your actual resting stop (manual raises included)
-    const eff = Math.max(brk, eng);
+    const eff = Math.max(brk, eng, p.stop || 0);   // also honor the engine's stored stop so a paper breakeven-snap (≥ avg cost) shows
     p.stop = eff > 0 ? +eff.toFixed(2) : (p.stop || null);
     p.pnl = p.real ? Math.round(p.ibkrPnl || 0)                            // IBKR truth for real positions → matches your account
                    : +(((last - basis) * (p.shares || p.totalShares || 0))).toFixed(0);
@@ -483,6 +483,50 @@ async function stampAttackSeen(db, firedTickers, heldTickers = []) {
   await db.collection(ATTACK_SEEN).deleteMany(keep.length ? { ticker: { $nin: keep } } : {});
 }
 
+// ── Breakeven-stop snap (NAV-risk reduction) ─────────────────────────────────
+// Scott 2026-06-18: once a LONG is up ≥ $100 open profit AND the latest COMPLETED
+// hourly bar is green, raise its stop to breakeven (avg cost). Raise-only, and it
+// stacks with the 2-week-low trail (highest/tightest stop wins) so the trail keeps
+// ratcheting above breakeven afterwards. "Green hour" is confirmed on TWS-matching :00
+// CLOCK-hour bars (built from FMP 30-min, the still-forming hour dropped) so it lines up
+// with what the chart shows. Green = the completed hour closed at or above its open.
+const BE_SNAP_PROFIT = 100;   // $ open profit required before snapping the stop to breakeven
+function etTotalMinutesNow(d = new Date()) {
+  const p = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d)) p[type] = value;
+  return (+p.hour) * 60 + (+p.minute);
+}
+// true = last COMPLETED clock-hour bar green · false = red · null = no completed hour yet today.
+function lastCompletedClockHourGreen(min30, today, nowMin) {
+  const byHour = {};
+  for (const b of (min30 || [])) {
+    if (!b.date || !b.date.startsWith(today)) continue;
+    const hr = parseInt(String(b.date).slice(11, 13), 10);
+    if (!(hr >= 0)) continue;
+    (byHour[hr] = byHour[hr] || []).push(b);
+  }
+  const done = Object.keys(byHour).map(Number).sort((a, b) => a - b).filter(hr => (hr + 1) * 60 <= nowMin);
+  if (!done.length) return null;   // nothing has finished yet today → can't confirm a green hour
+  const bs = byHour[done[done.length - 1]].sort((a, b) => a.date.localeCompare(b.date));
+  return +bs[bs.length - 1].close >= +bs[0].open;
+}
+// Map ticker → green?(true/false/null) for the last completed clock hour. Cached ~60s so the
+// 2-min tick doesn't hammer FMP; only called for names we actually hold (paper or live).
+let _greenHourCache = { at: 0, map: {} };
+async function fetchGreenHourMap(tickers) {
+  if (!tickers.length) return {};
+  if (Date.now() - _greenHourCache.at < 60_000 && tickers.every(t => t in _greenHourCache.map)) return _greenHourCache.map;
+  const today = etDateStr(), nowMin = etTotalMinutesNow(), map = {};
+  for (let i = 0; i < tickers.length; i += 5) {
+    await Promise.allSettled(tickers.slice(i, i + 5).map(async (t) => {
+      try { const data = await fetchFMP(`/historical-chart/30min/${t}`); map[t] = lastCompletedClockHourGreen(Array.isArray(data) ? data : [], today, nowMin); }
+      catch { map[t] = null; }
+    }));
+  }
+  _greenHourCache = { at: Date.now(), map };
+  return map;
+}
+
 // ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
@@ -554,13 +598,31 @@ export async function runPnthrTreeTick(db) {
 
   // 2) MANAGE — trail the 2-week stop; paper exits on stop (live stops rest at the broker)
   if (cfg.mode === 'paper') {
-    for (const p of await db.collection(POS).find({ status: 'ACTIVE' }).toArray()) {
+    const todayStr = etDateStr();
+    const active = await db.collection(POS).find({ status: 'ACTIVE' }).toArray();
+    const greenHour = await fetchGreenHourMap([...new Set(active.map(p => p.ticker))]).catch(() => ({}));
+    for (const p of active) {
       const q = quotes[p.ticker]; if (!q) continue;
       const price = +q.price, dayLow = +q.dayLow || price;
+      const sh = p.totalShares || p.shares || 0;
       const newStop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : p.stop;
-      const trailed = Math.max(p.stop || 0, newStop || 0);
-      if (trailed !== p.stop) await db.collection(POS).updateOne({ _id: p._id }, { $set: { stop: trailed } });
-      if (dayLow <= trailed) {
+      // Breakeven snap: ≥ $100 open profit AND last completed hour green → raise stop to avg cost.
+      const openPnl = (price - p.avgCost) * sh;
+      const beStop = (openPnl >= BE_SNAP_PROFIT && greenHour[p.ticker] === true && p.avgCost > 0) ? +(+p.avgCost).toFixed(2) : 0;
+      const trailed = Math.max(p.stop || 0, newStop || 0, beStop);
+      // Raising the stop above an intraday low arms it FORWARD-ONLY (matches a live resting stop:
+      // it can't fire on a low that printed before the stop was raised there). beArmedDate persists
+      // that for the rest of the day; it resets next session when dayLow is fresh.
+      const raisedAboveLow = trailed > (p.stop || 0) && trailed > dayLow;
+      const upd = {};
+      if (trailed !== p.stop) upd.stop = trailed;
+      if (raisedAboveLow) upd.beArmedDate = todayStr;
+      if (Object.keys(upd).length) await db.collection(POS).updateOne({ _id: p._id }, { $set: upd });
+      if (beStop && trailed === beStop && (p.stop || 0) < beStop) actions.push({ type: 'BE_SNAP', ticker: p.ticker, stop: beStop, openPnl: Math.round(openPnl) });
+      // Exit: forward-only (current price) while armed today; otherwise any intraday touch of the stop.
+      const armedToday = (raisedAboveLow ? todayStr : p.beArmedDate) === todayStr;
+      const stopHit = armedToday ? (price <= trailed) : (dayLow <= trailed);
+      if (stopHit) {
         const exitPx = trailed;
         const pnl = +((exitPx - p.avgCost) * p.totalShares).toFixed(2);
         await db.collection(POS).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitDate: new Date().toISOString().slice(0, 10), pnl, closedAt: new Date() } });
@@ -578,15 +640,22 @@ export async function runPnthrTreeTick(db) {
   // stop fires the exit). LIVE ONLY — in paper the page just DISPLAYS the intended stop; the
   // engine never modifies your real broker stops until you go live.
   if (cfg.mode === 'live') {
+    const liveLongs = (snap.positions || []).filter(p => { const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares; return AI_META[t] && sh > 0 && !excl.has(t); });
+    const greenHour = await fetchGreenHourMap([...new Set(liveLongs.map(p => (p.ticker || p.symbol || '').toUpperCase()))]).catch(() => ({}));
     for (const p of (snap.positions || [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
       if (excl.has(t)) continue;   // split-stale / IPO → DON'T place a stop (could be at the wrong scale, above market)
-      const newStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null; if (!newStop) continue;
+      const lowStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : 0;
+      // Breakeven snap: ≥ $100 open profit AND last completed hour green → raise stop to avg cost.
+      const avgCost = +p.avgCost || +p.avgPrice || 0, px = +quotes[t]?.price || 0;
+      const beStop = (avgCost > 0 && px > 0 && (px - avgCost) * sh >= BE_SNAP_PROFIT && greenHour[t] === true) ? +avgCost.toFixed(2) : 0;
+      const target = Math.max(lowStop, beStop); if (!target) continue;   // broker-resting stops are inherently forward-only
       const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
-      if (newStop > cur + 0.01) {
-        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: newStop, shares: sh, reason: 'TREE_TRAIL' });
-        actions.push({ type: 'LIVE_TRAIL', ticker: t, newStop, from: cur });
+      if (target > cur + 0.01) {
+        const beSnap = beStop && target === beStop && beStop > lowStop;
+        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: target, shares: sh, reason: beSnap ? 'TREE_BE_SNAP' : 'TREE_TRAIL' });
+        actions.push({ type: beSnap ? 'LIVE_BE_SNAP' : 'LIVE_TRAIL', ticker: t, newStop: target, from: cur });
       }
     }
   }

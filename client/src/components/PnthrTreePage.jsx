@@ -211,6 +211,7 @@ function DevourCard({ p, onClick, offStrategy }) {
         </span>
         <span style={{ color: pnlColor, fontWeight: 700, fontFamily: 'monospace' }}>{p.pnl >= 0 ? '+' : ''}{fmt(p.pnl)} ({p.pnlPct}%)</span>
       </div>
+      {p.attackAt && <div style={{ marginTop: 4, fontSize: 10, color: '#7fcf9f', fontFamily: 'monospace' }} title="When this name first appeared on ATTACK (its new 42-week-high trigger, ET)">⚡ ATTACK {clockET(p.attackAt)}</div>}
       {(p.company || p.sector) && (
         <div style={{ marginTop: 6, lineHeight: 1.3 }}>
           {p.company && <div style={{ color: '#bbb', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={p.company}>{p.company}</div>}

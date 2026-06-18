@@ -484,13 +484,16 @@ async function stampAttackSeen(db, firedTickers, heldTickers = []) {
 }
 
 // ── Breakeven-stop snap (NAV-risk reduction) ─────────────────────────────────
-// Scott 2026-06-18: once a LONG is up ≥ $100 open profit AND the latest COMPLETED
+// Scott 2026-06-18: once a LONG is up ≥ $250 open profit AND the latest COMPLETED
 // hourly bar is green, raise its stop to breakeven (avg cost). Raise-only, and it
 // stacks with the 2-week-low trail (highest/tightest stop wins) so the trail keeps
 // ratcheting above breakeven afterwards. "Green hour" is confirmed on TWS-matching :00
 // CLOCK-hour bars (built from FMP 30-min, the still-forming hour dropped) so it lines up
 // with what the chart shows. Green = the completed hour closed at or above its open.
-const BE_SNAP_PROFIT = 100;   // $ open profit required before snapping the stop to breakeven
+// $250 chosen over $100 on the backtest: robust good/neutral in both the survivorship and
+// survivorship-neutral runs, holds CAGR at baseline + nudges Sharpe/PF up, without the heavy
+// winner-strangling $100 caused in the (survivorship-flattered) scorecard universe.
+const BE_SNAP_PROFIT = 250;   // $ open profit required before snapping the stop to breakeven
 function etTotalMinutesNow(d = new Date()) {
   const p = {};
   for (const { type, value } of new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d)) p[type] = value;

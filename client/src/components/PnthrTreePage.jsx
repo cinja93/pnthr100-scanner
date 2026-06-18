@@ -191,10 +191,11 @@ function DevourCard({ p, onClick, offStrategy }) {
   const nearBreakeven = (!offStrategy && avg > 0 && last != null) ? Math.abs(last - avg) / avg <= NEAR_BE_PCT : false;
   const warn = nearStop ? 'stop' : (nearBreakeven ? 'be' : null);
 
-  // PROTECT uses CYAN (not blue) so a locked-profit card can never be mistaken for a paper sim
-  // (paper = dashed #3b82f6 + PAPER badge; protected = solid cyan + 🛡️ LOCKED badge).
-  const borderColor = sim ? '#3b82f6' : offStrategy ? '#b45309' : warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#06b6d4' : '#22c55e');
-  const bgColor     = sim ? '#0b1626' : offStrategy ? '#1a1304' : warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#07232b' : '#0e1a12');
+  // PROTECT uses a BRIGHT GREEN (locked profit) — clearly green, never blue, so it can't be
+  // mistaken for a paper sim (paper = dashed blue #3b82f6 + PAPER badge). Brighter than a
+  // normal long's green so it still reads as its own "locked" state.
+  const borderColor = sim ? '#3b82f6' : offStrategy ? '#b45309' : warn === 'stop' ? '#ef4444' : warn === 'be' ? '#facc15' : (prot ? '#4ade80' : '#22c55e');
+  const bgColor     = sim ? '#0b1626' : offStrategy ? '#1a1304' : warn === 'stop' ? '#1c0d0d' : warn === 'be' ? '#1c190a' : (prot ? '#07231b' : '#0e1a12');
   const flashAnim   = offStrategy ? undefined
                     : warn === 'stop' ? 'treestopflash 0.85s ease-in-out infinite'
                     : warn === 'be'   ? 'treebeflash 1.1s ease-in-out infinite'
@@ -204,7 +205,7 @@ function DevourCard({ p, onClick, offStrategy }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ background: sim ? '#1e3a8a' : offStrategy ? '#7c4a03' : '#16a34a', border: `1px solid ${sim ? '#3b82f6' : offStrategy ? '#f59e0b' : '#22c55e'}`, color: '#fff', fontWeight: 800, fontSize: 14, padding: '3px 9px', borderRadius: 8, fontFamily: 'monospace' }}>{p.ticker}</span>
-          <span style={{ color: sim ? '#60a5fa' : offStrategy ? '#f59e0b' : (prot ? '#22d3ee' : '#22c55e'), fontSize: 11 }}>{sim ? 'PAPER LONG' : offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
+          <span style={{ color: sim ? '#60a5fa' : offStrategy ? '#f59e0b' : (prot ? '#4ade80' : '#22c55e'), fontSize: 11 }}>{sim ? 'PAPER LONG' : offStrategy ? 'OFF STRATEGY' : (prot ? '🛡️ LOCKED' : 'LONG')}</span>
           {sim && <span title="Simulated would-buy recorded by the paper engine — NOT a real position in IBKR; no order was placed." style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>PAPER</span>}
           {p.early && !offStrategy && <span title="You bought this before the engine's signal (a new 42-week high). The tag clears the moment the strategy triggers the buy." style={{ background: '#f59e0b', color: '#1a1200', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>EARLY</span>}
           {p.newToday && <span style={{ background: '#22c55e', color: '#04210f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, letterSpacing: '0.05em' }}>NEW</span>}
@@ -217,7 +218,7 @@ function DevourCard({ p, onClick, offStrategy }) {
       {(p.company || p.sector) && (
         <div style={{ marginTop: 6, lineHeight: 1.3 }}>
           {p.company && <div style={{ color: '#bbb', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={p.company}>{p.company}</div>}
-          {p.sector && <div style={{ color: prot ? '#22d3ee' : '#7fcf9f', fontSize: 10, letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={`AI 300 sector: ${p.sector}`}>{p.sector}</div>}
+          {p.sector && <div style={{ color: prot ? '#86efac' : '#7fcf9f', fontSize: 10, letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }} title={`AI 300 sector: ${p.sector}`}>{p.sector}</div>}
         </div>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', marginTop: 8, fontSize: 12, fontFamily: 'monospace', color: '#ccc' }}>
@@ -504,7 +505,7 @@ export default function PnthrTreePage() {
 
       {/* PROTECT — trailing stop has reached/passed entry → worst case is a locked profit. Shown FIRST. */}
       <div style={{ marginTop: 20 }}>
-        <h3 style={{ color: '#22d3ee', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
+        <h3 style={{ color: '#4ade80', fontSize: 13, letterSpacing: '0.08em' }}>🛡️ PROTECT — PROFIT LOCKED ({protectedPos.length})</h3>
         {protectedPos.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None yet — a position moves here once its trailing stop reaches your entry (stop ≥ avg cost).</div> :
           renderPositions(protectedPos)}
       </div>

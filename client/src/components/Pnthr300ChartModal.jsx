@@ -118,6 +118,16 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
     return out;
   }
 
+  // Simple EMA over a value series (seeded on the first value). Used for the dotted
+  // 10-period reference line — the short-term sector trend, visual only (not a trading gate).
+  function computeEma(values, period) {
+    if (!values.length) return [];
+    const k = 2 / (period + 1);
+    const out = [values[0]];
+    for (let i = 1; i < values.length; i++) out.push(values[i] * k + out[i - 1] * (1 - k));
+    return out;
+  }
+
   // Chart render
   useEffect(() => {
     if (!containerRef.current || !rsiContainerRef.current || bars.length === 0) return;
@@ -156,6 +166,16 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
       time: b.date, open: b.open, high: b.high, low: b.low, close: b.close,
     })));
     ema.setData(bars.filter(b => b.ema != null).map(b => ({ time: b.date, value: b.ema })));
+
+    // Dotted 10-period EMA — reference line for the sector's short-term trend. Cool color so it
+    // reads as distinct from the solid yellow OpEMA. Visual only; NOT a trading gate (see the
+    // regime study — a 10-EMA entry gate didn't survive executable testing).
+    const ema10 = chart.addSeries(LineSeries, {
+      color: '#38bdf8', lineWidth: 1, lineStyle: 1,   // lineStyle 1 = Dotted
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    const ema10Vals = computeEma(bars.map(b => b.close), 10);
+    ema10.setData(bars.map((b, i) => ({ time: b.date, value: +ema10Vals[i].toFixed(2) })).slice(10));
 
     // Signal markers — default: last signal only; toggle shows all
     const sigBars = bars.map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }));
@@ -283,12 +303,14 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
         return;
       }
       const emaData = param.seriesData?.get(ema);
+      const ema10Data = param.seriesData?.get(ema10);
       const rsiVal = rsiByDate[param.time] ?? null;
       setHoveredBar({
         x: param.point.x, y: param.point.y,
         time: param.time,
         open: data.open, high: data.high, low: data.low, close: data.close,
         ema: emaData?.value ?? null,
+        ema10: ema10Data?.value ?? null,
         rsi: rsiVal,
       });
       if (rsiVal != null) {
@@ -543,6 +565,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
                 <span style={{ color: '#888', fontSize: 11 }}>
                   OpEMA <strong style={{ color: '#fcf000' }}>{latest.ema21W?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
                 </span>
+                <span style={{ color: '#38bdf8', fontSize: 11 }} title="Dotted 10-period EMA — short-term sector trend, reference only (not a trading rule)">┈┈ 10 EMA</span>
                 <span style={{ color: '#888', fontSize: 11 }}>
                   YTD <strong style={{ color: latest.ytdPct >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(latest.ytdPct)}</strong>
                 </span>
@@ -581,6 +604,12 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
                     <>
                       <span style={{ color: '#888' }}>OpEMA</span>
                       <span style={{ color: '#fcf000' }}>{fmtNum(hoveredBar.ema)}</span>
+                    </>
+                  )}
+                  {hoveredBar.ema10 != null && (
+                    <>
+                      <span style={{ color: '#888' }}>10 EMA</span>
+                      <span style={{ color: '#38bdf8' }}>{fmtNum(hoveredBar.ema10)}</span>
                     </>
                   )}
                   {hoveredBar.rsi != null && (

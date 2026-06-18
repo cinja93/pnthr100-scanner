@@ -1,6 +1,6 @@
 // Unit tests for the Risk Scorecard math (run: node pnthrTreeScorecard.test.mjs).
 // No DB — pure functions only. Proves return/drawdown/score logic before real trades arrive.
-import { reconstructEpisodes, priceDrawdownPct, scoreEpisode } from './pnthrTreeScorecard.js';
+import { reconstructEpisodes, priceDrawdownPct, scoreEpisode, pairRoundTrips } from './pnthrTreeScorecard.js';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -49,6 +49,28 @@ eq('MIXED: less return but also less DD',
   scoreEpisode({ returnPct: 10, ddPct: 8 }, { returnPct: 20, ddPct: 12 }).verdict, 'MIXED');
 eq('LOSS: less return AND more DD',
   scoreEpisode({ returnPct: 10, ddPct: 15 }, { returnPct: 20, ddPct: 12 }).verdict, 'LOSS');
+
+// ── includeOpen + pairRoundTrips (trade-skill savings) ──
+// Exit DDD at $110, re-enter (still open) at $100 → saved (110−100)×10 = $100.
+const loop = reconstructEpisodes([
+  { ticker: 'DDD', side: 'BOT', shares: 10, price: 100, date: '2026-06-12' },
+  { ticker: 'DDD', side: 'SLD', shares: 10, price: 110, date: '2026-06-15' },   // exit +10%
+  { ticker: 'DDD', side: 'BOT', shares: 10, price: 100, date: '2026-06-17' },   // re-enter lower, still open
+], { includeOpen: true });
+eq('includeOpen: 1 closed + 1 open leg', [loop.length, loop[0].exitDate, loop[1].exitDate, loop[1].open], [2, '2026-06-15', null, true]);
+
+const trips = pairRoundTrips(loop);
+eq('round trip saved $100 (sold 110, re-bought 100, 10 sh, open)',
+  [trips.length, trips[0].savings, trips[0].shares, trips[0].reentryOpen], [1, 100, 10, true]);
+
+// Re-entered HIGHER → negative savings (the move cost you).
+const costly = pairRoundTrips(reconstructEpisodes([
+  { ticker: 'EEE', side: 'BOT', shares: 5, price: 50, date: '2026-06-10' },
+  { ticker: 'EEE', side: 'SLD', shares: 5, price: 48, date: '2026-06-12' },     // exit at 48
+  { ticker: 'EEE', side: 'BOT', shares: 5, price: 55, date: '2026-06-16' },     // chased back at 55
+  { ticker: 'EEE', side: 'SLD', shares: 5, price: 60, date: '2026-06-18' },
+], { includeOpen: true }));
+eq('round trip COST -$35 (sold 48, re-bought 55, 5 sh)', [costly.length, costly[0].savings], [1, -35]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

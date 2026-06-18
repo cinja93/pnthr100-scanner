@@ -567,6 +567,27 @@ export default function PnthrTreePage() {
               <span style={{ color: '#ef4444' }}>LOSS {scorecard.counts.LOSS}</span>
             </div>
           )}
+          {scorecard.savings && scorecard.roundTrips?.length > 0 && (
+            <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
+                <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 TRADE-SKILL SAVINGS</span>
+                <span title="Round trip: (your exit price − your re-entry price) × shares, summed across every exit-and-reenter. Positive = you bought back lower; negative = you re-entered higher (the move ran away).">
+                  net <b style={{ color: scorecard.savings.totalSaved >= 0 ? '#22c55e' : '#ef4444' }}>{scorecard.savings.totalSaved >= 0 ? '+$' : '−$'}{Math.abs(scorecard.savings.totalSaved).toLocaleString()}</b>
+                </span>
+                <span style={{ color: '#777', fontSize: 11 }}>{scorecard.roundTrips.length} round trips · {scorecard.savings.wins} saved / {scorecard.savings.costs} cost{scorecard.savings.openTrips ? ` · ${scorecard.savings.openTrips} re-entry still open` : ''}</span>
+              </div>
+              <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
+                {scorecard.roundTrips.slice(0, 8).map((rt, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
+                    <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{rt.ticker}</span>
+                    <span>sold ${rt.exitPx} {String(rt.exitDate).slice(5)} → re-bought ${rt.reentryPx} {String(rt.reentryDate).slice(5)}{rt.reentryOpen ? ' (open)' : ''}</span>
+                    <span style={{ color: '#777' }}>{rt.shares}sh</span>
+                    <span style={{ color: rt.savings >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{rt.savings >= 0 ? 'saved +$' : 'cost −$'}{Math.abs(rt.savings).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {scorecard.scored.length > 0 ? (
             <div style={{ display: 'grid', gap: 6 }}>
               {scorecard.scored.map((s, i) => {
@@ -578,7 +599,8 @@ export default function PnthrTreePage() {
                     {v ? <span style={{ background: c + '22', color: c, border: `1px solid ${c}66`, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4 }}>{v}{s.score.edgePct != null ? ` ${s.score.edgePct >= 0 ? '+' : ''}${s.score.edgePct}%` : ''}</span>
                        : <span style={{ color: '#888', fontSize: 11 }}>no strategy match</span>}
                     <span style={{ color: '#7fcf9f' }}>you: {s.returnPct >= 0 ? '+' : ''}{s.returnPct}% · {s.ddPct}% DD</span>
-                    {s.strategy && <span style={{ color: '#999' }}>strategy: {s.strategy.returnPct >= 0 ? '+' : ''}{s.strategy.returnPct}% · {s.strategy.ddPct}% DD</span>}
+                    {s.strategy && <span style={{ color: '#999' }}>strategy{s.strategy.open ? ' (still holding)' : ''}: {s.strategy.returnPct >= 0 ? '+' : ''}{s.strategy.returnPct}% · {s.strategy.ddPct}% DD</span>}
+                    {s.ddAvoidedPct != null && s.ddAvoidedPct > 0 && <span title="Drawdown the strategy sat through that you sidestepped by exiting" style={{ color: '#22c55e' }}>DD avoided {s.ddAvoidedPct}%</span>}
                   </div>
                 );
               })}

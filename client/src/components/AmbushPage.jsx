@@ -968,6 +968,10 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
         </div>
       </div>
 
+      {/* Projected-vs-actual chart — right under the header / Show-chart button (Tree
+          layout) so expanding it is visible immediately, not below the metric rows. */}
+      {!hasGross && chartBlock}
+
       {/* Hedge-fund metric cards — NET row (green box) + GROSS row (red box) when gross present */}
       {projection.metrics && (projection.metricsGross ? (
         <>
@@ -999,7 +1003,6 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
 
       {!hideForward && <ForwardProjection forward={projection.forward} />}
 
-      {!hasGross && chartBlock}
       {tableView && <AumTableModal view={tableView} projection={projection} onClose={() => setTableView(null)} />}
       {showLedger && cashLedger && <CashLedgerModal data={cashLedger} onClose={() => setShowLedger(false)} />}
       {infoMetric && (

@@ -1,11 +1,18 @@
 import { ALL_ASSIGNABLE_PAGES } from '../contexts/PortalContext';
+import { PAGE_AI_VARIANT } from '../utils/sidebarPages';
 import DocPermissionsSelector from './DocPermissionsSelector';
 
 export default function PagePermissionsSelector({ selected, onChange, docIds, onDocIdsChange, defaultDocFund }) {
+  // A split-badge page (e.g. Orders) is shown in the sidebar if EITHER its base key
+  // (orders) OR its AI variant (aiOrders) is allowed. So the checkbox reflects "either
+  // present", and unchecking removes BOTH — otherwise the page stays visible.
+  const isOn = (key) => selected.includes(key) || (PAGE_AI_VARIANT[key] ? selected.includes(PAGE_AI_VARIANT[key]) : false);
+
   function toggle(key) {
+    const ai = PAGE_AI_VARIANT[key];
     onChange(
-      selected.includes(key)
-        ? selected.filter(k => k !== key)
+      isOn(key)
+        ? selected.filter(k => k !== key && k !== ai)
         : [...selected, key],
     );
   }
@@ -18,13 +25,14 @@ export default function PagePermissionsSelector({ selected, onChange, docIds, on
     onChange([]);
   }
 
-  const dataRoomChecked = selected.includes('data-room');
+  const onCount = ALL_ASSIGNABLE_PAGES.filter(p => isOn(p.key)).length;
+  const dataRoomChecked = isOn('data-room');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: '#888', letterSpacing: '0.04em' }}>
-          PORTAL PAGES ({selected.length}/{ALL_ASSIGNABLE_PAGES.length})
+          PORTAL PAGES ({onCount}/{ALL_ASSIGNABLE_PAGES.length})
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
           <button type="button" onClick={selectAll}
@@ -45,11 +53,11 @@ export default function PagePermissionsSelector({ selected, onChange, docIds, on
           <div key={p.key} style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{
               display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-              padding: '3px 0', fontSize: 12, color: selected.includes(p.key) ? '#fff' : '#555',
+              padding: '3px 0', fontSize: 12, color: isOn(p.key) ? '#fff' : '#555',
             }}>
               <input
                 type="checkbox"
-                checked={selected.includes(p.key)}
+                checked={isOn(p.key)}
                 onChange={() => toggle(p.key)}
                 style={{ accentColor: '#FCF000', cursor: 'pointer', width: 14, height: 14 }}
               />

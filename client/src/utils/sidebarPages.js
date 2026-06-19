@@ -54,4 +54,21 @@ const SIDEBAR_PAGES = [
   { key: 'portfolio',        label: 'Portfolio',       personalData: true },
 ];
 
+// AI variant for each split-badge ("AI | Carnivore") assignable page. MUST mirror
+// the assignable entries of Sidebar.jsx AI_PAGE_MAP. The sidebar shows a split page
+// when EITHER its base key OR this AI variant is in allowedPages, so the Investor
+// Portal checkbox must control BOTH — otherwise unchecking the base key leaves the
+// AI variant behind and the page stays visible (the "Orders still showing" bug).
+export const PAGE_AI_VARIANT = {
+  'ir-live':        'ai-ir-live',
+  'data-room':      'ai-data-room',
+  pulse:            'aiPulse',
+  orders:           'aiOrders',
+  apex:             'aiKill',
+  jungle:           'aiJungle',
+  sectors:          'aiSectors',
+  jungleHeat:       'aiHeat',
+  'signal-history': 'ai-signal-history',
+};
+
 export default SIDEBAR_PAGES;

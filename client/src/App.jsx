@@ -1803,6 +1803,12 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 
+          {/* Intelligence Report Live — PNTHR Tree Fund (own access key) */}
+          {renderPage === 'tree-ir-live' && (isAdmin || effectiveAllowed?.includes('tree-ir-live')
+            ? <IrLivePage fund="tree" />
+            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
+          )}
+
           {/* TEST page — admin only */}
           {renderPage === 'test' && (isAdmin
             ? <TestPage />

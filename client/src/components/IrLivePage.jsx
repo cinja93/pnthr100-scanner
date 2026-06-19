@@ -699,6 +699,16 @@ const FUND_CONFIG = {
     curveLabel: 'Ambush V7.6',
     crisisHeader: 'Ambush',
   },
+  tree: {
+    name: 'PNTHR Tree Fund, LP',
+    netLabel: 'TREE (NET)',
+    compLabel: 'TREE FUND',
+    subtitle: (endDate) => `Backtest Performance Report | Jan 2023 – ${endDate} | Long/Short Mandate · Current Systematic Implementation: Long-Only 42-Week-High Momentum | PNTHR AI 300 Universe (~300 Names) | v1.0`,
+    apiBase: 'tree-ir',
+    footer: 'PNTHR TREE FUND',
+    curveLabel: 'PNTHR Tree Fund',
+    crisisHeader: 'Tree',
+  },
 };
 
 const AI300_METHODOLOGY = [
@@ -732,8 +742,19 @@ const AMBUSH_METHODOLOGY = [
   { title: 'Execution Model & Costs', content: 'Sixty-second intraday tick engine. Entries and lot adds fill at the trigger price with adverse slippage; exits fill at the stop/trail with adverse slippage. All friction costs (real IBKR commissions, 5 bps slippage, modeled short borrow) are included in net figures. No look-ahead — signals and regime use only data available at each bar. Validated under stress: borrow ×10, gap/squeeze slippage, pessimistic fills, and year-by-year persistence.' },
 ];
 
+const TREE_METHODOLOGY = [
+  { title: 'Mandate vs. Current Implementation', content: 'PNTHR Tree Fund, LP is authorized as a long/short equity strategy and may take long and short positions at the Investment Manager\'s discretion. The current systematic implementation — and the entirety of this backtest — is LONG-ONLY: it buys new 42-week highs in the PNTHR AI 300 universe and trails a protective stop. No short positions were taken in the backtest, and no short performance is presented or implied. The long/short authorization preserves flexibility to add a short sleeve in the future; any such change would be disclosed to investors.' },
+  { title: 'The PNTHR AI 300 Universe', content: 'Approximately 300 AI-economy U.S. equities across 16 proprietary sectors of the artificial intelligence economy, from semiconductors and cloud infrastructure to autonomous systems and AI-powered healthcare. The backtest uses the CURRENT index members only, which makes the historical result survivorship-flattered (see disclosures).' },
+  { title: 'Entry — New 42-Week High Breakout', content: 'A position is initiated when a name makes a NEW intraday 42-week high — its high trades above the highest high of the prior 210 trading days (today excluded). Entry is modeled as a resting buy-stop at the prior 42-week high plus $0.01, filled at the trigger level or the bar\'s open if it gapped above (the worse of the two). No look-ahead: only prior bars and the current bar\'s high are used. Full position size is taken at the breakout — no pyramiding, which tested best for this daily strategy.' },
+  { title: 'Exit — Two-Week Trailing Stop', content: 'The protective stop is the lowest low of the prior 10 trading days (two weeks) minus $0.01, ratcheted upward only as the trade works. The position exits when the day breaks the stop; gap-through fills are modeled conservatively (fill at the open when the open gaps below the stop).' },
+  { title: 'Breakeven Snap', content: 'Once a position is at least $250 in open profit on a green day (close at or above the open), the single stop jumps to the entry price (breakeven), raise-only, then resumes trailing the 10-day low once that climbs above breakeven. The live engine confirms this on a completed green clock-HOUR; the backtest models a green-DAY proxy (approximate).' },
+  { title: 'Position Sizing & Leverage Cap', content: 'Each position is sized off current NAV at the smaller of 2% of NAV risked to the stop and 10% of NAV in position value, and is further capped at 2% of the name\'s 20-day average daily volume for institutional executability. Total gross long exposure is capped at 2× NAV — the mandatory leverage governor that, without it, would let the per-name sizing pile up in a broad rally.' },
+  { title: 'Execution Model & Costs', content: 'Daily-bar engine. Entries fill at the breakout level (or the gapped-through open); exits fill at the trailing stop with gap-through pricing. All friction costs — IBKR commission and slippage on every leg — are deducted in the figures. The backtest period is frozen at the last session before go-live (January 3, 2023 through June 11, 2026); live performance from June 12, 2026 onward is tracked separately and is not part of this report.' },
+];
+
 function MethodologySection({ fund }) {
   const sections = fund === 'ambush' ? AMBUSH_METHODOLOGY
+    : fund === 'tree' ? TREE_METHODOLOGY
     : fund === 'carnivore' ? CARNIVORE_METHODOLOGY : AI300_METHODOLOGY;
 
   return (

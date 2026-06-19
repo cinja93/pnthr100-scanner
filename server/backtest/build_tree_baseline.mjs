@@ -1,7 +1,8 @@
 // ── PNTHR TREE — BUILD PROJECTION BASELINE (daily-10 stop, 2× cap) ───────────
-// Runs the LOCKED Tree strategy (matches pnthrTreeEngine.js) and writes
-// server/data/treeProjectionBaseline.json — the same shape Ambush uses, so the
-// AumTracker panel renders Tree's OWN numbers (not Ambush's).
+// Runs the LOCKED Tree strategy (now in the SHARED treeSim.js engine, also used by
+// the Investor Report builder genTreeIrData.js — so the dashboard and the IR can
+// never diverge) and writes server/data/treeProjectionBaseline.json — the same
+// shape Ambush uses, so the AumTracker panel renders Tree's OWN numbers.
 //
 //   AI-300 · LONG-only · FULL size (no pyramid) · enter on NEW intraday 42wk high (210 trading days)
 //   (resting buy-stop, fill at worse of level/open) · stop = lowest low of prior 10
@@ -14,146 +15,24 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import fs from 'fs';
 import { connectToDatabase } from '../database.js';
-import { calcCommission, calcSlippage } from './costEngine.js';
 import { computeInputHash } from '../treeBaselineGuard.js';   // single shared fingerprint of the backtest inputs
-import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
+import { loadTreeData, simulateTree, ENTRY_HIGH_LOOKBACK, BE_SNAP_PROFIT, DEFAULT_START, DEFAULT_END } from './treeSim.js';
 
-const NAV0 = 100000, VITALITY_PCT = 0.02, TICKER_CAP_PCT = 0.10, MAX_GROSS = 2.0;
-const ENTRY_HIGH_LOOKBACK = +(process.env.LOOKBACK) || 210;   // 42-week high = 210 trading days (LIVE default). Override via LOOKBACK env to sweep (60=12wk … 252=52wk).
-const STOP_LOOKBACK = 10, ADV_CAP_PCT = 0.02;
-// Breakeven-stop snap (live, Scott 2026-06-18): on a GREEN day (close ≥ open) where open
-// profit ≥ $BE_SNAP_PROFIT, raise the single stop to breakeven (entry fill), raise-only,
-// applied at the close → forward-only. The green DAY is the daily stand-in for the live green
-// completed HOUR (approximate). BE_SNAP=0 reproduces the old no-snap baseline.
-const BE_SNAP_PROFIT = process.env.BE_SNAP != null ? +process.env.BE_SNAP : 250;
-const START = process.env.START || '2023-01-03';
-// Backtest END is FROZEN at the last session before go-live (strategy went LIVE Fri 2026-06-12).
-// A backtest must not bleed into the live period, and freezing the endpoint makes the result
-// reproducible — it no longer drifts as new daily bars arrive. Live performance from 06-12
-// onward is the real track record (the dashboard's ACTUAL AUM line), tracked separately.
-const END = process.env.END || '2026-06-11';
-// Universe knob: 'ai' (default) = current AI-300 members from pnthr_ai_bt_candles;
-// 'carn' = the 679 universe (pnthr_bt_candles, S&P 500 + 400) for out-of-sample validation.
-const UNIVERSE = process.env.UNIVERSE || 'ai';
-const CANDLE_COLL = UNIVERSE === 'carn' ? 'pnthr_bt_candles' : 'pnthr_ai_bt_candles';
-// ETFs/indexes living in the 679 collection that must never be traded as stocks.
-const ETF_EXCLUDE = new Set(['SPY','QQQ','DIA','IWM','XLK','XLF','XLE','XLV','XLY','XLP','XLI','XLB','XLU','XLRE','XLC','SMH','VOO','VTI']);
+// Sweep knobs (env overrides; production runs use the LOCKED defaults from treeSim.js).
+const LOOKBACK = +(process.env.LOOKBACK) || ENTRY_HIGH_LOOKBACK;   // 42wk = 210d; override to sweep (60=12wk … 252=52wk)
+const BE_SNAP = process.env.BE_SNAP != null ? +process.env.BE_SNAP : BE_SNAP_PROFIT;   // BE_SNAP=0 = old no-snap baseline
+const START = process.env.START || DEFAULT_START;
+const END = process.env.END || DEFAULT_END;   // FROZEN at the last session before go-live (reproducible)
+const UNIVERSE = process.env.UNIVERSE || 'ai';   // 'ai' (default) | 'carn' (679 out-of-sample validation)
+const NAV0 = 100000;
 
 const db = await connectToDatabase();
 
-// ── load + precompute ───────────────────────────────────────────────────────
-// Universe = CURRENT AI-300 index members only (matches the live engine + the disclosure).
-// Previously this traded EVERY candle doc, including ~19 names removed from the index (delisted
-// CYBR/ABB, non-AI CHPT/PLUG, etc.) — names the live strategy never trades. Filtering to actual
-// members makes the backtest faithful to the strategy it claims to represent.
-const AI_SET = new Set(); for (const s of SECTORS) for (const h of s.holdings) AI_SET.add(h.ticker);
-const docs = await db.collection(CANDLE_COLL).find({}).toArray();
-const T = {}; const allDatesSet = new Set();
-for (const d of docs) {
-  if (UNIVERSE === 'ai' && !AI_SET.has(d.ticker)) continue;   // current index members only
-  if (UNIVERSE === 'carn' && ETF_EXCLUDE.has(d.ticker)) continue;   // 679: skip ETFs/indexes
-  const bars = (d.daily || []).map(b => ({ date: b.date, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume || 0 }))
-    .filter(b => b.l > 0 && b.c > 0 && b.date <= END).sort((a, b) => a.date.localeCompare(b.date));
-  if (bars.length < ENTRY_HIGH_LOOKBACK + 5) continue;
-  const n = bars.length;
-  const hi52 = new Array(n).fill(null), loStop = new Array(n).fill(null), adv20 = new Array(n).fill(0);
-  for (let i = 0; i < n; i++) {
-    if (i >= ENTRY_HIGH_LOOKBACK) { let mh = -Infinity; for (let j = i - ENTRY_HIGH_LOOKBACK; j < i; j++) if (bars[j].h > mh) mh = bars[j].h; hi52[i] = mh; }
-    if (i >= STOP_LOOKBACK) { let sl = Infinity; for (let j = i - STOP_LOOKBACK; j < i; j++) if (bars[j].l < sl) sl = bars[j].l; loStop[i] = sl; }
-    if (i >= 20) { let v = 0; for (let j = i - 20; j < i; j++) v += bars[j].v; adv20[i] = v / 20; }
-    allDatesSet.add(bars[i].date);
-  }
-  const idxByDate = {}; bars.forEach((b, i) => { idxByDate[b.date] = i; });
-  T[d.ticker] = { bars, idxByDate, hi52, loStop, adv20 };
-}
-const allDates = [...allDatesSet].sort();
-
-// ── SPY benchmark (stitch the two DB sources to cover the full period) ────────
-const spyClose = {};
-for (const c of ['pnthr_bt_candles', 'pnthr_candle_cache']) {
-  const d = await db.collection(c).findOne({ ticker: 'SPY' });
-  if (d) for (const b of (d.daily || d.candles || [])) if (+b.close > 0) spyClose[b.date] = +b.close;
-}
-const spyDates = Object.keys(spyClose).sort();
-const spyAt = (date, dir) => {   // dir +1 = first ≥ date, -1 = last ≤ date
-  if (dir > 0) { for (const dt of spyDates) if (dt >= date) return spyClose[dt]; }
-  else { for (let i = spyDates.length - 1; i >= 0; i--) if (spyDates[i] <= date) return spyClose[spyDates[i]]; }
-  return null;
-};
-
-// ── simulation (daily-10 stop, 2× gross cap) ─────────────────────────────────
-const positions = {};
-let realized = 0, realizedGross = 0, totalComm = 0, totalSlip = 0;
-const closed = []; const equity = []; const equityGross = [];
-let peak = NAV0, maxDDfrac = 0, maxDDdollar = 0;
-let peakG = NAV0, maxDDfracG = 0, maxDDdollarG = 0;
-
-const unrealAt = (mark) => { let u = 0; for (const [t, p] of Object.entries(positions)) { const px = mark[t]; if (px == null) continue; u += (px - p.fill) * p.sh; } return u; };
-const equityAt = (mark) => NAV0 + realized + unrealAt(mark);            // NET (after costs) — drives sizing/cap, unchanged
-const equityGrossAt = (mark) => NAV0 + realizedGross + unrealAt(mark);  // GROSS (before commission + slippage)
-const grossAt = (mark) => { let g = 0; for (const [t, p] of Object.entries(positions)) g += p.sh * (mark[t] ?? p.fill); return g; };
-function closePos(t, exitPx, date) {
-  const p = positions[t]; if (!p) return;
-  const comm = calcCommission(p.sh, exitPx), slip = calcSlippage(p.sh, exitPx);
-  totalComm += comm; totalSlip += slip;
-  const gross = (exitPx - p.fill) * p.sh; realizedGross += gross;       // gross: no costs
-  const pnl = gross - comm - slip; realized += pnl;                     // net: minus costs
-  const ei = T[t]?.idxByDate[p.entryDate], xi = T[t]?.idxByDate[date];  // hold time in TRADING days (bar-index delta)
-  const holdDays = (ei != null && xi != null) ? (xi - ei) : null;
-  const returnPct = p.fill > 0 ? +(((exitPx - p.fill) / p.fill) * 100).toFixed(2) : 0;   // price move %, same net/gross
-  closed.push({ ticker: t, pnl, pnlGross: gross, holdDays, returnPct }); delete positions[t];
-}
-
-for (const date of allDates) {
-  if (date < START) continue;
-  for (const t of Object.keys(positions)) {
-    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null) continue;
-    const bar = tk.bars[i]; const pos = positions[t];
-    if (tk.loStop[i] != null) { const s = tk.loStop[i] - 0.01; pos.stop = pos.stop == null ? s : Math.max(pos.stop, s); }
-    if (pos.stop != null && bar.l <= pos.stop) closePos(t, Math.min(pos.stop, bar.o), date);
-  }
-  const mark = {}; for (const t of Object.keys(positions)) { const i = T[t].idxByDate[date]; if (i != null) mark[t] = T[t].bars[i].c; }
-  const curEq = equityAt(mark);
-  for (const t of Object.keys(T)) {
-    if (positions[t]) continue;
-    const tk = T[t]; const i = tk.idxByDate[date]; if (i == null || i < ENTRY_HIGH_LOOKBACK) continue;
-    const bar = tk.bars[i];
-    if (tk.hi52[i] == null || bar.h < tk.hi52[i] + 0.01 || tk.loStop[i] == null) continue;
-    const trig = +(tk.hi52[i] + 0.01).toFixed(2);
-    const fill = Math.max(trig, bar.o);
-    const stop = +(tk.loStop[i] - 0.01).toFixed(2);
-    const rps = fill - stop; if (rps <= 0.01 || stop >= fill) continue;
-    let sh = Math.min(Math.floor((curEq * VITALITY_PCT) / rps), Math.floor((curEq * TICKER_CAP_PCT) / fill));
-    const advMax = Math.floor((tk.adv20[i] || 0) * ADV_CAP_PCT); if (advMax > 0) sh = Math.min(sh, advMax);
-    if (sh < 1) continue;
-    if (grossAt(mark) + sh * fill > MAX_GROSS * curEq) continue;
-    const comm = calcCommission(sh, fill), slip = calcSlippage(sh, fill);
-    totalComm += comm; totalSlip += slip; realized -= comm + slip;
-    positions[t] = { sh, fill, stop, entryDate: date };
-  }
-  // breakeven snap (forward-only: set at the close, governs from the next bar). One stop:
-  // pos.stop is floored at breakeven; the 2-week-low trail still ratchets it up later via max().
-  if (BE_SNAP_PROFIT > 0) {
-    for (const t of Object.keys(positions)) {
-      const tk = T[t]; const i = tk.idxByDate[date]; if (i == null) continue;
-      const bar = tk.bars[i]; const pos = positions[t];
-      if (bar.c < bar.o) continue;                                  // not a green day
-      if ((bar.c - pos.fill) * pos.sh < BE_SNAP_PROFIT) continue;   // not up enough yet
-      const be = +pos.fill.toFixed(2);
-      if (pos.stop == null || be > pos.stop) pos.stop = be;         // raise-only
-    }
-  }
-  const eq = equityAt(mark); equity.push({ date, eq });
-  if (eq > peak) peak = eq;
-  const ddf = (eq - peak) / peak; if (ddf < maxDDfrac) maxDDfrac = ddf;
-  if (peak - eq > maxDDdollar) maxDDdollar = peak - eq;
-  const eqG = equityGrossAt(mark); equityGross.push({ date, eq: eqG });   // gross equity, same trades
-  if (eqG > peakG) peakG = eqG;
-  const ddfG = (eqG - peakG) / peakG; if (ddfG < maxDDfracG) maxDDfracG = ddfG;
-  if (peakG - eqG > maxDDdollarG) maxDDdollarG = peakG - eqG;
-}
-const lastDate = allDates[allDates.length - 1];
-for (const t of Object.keys(positions)) { const i = T[t].idxByDate[lastDate]; closePos(t, i != null ? T[t].bars[i].c : positions[t].fill, lastDate); }
+// Load candles + run the shared LOCKED simulation (identical engine to the live dashboard + the IR).
+const data = await loadTreeData(db, { end: END, universe: UNIVERSE, lookback: LOOKBACK });
+const { spyAt, lastDate } = data;
+const sim = simulateTree(data, { nav0: NAV0, start: START, beSnap: BE_SNAP });
+const { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip } = sim;
 
 // ── metrics — computed identically for NET (after costs) and GROSS (before costs) ───
 // Same trades either way; gross just adds the commission+slippage back. pnlField selects
@@ -241,7 +120,7 @@ const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs
 
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
-  strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · breakeven snap (+$${BE_SNAP_PROFIT} & green)`,
+  strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · breakeven snap (+$${BE_SNAP} & green)`,
   disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
   backtestStart: equity[0].date,        // first session traded (frozen)

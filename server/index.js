@@ -83,6 +83,7 @@ import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
 import { ambushIrMetricsHandler, ambushIrTradesHandler } from './ambushIrService.js';
+import { treeIrMetricsHandler, treeIrTradesHandler } from './treeIrService.js';
 import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
 import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
@@ -3099,6 +3100,23 @@ app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess,
 // ── PNTHR Ambush V7.6 — Intelligence Report (no-gate + 2-bar; 3 tiers) ───────
 app.get('/api/ambush-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, ambushIrMetricsHandler);
 app.get('/api/ambush-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, ambushIrTradesHandler);
+
+// ── PNTHR Tree Fund — Intelligence Report (AI-300 42wk-high; 3 tiers) ────────
+// Gated by its OWN page key ('tree-ir-live') so a Tree-only investor can be granted
+// the Tree IR without the AI Elite / Carnivore / Ambush reports (separate fund).
+async function requireTreeIrAccess(req, res, next) {
+  if (req.user?.role === 'admin') return next();
+  if (req.user?.source === 'den_investors') {
+    const inv = await findInvestorById(req.user.userId);
+    if (inv?.allowedPages?.includes('tree-ir-live')) return next();
+  } else {
+    const profile = await getUserProfile(req.user.userId);
+    if (profile?.allowedPages?.includes('tree-ir-live')) return next();
+  }
+  return res.status(403).json({ error: 'Access denied' });
+}
+app.get('/api/tree-ir/:tier/metrics', authenticateJWT, requireTreeIrAccess, treeIrMetricsHandler);
+app.get('/api/tree-ir/:tier/trades',  authenticateJWT, requireTreeIrAccess, treeIrTradesHandler);
 
 // ── AI 300 Kill Test — Appearance Tracking ───────────────────────────────────
 app.get('/api/ai300-kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

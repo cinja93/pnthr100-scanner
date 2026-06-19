@@ -13,7 +13,7 @@ from reportlab.lib import colors
 import os
 
 FUND       = "PNTHR Tree Fund, LP"
-FUND_UPPER = "PNTHR AI ELITE 300 FUND, LP"
+FUND_UPPER = "PNTHR TREE FUND, LP"
 VERSION    = "v1.0"
 
 OUTPUT = os.path.expanduser(f"~/Downloads/PNTHR_Tree_Fund_Accredited_Investor_Verification_{VERSION}_2026.pdf")
@@ -93,7 +93,7 @@ if os.path.exists(LOGO):
     story.append(logo)
     story.append(Spacer(1, 10))
 
-story.append(Paragraph("PNTHR AI ELITE 300 FUND, LP", styles['DocTitle']))
+story.append(Paragraph("PNTHR TREE FUND, LP", styles['DocTitle']))
 story.append(Spacer(1, 4))
 story.append(Paragraph(
     '<u>A<font size="9">CCREDITED</font> I<font size="9">NVESTOR AND</font> '

@@ -214,7 +214,7 @@ def build_title():
     # and appears on content page 2 immediately before Part I, per original v2.3.
     story = build_cover_header(
         title_line_1="",
-        title_line_2="PNTHR AI ELITE 300 FUND, LP",
+        title_line_2="PNTHR TREE FUND, LP",
         subtitle="Subscriber Information Form & Investor Questionnaire",
         date_line="Dated as of:  June 1, 2026",
         revision_line="Document Revision:  v1.0 - June 2026",
@@ -1242,7 +1242,7 @@ def build():
     on_cover, on_page = make_page_handlers(
         doc_short_title="Investor Questionnaire",
         fund_name="PNTHR Tree Fund",
-        fund_name_upper="PNTHR AI ELITE 300 FUND",
+        fund_name_upper="PNTHR TREE FUND",
         doc_date_display="June 2026",
     )
     story = []

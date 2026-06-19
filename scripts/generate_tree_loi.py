@@ -31,7 +31,7 @@ from pnthr_design import (
 )
 
 FUND       = "PNTHR Tree Fund, LP"
-FUND_UPPER = "PNTHR AI ELITE 300 FUND, LP"
+FUND_UPPER = "PNTHR TREE FUND, LP"
 VERSION    = "v1.0"
 
 OUT_PATH = os.path.expanduser(f"~/Downloads/PNTHR_Tree_Fund_LOI_{VERSION}_2026.pdf")
@@ -162,7 +162,7 @@ def fund_terms_table():
 # =========================================================================
 def build():
     story = build_cover_header(
-        title_line_1="PNTHR AI ELITE 300 FUND, LP",
+        title_line_1="PNTHR TREE FUND, LP",
         title_line_2=None,
         subtitle="LETTER OF INTENT",
         date_line="Effective:  June 1, 2026",
@@ -352,7 +352,7 @@ def build():
         doc_short_title="Letter of Intent",
         doc_date_display="June 2026",
         fund_name="PNTHR Tree Fund",
-        fund_name_upper="PNTHR AI ELITE 300 FUND",
+        fund_name_upper="PNTHR TREE FUND",
     )
     doc.build(story, onFirstPage=on_cover, onLaterPages=on_page)
     print(f"PDF generated: {OUT_PATH}")

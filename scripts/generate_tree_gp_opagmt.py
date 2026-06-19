@@ -10,7 +10,7 @@ Changes from Carnivore v2.5:
   - Fund name: "Carnivore Quant Fund" -> "PNTHR Tree Fund" throughout
   - Fund effective/PPM/IMA dates: June 1, 2025 -> June 1, 2026
   - Version: v2.5 -> v1.0
-  - Footer breadcrumbs: AI ELITE 300 FUND / June 2026
+  - Footer breadcrumbs: TREE FUND / June 2026
   - Cover issuer line: General Partner of PNTHR Tree Fund, LP
   - LLC formation date (January 30, 2025) unchanged (same entity)
 
@@ -972,7 +972,7 @@ def build():
     )
     on_cover, on_page = make_page_handlers(
         fund_name="PNTHR Tree Fund",
-        fund_name_upper="PNTHR AI ELITE 300 FUND",
+        fund_name_upper="PNTHR TREE FUND",
         doc_short_title="Operating Agreement",
         doc_date_display="June 2026",
     )

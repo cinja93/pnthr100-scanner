@@ -30,7 +30,7 @@ from pnthr_design import (
 )
 
 FUND       = "PNTHR Tree Fund, LP"
-FUND_UPPER = "PNTHR AI ELITE 300 FUND"
+FUND_UPPER = "PNTHR TREE FUND"
 VERSION    = "v2.1"
 DATE_DISP  = "May 2026"
 

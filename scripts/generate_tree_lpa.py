@@ -2761,7 +2761,7 @@ def build():
         doc_short_title="Limited Partnership Agreement",
         doc_date_display="June 2026",
         fund_name="PNTHR Tree Fund",
-        fund_name_upper="PNTHR AI ELITE 300 FUND",
+        fund_name_upper="PNTHR TREE FUND",
     )
     story = []
     story.extend(build_cover())

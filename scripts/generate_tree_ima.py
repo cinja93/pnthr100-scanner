@@ -67,7 +67,7 @@ def subsection(num, *paragraphs):
 def build_cover():
     return build_cover_header(
         title_line_1="",
-        title_line_2="PNTHR AI ELITE 300 FUND, LP",
+        title_line_2="PNTHR TREE FUND, LP",
         subtitle="INVESTMENT MANAGEMENT AGREEMENT",
         date_line="Dated as of:  June 1, 2026",
         revision_line="Document Revision:  v1.0 - June 2026",
@@ -696,7 +696,7 @@ def build():
         doc_short_title="Investment Management Agreement",
         doc_date_display="June 2026",
         fund_name="PNTHR Tree Fund",
-        fund_name_upper="PNTHR AI ELITE 300 FUND",
+        fund_name_upper="PNTHR TREE FUND",
     )
     story = []
     story.extend(build_cover())

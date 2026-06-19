@@ -853,7 +853,7 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
   // fee-add-back, so we show the honest net figure once rather than a misleading gross column).
   const riskPanel = (m) => (
     <div style={{ border: '1px solid #b45309', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
-      {rowLabel('MONTHLY & RISK PROFILE (NET, after fees)')}
+      {rowLabel('MONTHLY & RISK PROFILE · NET OF TRADING COSTS')}
       {tileGrid([
         ['Avg Month', '+' + m.avgMonthPct + '%', '#22c55e', 'positive ' + m.positiveMonthsPct + '%'],
         ['Best Month', '+' + m.bestMonthPct + '%', '#22c55e'],
@@ -976,11 +976,11 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       {projection.metrics && (projection.metricsGross ? (
         <>
           <div style={{ border: '1px solid #22c55e', borderRadius: 10, padding: '0 10px 10px', marginTop: 12 }}>
-            {rowLabel('NET (after fund fees)')}
+            {rowLabel('NET OF TRADING COSTS · BEFORE FUND FEES')}
             {metricTiles(projection.metrics, 'Net', true)}
           </div>
           <div style={{ border: '1px solid #ef4444', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
-            {rowLabel('GROSS (before fund fees)')}
+            {rowLabel('GROSS · BEFORE TRADING COSTS')}
             {metricTiles(projection.metricsGross, 'Gross', true)}
           </div>
         </>

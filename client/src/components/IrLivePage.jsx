@@ -860,7 +860,10 @@ export default function IrLivePage({ fund = 'ai300' }) {
           {/* ═══ OVERVIEW ═══ */}
           {section === 'overview' && (
             <div>
-              {/* Headline numbers */}
+              {/* NET (after all fees) — what an investor keeps */}
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: GREEN, margin: '0 0 8px', textTransform: 'uppercase' }}>
+                Net — After All Fees <span style={{ color: '#888', fontWeight: 600 }}>(2% management + tiered performance fee + trading costs)</span>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
                 <MetricCard label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
                   info="Your money, multiplied. This is the total profit on every dollar invested after all fees and costs are paid. While the S&P 500 historically grows around 10% a year, this fund makes money at a pace that dramatically outperforms passive investing. This number gives you confidence that PNTHR's systematic approach builds real, compounding wealth." />
@@ -888,8 +891,31 @@ export default function IrLivePage({ fund = 'ai300' }) {
                   info="The extra dollars earned above what a simple S&P 500 index fund would have returned. This is pure profit from active management, money you would have left on the table with a passive strategy. Every dollar of alpha is a direct benefit of choosing PNTHR. This number proves the fund doesn't just keep up with the market, it dramatically beats it." />
               </div>
 
-              {/* Equity curve */}
-              <EquityCurveChart data={net} spyData={spy} spyReturn={spy?.totalReturn} label={`STRATEGY EQUITY CURVE (GROSS) — ${fc.curveLabel}`} color={BLUE} />
+              {/* GROSS (before fund fees) — the underlying strategy result */}
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: '#9ab', margin: '0 0 8px', textTransform: 'uppercase' }}>
+                Gross — Before Fund Fees <span style={{ color: '#888', fontWeight: 600 }}>(strategy after trading costs, before the 2% + performance fee)</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
+                <MetricCard label="Gross Total Return" value={fmtPct(gross?.totalReturn)} color={retColor(gross?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
+                  info="The strategy's total return before fund management and performance fees, but after real trading commissions and slippage. This is the raw strategy result. The Net figures above show what an investor actually keeps after the 2% management fee and the tiered performance fee are deducted." />
+                <MetricCard label="Gross CAGR" value={fmtPct(gross?.cagr)} color={GREEN}
+                  info="The strategy's annual compound growth rate before fund fees. Net CAGR (above) is the after-fee figure the investor earns." />
+                <MetricCard label="Gross Sharpe" value={fmt(gross?.sharpe)} color={gross?.sharpe >= 1 ? GREEN : '#fff'}
+                  info="Risk-adjusted return of the underlying strategy (profit per unit of risk), measured before fund fees." />
+                <MetricCard label="Gross Sortino" value={fmt(gross?.sortino)} color={gross?.sortino >= 2 ? GREEN : '#fff'}
+                  info="Like Sharpe but penalizing only downside volatility, measured on the strategy before fund fees." />
+                <MetricCard label="Gross Calmar" value={fmt(gross?.calmar)}
+                  info="Strategy annual return relative to its worst drawdown, before fund fees." />
+                <MetricCard label="Gross Recovery Factor" value={`${fmt(gross?.recoveryFactor, 0)}x`}
+                  info="How many times over the strategy earned back its deepest drawdown, before fund fees." />
+                <MetricCard label="Gross Ending Equity" value={fmtNav(gross?.endNav)} color={GREEN}
+                  info="What the seed investment grew to before fund fees were deducted. Net Ending Equity (above) is the after-fee figure the investor keeps." />
+                <MetricCard label="Gross Alpha vs S&P" value={spy && gross ? fmtDollar(gross.endNav - spy.endingEquity) : '—'} color={GREEN}
+                  info="Extra dollars the strategy earned over an S&P 500 index fund, measured before fund fees." />
+              </div>
+
+              {/* Equity curve — gross strategy curve (badge now matches the GROSS label) */}
+              <EquityCurveChart data={gross} spyData={spy} spyReturn={spy?.totalReturn} label={`STRATEGY EQUITY CURVE (GROSS) — ${fc.curveLabel}`} color={BLUE} />
 
               {/* Performance comparison */}
               <ComparisonTable data={net} spy={spy} alpha={d.alphaVsSpy} label={`PERFORMANCE COMPARISON: ${fc.compLabel} vs. S&P 500`} netLabel={fc.netLabel} />

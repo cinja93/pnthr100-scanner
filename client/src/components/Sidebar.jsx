@@ -39,11 +39,8 @@ const NAV_GROUPS = [
     groupLabel: "Investor's Den",
     info: 'investorsDen',
     items: [
-      { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | Carnivore', badgeType: 'split', needsAccess: true },
-      { key: 'ambush-ir-live', label: '  Ambush V7.6', badge: 'AMBUSH', badgeType: 'live', needsAccess: true, accessKey: 'ir-live', irChild: true },
-      { key: 'tree-ir-live', label: '  Tree Fund', badge: 'TREE', badgeType: 'live', needsAccess: true, irChild: true },
-      { key: 'data-room', label: 'Data Room',            badge: 'AI | Carnivore', badgeType: 'split' },
-      { key: 'tree-data-room', label: 'Tree Data Room', badge: 'TREE', badgeType: 'live', needsAccess: true },
+      { key: 'tree-ir-live', label: 'Intelligence Report', badge: 'TREE', badgeType: 'live', needsAccess: true },
+      { key: 'tree-data-room', label: 'Data Room', badge: 'TREE', badgeType: 'live', needsAccess: true },
     ],
   },
   {
@@ -68,9 +65,6 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'ambush',   label: 'Ambush V7.6',  badge: 'LIVE' },
-      { key: 'orders',   label: 'Orders',    badge: 'AI | Carnivore', badgeType: 'split' },
-      { key: 'eliteAi',  label: 'Elite AI',  badge: 'NEW' },
       { key: 'pnthrTree', label: 'PNTHR Tree', badge: 'LIVE' },
     ],
   },
@@ -112,7 +106,7 @@ const SECTION_INFO = {
   },
   pnthrLive: {
     title: 'PNTHR Live',
-    body: "Live operations center. Ambush V7.6 is the fully automated intraday system: longs AND shorts in any market regime, 1H-stop, graduated sizing (50/75/100%), 5-lot pyramid, and a 2-bar trailing exit. Orders shows the active trading pipeline and heat exposure.",
+    body: "Live operations center for the PNTHR Tree strategy — the automated AI-300, 42-week-high momentum engine. PNTHR Tree shows the live funnel, positions, risk, and forward projection.",
   },
   strategy: {
     title: 'Strategy',
@@ -336,6 +330,12 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         items: [
           { key: 'investor-mgmt',     label: 'Investor Portal' },
           { key: 'journal',           label: 'Journal' },
+          { key: 'ir-live',           label: 'Intel Report (AI/Carn)', badge: 'AI | Carnivore', badgeType: 'split' },
+          { key: 'ambush-ir-live',    label: 'Ambush IR', badge: 'AMBUSH', badgeType: 'live', accessKey: 'ir-live' },
+          { key: 'data-room',         label: 'Data Room (AI/Carn)', badge: 'AI | Carnivore', badgeType: 'split' },
+          { key: 'ambush',            label: 'Ambush V7.6', badge: 'LIVE' },
+          { key: 'orders',            label: 'Orders', badge: 'AI | Carnivore', badgeType: 'split' },
+          { key: 'eliteAi',           label: 'Elite AI', badge: 'NEW' },
           { key: 'signal-history',    label: 'Signal History',    badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | Carnivore', badgeType: 'split' },

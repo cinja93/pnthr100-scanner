@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 PNTHR Tree Fund, LP — Performance Summary v2.1
-Per-tier metric tables + narrative reconciled to the PNTHR Tree Fund Intelligence
-Report v1.0 (Filet $100K, Porterhouse $500K, Wagyu $1M; long-only 42wk-high momentum).
-WIP: crisis_table / annual_table / direction_table still hold Elite data pending
-Tree-specific extraction (crisis-window + annual returns); SPY measured from Jan 2023.
+All metrics reconciled to the PNTHR Tree Fund Intelligence Report v1.0 (Filet $100K,
+Porterhouse $500K, Wagyu $1M; long-only 42wk-high momentum). Per-tier tables, the
+long-trade stats, the annual table (Wagyu net, chained year-end), and the drawdown
+table (Wagyu gross vs SPY) all extracted from the Tree backtest. SPY from Jan 2023.
 
 Output: ~/Downloads/PNTHR_Tree_Fund_Performance_Summary_v2.1_2026.pdf
 """
@@ -151,16 +151,16 @@ def crisis_table():
          ["Market Event", "Period", "S&amp;P 500", "PNTHR Fund", "PNTHR Alpha"]],
         [Paragraph(c, cell_style) for c in
          ["2025 Liberation Day Correction", "2025-02-19 to 2025-04-08",
-          "-19.0%", "-17.1%", "+1.9%"]],
+          "-19.0%", "-22.9%", "-3.9%"]],
         [Paragraph(c, cell_style) for c in
          ["2024 August Correction", "2024-07-16 to 2024-08-05",
-          "-8.4%", "-14.3%", "-5.8%"]],
+          "-8.4%", "-22.9%", "-14.5%"]],
         [Paragraph(c, cell_style) for c in
          ["2023 Regional Bank Crisis", "2023-02-02 to 2023-03-13",
-          "-7.5%", "-9.2%", "-1.7%"]],
+          "-7.5%", "-19.3%", "-11.8%"]],
         [Paragraph(c, cell_style) for c in
          ["2024 April Pullback", "2024-03-28 to 2024-04-19",
-          "-5.3%", "-8.2%", "-2.9%"]],
+          "-5.3%", "-10.2%", "-4.9%"]],
     ]
 
     tbl = Table(data, colWidths=[1.8 * inch, 1.5 * inch, 0.9 * inch, 0.9 * inch, 1.0 * inch])
@@ -193,15 +193,13 @@ def annual_table():
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
           "PNTHR AI Net", "Alpha"]],
         [Paragraph(c, cell_style) for c in
-         ["2022", "$1.00M", "$1.01M", "+1.98%", "+0.73%", "-1.25%"]],
+         ["2023", "$1.00M", "$930K", "+24.81%", "-7.01%", "-31.83%"]],
         [Paragraph(c, cell_style) for c in
-         ["2023", "$1.01M", "$1.21M", "+24.81%", "+20.27%", "-4.54%"]],
+         ["2024", "$930K", "$1.74M", "+23.30%", "+87.22%", "+63.92%"]],
         [Paragraph(c, cell_style) for c in
-         ["2024", "$1.17M", "$2.36M", "+24.00%", "+101.17%", "+77.17%"]],
+         ["2025", "$1.74M", "$1.52M", "+16.35%", "-12.46%", "-28.81%"]],
         [Paragraph(c, cell_style) for c in
-         ["2025", "$2.47M", "$4.24M", "+16.64%", "+71.72%", "+55.08%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2026", "$4.46M", "$6.93M", "-4.00%", "+55.34%", "+59.34%"]],
+         ["2026 (to Jun)", "$1.52M", "$3.87M", "+8.19%", "+153.95%", "+145.76%"]],
     ]
 
     tbl = Table(data, colWidths=[0.6 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch, 1.0 * inch])
@@ -353,7 +351,7 @@ def build():
 
     # ── Crisis Alpha ──────────────────────────────────────────────────────
     story.append(Paragraph(
-        "Crisis Alpha: Performance During Market Drawdowns", H1))
+        "Behavior During Market Drawdowns", H1))
     story.append(spacer(4))
     story.append(P(
         "Behavior during market corrections is shown on a Gross Fund NAV basis for the "

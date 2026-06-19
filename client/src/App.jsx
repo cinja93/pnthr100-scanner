@@ -1824,6 +1824,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Data Room */}
           {renderPage === 'data-room' && <DataRoomPage fund="carn" />}
           {renderPage === 'ai-data-room' && <DataRoomPage fund="ai" />}
+          {renderPage === 'tree-data-room' && <DataRoomPage fund="tree" />}
 
           {/* PNTHR Compliance (admin only) */}
           {renderPage === 'compliance' && isAdmin && <CompliancePage />}

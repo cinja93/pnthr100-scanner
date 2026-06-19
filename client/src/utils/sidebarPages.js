@@ -15,6 +15,7 @@ const SIDEBAR_PAGES = [
   // Investor's Den
   { key: 'ir-live',           label: 'Intelligence Report' },
   { key: 'data-room',        label: 'Data Room' },
+  { key: 'tree-data-room',   label: 'Tree Data Room' },
 
   // This Week
   { key: 'perch',            label: 'Perch' },

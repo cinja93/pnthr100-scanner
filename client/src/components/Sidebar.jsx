@@ -42,6 +42,7 @@ const NAV_GROUPS = [
       { key: 'ir-live',   label: 'Intelligence Report', badge: 'AI | Carnivore', badgeType: 'split', needsAccess: true },
       { key: 'ambush-ir-live', label: '  Ambush V7.6', badge: 'AMBUSH', badgeType: 'live', needsAccess: true, accessKey: 'ir-live', irChild: true },
       { key: 'data-room', label: 'Data Room',            badge: 'AI | Carnivore', badgeType: 'split' },
+      { key: 'tree-data-room', label: 'Tree Data Room', badge: 'TREE', badgeType: 'live', needsAccess: true },
     ],
   },
   {

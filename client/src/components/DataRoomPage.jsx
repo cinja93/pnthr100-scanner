@@ -82,7 +82,10 @@ export default function DataRoomPage({ fund = 'carn' }) {
   });
   const sectionNames = allSectionNames.filter(sec => {
     const isAiSection = /ai\s*elite|ai\s*300/i.test(sec);
-    return fund === 'ai' ? isAiSection : !isAiSection;
+    const isTreeSection = /pnthr\s*tree/i.test(sec);
+    if (fund === 'ai') return isAiSection;
+    if (fund === 'tree') return isTreeSection;
+    return !isAiSection && !isTreeSection;   // Carnivore = neither AI nor Tree (no leak)
   });
 
   const toggleSection = (sec) => {

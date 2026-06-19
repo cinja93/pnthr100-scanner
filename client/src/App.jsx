@@ -210,8 +210,8 @@ function AppAuth() {
     const acctSize = role === 'investor'
       ? (profile?.investmentAmount ?? null)
       : (profile?.accountSize ?? null);
-    localStorage.setItem('pnthr_page', 'ai-ir-live');
-    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'ai-ir-live', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
+    localStorage.setItem('pnthr_page', 'tree-ir-live');
+    setCurrentUser({ email, role, accountSize: acctSize, defaultPage: 'tree-ir-live', name: profile?.name ?? null, company: profile?.company ?? null, investmentAmount: profile?.investmentAmount ?? null, loginCount: profile?.loginCount ?? null, maxLogins: profile?.maxLogins ?? 5, allowedPages: profile?.allowedPages ?? null });
     setShowSplash(true);
     if (role === 'investor') setShowWelcome(true);
   }
@@ -941,9 +941,11 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   }, [rawAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activePage, setActivePageRaw] = useState(() => {
-    const saved = localStorage.getItem('pnthr_page');
+    let saved = localStorage.getItem('pnthr_page');
+    // Tree-exclusive: the old hardcoded landing (ai-ir-live) now opens the Tree IR.
+    if (saved === 'ai-ir-live') saved = 'tree-ir-live';
     if (effectiveAllowed && saved && !effectiveAllowed.includes(saved)) return effectiveAllowed[0];
-    return saved || currentUser?.defaultPage || 'long';
+    return saved || currentUser?.defaultPage || 'tree-ir-live';
   });
 
   // Portal guard: redirect to first allowed page if current page isn't permitted

@@ -25,17 +25,18 @@ export function getDefaultPages() {
 // Pages allowed per portal mode (fallback when user has no per-user allowedPages)
 export const PORTAL_PAGES = {
   den:      null, // Admin demo mode — full access, no page filtering
-  // Investors see AI 300 fund content only — no carnivore/679 pages
-  investor: ['ai-ir-live', 'ai-data-room', 'perch', 'earnings', 'aiPulse', 'ai300Index', 'bondHeat', 'aiKill', 'search', 'aiJungle', 'aiSectors', 'aiHeat', 'etf'],
+  // Tree-exclusive: investors land on the Tree IR + Tree Data Room. Elite IR /
+  // Elite Data Room are now INTERNAL (admin-only) and intentionally excluded.
+  investor: ['tree-ir-live', 'tree-data-room', 'perch', 'earnings', 'newHighsLows', 'aiPulse', 'ai300Index', 'bondHeat', 'aiKill', 'search', 'aiJungle', 'aiSectors', 'aiHeat', 'etf'],
   // VIP: member-scoped view. Per-user data isolation (portfolio/journal/
   // assistant/watchlist) is enforced server-side via ownerId filters.
   // Orders pages show MCE/Sector Gated/ON DECK with VIP user's own NAV
   // for sizing (not admin NAV). Admin-only sections (Live Positions, Heat
   // Budget, Sector Breakdown, Bridge Orders) are gated by isAdmin.
   vip: [
-    'ir-live', 'ai-ir-live', 'data-room', 'ai-data-room', 'perch', 'earnings',
+    'tree-ir-live', 'tree-data-room', 'pnthrTree', 'newHighsLows', 'perch', 'earnings',
     'pulse', 'aiPulse', 'ai300Index', 'bondHeat',
-    'aiOrders', 'prey', 'apex', 'aiKill', 'search',
+    'prey', 'apex', 'aiKill', 'search',
     'jungle', 'aiJungle', 'sectors', 'aiSectors',
     'jungleHeat', 'aiHeat', 'etf', 'long', 'short',
     'watchlist',

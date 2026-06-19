@@ -24,7 +24,7 @@ const TRADES = 'pnthr_tree_trades';
 
 const VITALITY_PCT   = 0.02;   // risk budget per name
 const TICKER_CAP_PCT = 0.10;   // max position value per name
-const APPROACH_PCT   = 0.01;   // within 1% of the 42wk high → "approaching" (flashing)
+export const APPROACH_PCT   = 0.01;   // within 1% of the 42wk high → "approaching" (flashing)
 const STOP_LOOKBACK  = 10;     // 2 trading weeks
 const ENTRY_HIGH_LOOKBACK = 210;   // 42-week high lookback: 210 trading days of PRIOR bars (excludes today).
                                    // Switched from 52wk/252d on 2026-06-17 — the 42wk high beat the 52wk on return,
@@ -50,7 +50,7 @@ const ENTRY_HIGH_LOOKBACK = 210;   // 42-week high lookback: 210 trading days of
 const ENGINE_EXCLUDE = new Set(['SPCX']);
 
 // Static manual-only set ∪ dynamic split exclusions → Map(ticker → reason).
-async function engineExclusions(db) {
+export async function engineExclusions(db) {
   const out = new Map();
   for (const t of ENGINE_EXCLUDE) out.set(t, 'new IPO — seasoning until ~1yr of bars');
   try { for (const [t, why] of await getSplitExclusions(db)) out.set(t, why); }
@@ -63,7 +63,7 @@ async function engineExclusions(db) {
 // bands so the engine can't enter or trail a stop off bogus levels, and flag
 // it for the nightly split re-sync. This is the guard that would have caught
 // KLAC even with no calendar (live $241 vs stored ~$2,411).
-function applyPriceSanity(quotes, bands) {
+export function applyPriceSanity(quotes, bands) {
   const flagged = [];
   for (const t of Object.keys(bands.highs)) {
     const price = +quotes[t]?.price, last = bands.lastClose?.[t];
@@ -75,12 +75,12 @@ function applyPriceSanity(quotes, bands) {
   }
   return flagged;
 }
-const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
+export const MAX_GROSS_X    = 2.0;    // gross leverage cap: total long exposure ≤ 2× NAV (Scott 2026-06-11).
                                // WITHOUT this the per-name 2%/10% sizing piles to 4-10× in a broad rally
                                // (backtest: 72%+ drawdown). 2× cap → ~106% CAGR / 55% DD (daily-stop, hypothetical).
 
-const AI_META = {};
-const AI_TICKERS = (() => {
+export const AI_META = {};
+export const AI_TICKERS = (() => {
   const out = [];
   for (const s of AI_SECTORS) for (const h of s.holdings) { out.push(h.ticker); AI_META[h.ticker] = { sector: s.name, name: h.name }; }
   return [...new Set(out)];
@@ -99,7 +99,7 @@ export async function getNav(db) {
   return nav;
 }
 
-async function fetchQuotes(tickers) {
+export async function fetchQuotes(tickers) {
   const map = {};
   for (let i = 0; i < tickers.length; i += 200) {
     const chunk = tickers.slice(i, i + 200);
@@ -115,7 +115,7 @@ async function fetchQuotes(tickers) {
 //              intraday move, so a fresh breakout never registers (it stays "approaching").
 //   lows[t]  = min low of the prior ≤10 bars    → the 2-week trailing-stop reference.
 // Excluding today makes the live trigger identical to the backtest (prior-bars-only).
-async function priorBands(db, tickers, excl) {
+export async function priorBands(db, tickers, excl) {
   const today = etDateStr();
   const highs = {}, lows = {}, lastClose = {};
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
@@ -493,7 +493,7 @@ async function stampAttackSeen(db, firedTickers, heldTickers = []) {
 // $250 chosen over $100 on the backtest: robust good/neutral in both the survivorship and
 // survivorship-neutral runs, holds CAGR at baseline + nudges Sharpe/PF up, without the heavy
 // winner-strangling $100 caused in the (survivorship-flattered) scorecard universe.
-const BE_SNAP_PROFIT = 250;   // $ open profit required before snapping the stop to breakeven
+export const BE_SNAP_PROFIT = 250;   // $ open profit required before snapping the stop to breakeven
 function etTotalMinutesNow(d = new Date()) {
   const p = {};
   for (const { type, value } of new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d)) p[type] = value;
@@ -516,7 +516,7 @@ function lastCompletedClockHourGreen(min30, today, nowMin) {
 // Map ticker → green?(true/false/null) for the last completed clock hour. Cached ~60s so the
 // 2-min tick doesn't hammer FMP; only called for names we actually hold (paper or live).
 let _greenHourCache = { at: 0, map: {} };
-async function fetchGreenHourMap(tickers) {
+export async function fetchGreenHourMap(tickers) {
   if (!tickers.length) return {};
   if (Date.now() - _greenHourCache.at < 60_000 && tickers.every(t => t in _greenHourCache.map)) return _greenHourCache.map;
   const today = etDateStr(), nowMin = etTotalMinutesNow(), map = {};
@@ -703,7 +703,7 @@ function loadCashLedger() {
   }
   return _treeCashLedger;
 }
-function etDateStr(d = new Date()) {
+export function etDateStr(d = new Date()) {
   const p = {};
   for (const { type, value } of new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)) p[type] = value;
   return `${p.year}-${p.month}-${p.day}`;
@@ -734,23 +734,30 @@ function simulateForward(startBalance, N, elapsed, dailyCagrRate, horizons) {
   return snaps;
 }
 
-export async function getPnthrTreeProjection(db) {
+// opts (all optional — defaults reproduce the house/admin book exactly):
+//   nav      — override the NAV (paper books pass their own marked-to-market NAV)
+//   cfgColl  — config collection that holds the projection anchor (per-book for paper)
+//   aumColl  — actual-AUM series collection (per-book for paper)
+//   noCashLedger — paper books suppress the house cash-banking ledger (it's Scott's, not theirs)
+export async function getPnthrTreeProjection(db, opts = {}) {
+  const cfgColl = opts.cfgColl || CFG;
+  const aumColl = opts.aumColl || 'pnthr_tree_aum';
   const proj = loadTreeBaseline();
   const factors = proj.factors || [];
-  const nav = await getNav(db);
+  const nav = opts.nav != null ? opts.nav : await getNav(db);
   const todayISO = etDateStr();
 
   // anchor: lock the projection start (date + AUM) on first call
-  const cfg = await getPnthrTreeConfig(db);
+  const cfg = (await db.collection(cfgColl).findOne({})) || {};
   let startDate = cfg.projectionStartDate, startAum = cfg.projectionStartAum;
   if (!startDate || !startAum) {
     startDate = todayISO; startAum = nav;
-    await db.collection(CFG).updateOne({}, { $set: { projectionStartDate: startDate, projectionStartAum: startAum } }, { upsert: true });
+    await db.collection(cfgColl).updateOne({}, { $set: { projectionStartDate: startDate, projectionStartAum: startAum } }, { upsert: true });
   }
 
   // record today's actual NAV, then read the actual series
-  await db.collection('pnthr_tree_aum').updateOne({ date: todayISO }, { $set: { date: todayISO, actualAum: nav } }, { upsert: true });
-  const actualSeries = await db.collection('pnthr_tree_aum').find({}).sort({ date: 1 }).toArray();
+  await db.collection(aumColl).updateOne({ date: todayISO }, { $set: { date: todayISO, actualAum: nav } }, { upsert: true });
+  const actualSeries = await db.collection(aumColl).find({}).sort({ date: 1 }).toArray();
 
   // Projected curve = SMOOTH daily compounding at the backtest CAGR, mapped to
   // weekday dates. NOT the raw backtest equity path: that replays the real
@@ -799,7 +806,7 @@ export async function getPnthrTreeProjection(db) {
     forward,
     metrics: proj.metrics || null,
     metricsGross: proj.metricsGross || null,   // GROSS tiles (AumTracker renders a 2nd row when present)
-    cashLedger: loadCashLedger(),
+    cashLedger: opts.noCashLedger ? null : loadCashLedger(),
     meta: {
       backtestStart: proj.backtestStart || null,
       backtestEnd: proj.backtestEnd || null,

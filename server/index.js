@@ -43,6 +43,7 @@ import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrde
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
+import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks } from './treePaperBook.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2617,18 +2618,35 @@ app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {
-  try { res.json(await getNewHighsLows()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    // Admin (Scott) → house NAV. Everyone else → their own account size, so the
+    // buy suggestions are sized to THEIR account (e.g. Brennan's $50k), never Scott's.
+    let navOverride;
+    if (req.user?.role !== 'admin') {
+      const p = await getUserProfile(req.user.userId).catch(() => null);
+      navOverride = (p?.accountSize > 0) ? p.accountSize : 50000;
+    }
+    res.json(await getNewHighsLows(navOverride));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── PNTHR TREE — 52-week-high momentum engine (off | paper | live) ──────────
+// ── PNTHR TREE — 42-week-high momentum engine ───────────────────────────────
+//  • Admin (Scott)  → the live HOUSE book: real IBKR positions, real NAV, real P&L.
+//  • Everyone else  → their OWN paper book (sized to their account size, e.g. $50k),
+//    which runs the same strategy on simulated trades and NEVER sees Scott's account.
 app.get('/api/pnthr-tree', authenticateJWT, async (req, res) => {
-  try { const db = await connectToDatabase(); res.json(await getPnthrTreeState(db)); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const db = await connectToDatabase();
+    if (req.user?.role === 'admin') res.json(await getPnthrTreeState(db));
+    else res.json(await getPaperBookState(db, req.user.userId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/pnthr-tree/projection', authenticateJWT, async (req, res) => {
-  try { const db = await connectToDatabase(); res.json(await getPnthrTreeProjection(db)); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const db = await connectToDatabase();
+    if (req.user?.role === 'admin') res.json(await getPnthrTreeProjection(db));
+    else res.json(await getPaperBookProjection(db, req.user.userId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/mode', authenticateJWT, requireAdmin, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await setPnthrTreeMode(db, (req.body || {}).mode)); }
@@ -2644,8 +2662,10 @@ app.post('/api/admin/pnthr-tree/tick', authenticateJWT, requireAdmin, async (req
 });
 // EOD daily trade log (IBKR-truth): read the archive / re-record today on demand
 app.get('/api/pnthr-tree/daily-log', authenticateJWT, async (req, res) => {
-  try { const db = await connectToDatabase(); res.json({ days: await getTreeDailyLog(db, Math.min(+req.query.limit || 30, 120)) }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    if (req.user?.role !== 'admin') return res.json({ days: [] });   // IBKR-truth EOD log = Scott's account only
+    const db = await connectToDatabase(); res.json({ days: await getTreeDailyLog(db, Math.min(+req.query.limit || 30, 120)) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/record-daily-log', authenticateJWT, requireAdmin, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await recordTreeDailyLog(db)); }
@@ -2653,8 +2673,10 @@ app.post('/api/admin/pnthr-tree/record-daily-log', authenticateJWT, requireAdmin
 });
 // Risk Scorecard — your managed trades vs the untouched strategy (return-per-drawdown, %). Forward-only.
 app.get('/api/pnthr-tree/scorecard', authenticateJWT, async (req, res) => {
-  try { const db = await connectToDatabase(); const { getPnthrTreeScorecard } = await import('./pnthrTreeScorecard.js'); res.json(await getPnthrTreeScorecard(db)); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    if (req.user?.role !== 'admin') return res.json(null);   // "your management vs the strategy" = Scott's real trades only (N/A for an auto paper book)
+    const db = await connectToDatabase(); const { getPnthrTreeScorecard } = await import('./pnthrTreeScorecard.js'); res.json(await getPnthrTreeScorecard(db));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Standalone auto-execute trigger (runs against latest existing orders doc)
@@ -6398,6 +6420,9 @@ cron.schedule('*/2 13-20 * * 1-5', async () => {
     const db = await connectToDatabase();
     const r = await runPnthrTreeTick(db);
     if (r.actions && r.actions.length) console.log('[PNTHR Tree] ' + r.mode + ' tick:', JSON.stringify(r.actions.slice(0, 10)));
+    // Member paper books (e.g. Brennan $50k) — same strategy, simulated, no IBKR.
+    const pb = await runAllPaperBookTicks(db);
+    if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
   finally { pnthrTreeTickRunning = false; }
 });

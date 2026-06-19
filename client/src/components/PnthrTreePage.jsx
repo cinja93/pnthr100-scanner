@@ -423,9 +423,17 @@ export default function PnthrTreePage() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {busy && <span style={{ color: '#888', fontSize: 11 }}>saving…</span>}
-          <ModeButton label="OFF" active={mode === 'off'} color="#666" onClick={() => setMode('off')} />
-          <ModeButton label="PAPER TRADE" active={mode === 'paper'} color="#3b82f6" onClick={() => setMode('paper')} />
-          <ModeButton label="AUTO-EXECUTE" active={mode === 'live'} color="#22c55e" onClick={() => setMode('live')} />
+          {data?.readOnly ? (
+            <span style={{ padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 13, letterSpacing: '0.04em', border: '1px solid #3b82f6', background: '#0b1f3a', color: '#93c5fd' }}>
+              📝 PAPER BOOK · {fmt(data.baseCapital || data.nav || 0)}
+            </span>
+          ) : (
+            <>
+              <ModeButton label="OFF" active={mode === 'off'} color="#666" onClick={() => setMode('off')} />
+              <ModeButton label="PAPER TRADE" active={mode === 'paper'} color="#3b82f6" onClick={() => setMode('paper')} />
+              <ModeButton label="AUTO-EXECUTE" active={mode === 'live'} color="#22c55e" onClick={() => setMode('live')} />
+            </>
+          )}
         </div>
       </div>
 
@@ -436,6 +444,11 @@ export default function PnthrTreePage() {
         </div>
       )}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 42-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
+      {data?.readOnly && (
+        <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
+          📝 This is your PNTHR Tree paper book, sized to {fmt(data.baseCapital || data.nav || 0)}. The strategy runs automatically: every new 42-week high is a simulated buy with a 2-week-low trailing stop and a $250 breakeven snap. These are hypothetical paper trades, place NO real orders, and are not held in any brokerage account. When you connect your own brokerage down the road, this can switch to live trading.
+        </div>
+      )}
       {mode === 'paper' && simCount > 0 && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
           📝 PAPER TRADE mode — {simCount} simulated would-buy{simCount === 1 ? '' : 's'} shown below (dashed blue cards with a “PAPER” tag). These are hypothetical, place NO real orders, and are NOT positions in your IBKR account. {realCount === 0 ? 'Your real IBKR account is currently flat.' : 'Your real holdings are the solid-bordered cards.'}
@@ -447,7 +460,7 @@ export default function PnthrTreePage() {
         {projection ? (
           <>
             <Collapsible title="PROJECTED vs ACTUAL AUM" storageKey="tree_collapse_aum">
-              <AumTracker projection={projection} hideForward cashLedger={projection.cashLedger} onActualTable={openDailyLog} />
+              <AumTracker projection={projection} hideForward cashLedger={projection.cashLedger} onActualTable={data?.readOnly ? undefined : openDailyLog} />
             </Collapsible>
             <Collapsible title="PNTHR GOALS" storageKey="tree_collapse_goals">
               <ForwardProjection forward={projection.forward} />
@@ -461,6 +474,7 @@ export default function PnthrTreePage() {
         {data?.counts && <span>Stalking {data.counts.stalking || 0} · Approaching {data.counts.approaching || 0} · Attack {data.counts.attack || 0}</span>}
         {data && <span>Leverage <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#22c55e' }}>{data.grossX ?? 0}x</b> / {data.grossCapX ?? 2}x cap</span>}
         {data && <span>Net liq deployed <b style={{ color: (data.grossX || 0) > (data.grossCapX || 2) ? '#ef4444' : '#7fcf9f' }}>{Math.round((data.grossX || 0) * 100)}%</b> <span style={{ color: '#555' }}>(Σ % net liq)</span></span>}
+        {!data?.readOnly && (<>
         <button onClick={runSplitCheck} disabled={splitBusy}
           title="Refresh FMP's stock-split calendar + re-sync candles for any pending split (runs automatically every evening at 4:15pm ET)"
           style={{ padding: '3px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', background: 'transparent',
@@ -468,11 +482,17 @@ export default function PnthrTreePage() {
           {splitBusy ? 'CHECKING…' : '🪓 SPLIT CHECK'}
         </button>
         {splitMsg && <span style={{ color: splitMsg.startsWith('✗') ? '#ef4444' : '#7fcf9f' }}>{splitMsg}</span>}
+        </>)}
         <span style={{ color: '#555' }}>Backtest hypothetical &amp; survivorship-flattered (current AI-300 names). Not a track record.</span>
       </div>
 
       {/* Categorized open P&L — TREE strategy + IBKR (manual) = Total (matches your IBKR account) */}
-      {data && (
+      {data && data.readOnly && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#0c140e', border: '1px solid #14331f', borderRadius: 8, marginBottom: 8 }}>
+          <span style={{ color: '#bbb', fontSize: 12 }}>Open P&amp;L <b style={{ color: (data.openPnl || 0) >= 0 ? '#22c55e' : '#ef4444', fontSize: 15 }}>{(data.openPnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.openPnl || 0))}</b> <span style={{ color: '#555' }}>· your paper book (hypothetical)</span></span>
+        </div>
+      )}
+      {data && !data.readOnly && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#0c140e', border: '1px solid #14331f', borderRadius: 8, marginBottom: 8 }}>
           <span style={{ color: '#888', fontSize: 12 }} title="TREE strategy positions (Devour + Protect)">TREE P&amp;L <b style={{ color: (data.treePnl || 0) >= 0 ? '#22c55e' : '#ef4444' }}>{(data.treePnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.treePnl || 0))}</b></span>
           <span style={{ color: '#555' }}>+</span>
@@ -486,7 +506,14 @@ export default function PnthrTreePage() {
       {/* TOTAL RISK (heat) — your real account vs the strategy's book. Heat = $ you'd give back if every
           stop fired (price − stop) × shares, shown $ and % of NAV. Whether carrying less is a WIN depends
           on return too — that's scored per-trade in the scorecard (next build). */}
-      {data?.totalRisk && (
+      {data?.totalRisk && data.readOnly && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#140f0c', border: '1px solid #3a2410', borderRadius: 8, marginBottom: 8 }}>
+          <span style={{ color: '#888', fontSize: 12 }} title="What this paper book would give back if every position stopped from here">
+            Open risk <b style={{ color: '#facc15' }}>{fmt(data.totalRisk.actual)}</b> <span style={{ color: '#a16207' }}>({data.totalRisk.actualPct}% of NAV)</span> <span style={{ color: '#666' }}>— if every stop fired from here</span>
+          </span>
+        </div>
+      )}
+      {data?.totalRisk && !data.readOnly && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', padding: '9px 14px', background: '#140f0c', border: '1px solid #3a2410', borderRadius: 8, marginBottom: 8 }}>
           <span style={{ color: '#888', fontSize: 12 }} title="What the strategy's book would lose if every stop fired (paper sim in paper mode, your real book once live)">
             Strategy risk <b style={{ color: '#facc15' }}>{fmt(data.totalRisk.strategy)}</b> <span style={{ color: '#a16207' }}>({data.totalRisk.strategyPct}% of NAV)</span>

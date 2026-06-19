@@ -67,7 +67,10 @@ function classifyHighs(tickers, quoteMap, bands, nav) {
   return highs;
 }
 
-export async function getNewHighsLows() {
+// navOverride — when provided (e.g. a member's $50k account size), size the buy
+// suggestions to THAT account instead of the house NAV, so each viewer sees their
+// own share counts and risk. Admins pass nothing → the house NAV.
+export async function getNewHighsLows(navOverride) {
   const db = await connectToDatabase();
   const [base, sp400] = await Promise.all([getAllTickers(), getSp400Tickers()]);
   const carnivoreTickers = [...new Set([...(base || []), ...(sp400 || [])])];
@@ -76,7 +79,7 @@ export async function getNewHighsLows() {
     fetchQuotesChunked(all),
     priorBands(db, 'pnthr_bt_candles', carnivoreTickers, CARN_LOOKBACK),
     priorBands(db, 'pnthr_ai_bt_candles', AI_TICKERS, AI_LOOKBACK),
-    getNav(db),
+    navOverride != null ? Promise.resolve(navOverride) : getNav(db),
   ]);
   return {
     carnivore: { highs: classifyHighs(carnivoreTickers, quoteMap, carnBands, nav), lookbackWeeks: 4 },

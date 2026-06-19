@@ -22,11 +22,13 @@ const SIDEBAR_PAGES = [
 
   // Market Pulse
   { key: 'pulse',            label: 'Pulse' },
+  { key: 'newHighsLows',     label: 'New Highs' },
   { key: 'ai300Index',       label: 'AI 300 Index' },
   { key: 'bondHeat',         label: 'Bond Yields' },
 
   // PNTHR Live
   { key: 'orders',           label: 'Orders',          personalData: true },
+  { key: 'pnthrTree',        label: 'PNTHR Tree',      personalData: true },
 
   // Strategy
   { key: 'prey',             label: 'Prey' },

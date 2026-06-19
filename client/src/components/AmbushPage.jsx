@@ -504,6 +504,14 @@ function AumChart({ projected, actual, actualProjected }) {
       <polyline points={projPts} fill="none" stroke="#3b82f6" strokeWidth="2" />
       {actProjPts && <polyline points={actProjPts} fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="2 5" opacity="0.85" />}
       {actPts && <polyline points={actPts} fill="none" stroke="#22c55e" strokeWidth="2.5" />}
+      {/* "You are here" dot on the latest actual point. A <polyline> needs 2+ points to
+          draw, so a brand-new book (a single actual data point) would show NO actual line
+          at all — this marker makes today's AUM visible from day one, and labels the
+          current position on an established book too. */}
+      {act.length > 0 && (() => {
+        const a = act[act.length - 1]; const cx = xd(a.date), cy = y(a.value);
+        return (isFinite(cx) && isFinite(cy)) ? <circle cx={cx} cy={cy} r="4" fill="#22c55e" stroke="#0a0a0a" strokeWidth="1.5" /> : null;
+      })()}
     </svg>
   );
 }

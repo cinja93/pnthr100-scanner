@@ -71,7 +71,7 @@ def metrics_table(rows):
     """4-column Metric / Gross / Net / Fee Drag table."""
     hdr_style = ParagraphStyle(
         name="th", fontName="Helvetica-Bold", fontSize=10, leading=13,
-        alignment=TA_LEFT)
+        alignment=TA_LEFT, textColor=PALETTE_WHITE)
     cell_style = ParagraphStyle(
         name="td", fontName="Helvetica", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -105,7 +105,7 @@ def direction_table():
     """BL / SS / Combined trade activity table (from Wagyu $1M IR v10.2)."""
     hdr_style = ParagraphStyle(
         name="th2", fontName="Helvetica-Bold", fontSize=10, leading=13,
-        alignment=TA_LEFT)
+        alignment=TA_LEFT, textColor=PALETTE_WHITE)
     cell_style = ParagraphStyle(
         name="td2", fontName="Helvetica", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -141,7 +141,7 @@ def crisis_table():
     """Crisis alpha table from Wagyu IR v10.2."""
     hdr_style = ParagraphStyle(
         name="th3", fontName="Helvetica-Bold", fontSize=10, leading=13,
-        alignment=TA_LEFT)
+        alignment=TA_LEFT, textColor=PALETTE_WHITE)
     cell_style = ParagraphStyle(
         name="td3", fontName="Helvetica", fontSize=10, leading=13,
         alignment=TA_LEFT)
@@ -183,7 +183,7 @@ def annual_table():
     """Annual performance from Wagyu IR v10.2 (Wagyu Net basis)."""
     hdr_style = ParagraphStyle(
         name="th4", fontName="Helvetica-Bold", fontSize=10, leading=13,
-        alignment=TA_LEFT)
+        alignment=TA_LEFT, textColor=PALETTE_WHITE)
     cell_style = ParagraphStyle(
         name="td4", fontName="Helvetica", fontSize=10, leading=13,
         alignment=TA_LEFT)

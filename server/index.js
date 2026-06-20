@@ -41,6 +41,7 @@ import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstitu
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
+import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks } from './treePaperBook.js';
@@ -2616,6 +2617,24 @@ app.get('/api/elite-ai/scorecard', authenticateJWT, async (req, res) => {
 });
 app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
   try { res.json(await getEliteProjection()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── PNTHR Ambush V7.6 — PAPER engine (isolated pnthr_ambush_paper_*, no orders/IBKR) ──
+app.get('/api/ambush-paper/positions', authenticateJWT, async (req, res) => {
+  try { res.json(await getAmbushPaperPositions()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/ambush-paper/trades', authenticateJWT, async (req, res) => {
+  try { res.json(await getAmbushPaperTrades()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/ambush-paper/tick', authenticateJWT, requireAdmin, async (req, res) => {
+  try { res.json(await runAmbushPaperTick()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/ambush-paper/reset', authenticateJWT, requireAdmin, async (req, res) => {
+  try { res.json(await resetAmbushPaperDryRun()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {
@@ -6768,12 +6787,14 @@ setInterval(async () => {
 const AMBUSH_CRON_IS_WRITER =
   process.env.RECONCILIATION_CRON_ENABLED === 'true' || process.env.AMBUSH_CRON_ENABLED === 'true';
 
-// ── Elite AI — paper dry-run manage loop — every 60s during market hours ──────
+// ── Elite AI — paper dry-run manage loop — every 10s during market hours ──────
 // Paper only: fills L2-L5 as price clears triggers, ratchets the stop, exits on
 // a stop hit. Writes ONLY to pnthr_elite_positions / pnthr_elite_trades — never
 // touches Ambush, pnthr_portfolio, or any live order path. Runs ONLY on the
 // always-on writer instance (gate above) so it keeps papering in the background
 // server-side, independent of PNTHR Tree and of whether the dev laptop is up.
+// 10s cadence (Scott): the fund-comparison dashboard refreshes every 10s; the MCE
+// candidate scan is cached (getReentrySignals TTL) so 10s only adds held-quote refreshes.
 let eliteManageRunning = false;
 setInterval(async () => {
   if (!AMBUSH_CRON_IS_WRITER) return;          // background paper book runs only on the always-on writer
@@ -6791,7 +6812,25 @@ setInterval(async () => {
     if ((e.created?.length || 0) || r.changed) console.log(`[Elite DryRun] ${e.created?.length || 0} new, ${r.fills} fill(s), ${r.exits} exit(s) / ${r.managed} positions`);
   } catch (e) { console.error('[Elite DryRun] tick failed:', e.message); }
   finally { eliteManageRunning = false; }
-}, 60_000);
+}, 10_000);
+
+// ── Ambush V7.6 — PAPER engine tick — every 10s during market hours ───────────
+// Structurally isolated paper replica of the intraday Ambush strategy (Ambush trades
+// AT the breakout, so it must tick near-real-time). Writes ONLY to
+// pnthr_ambush_paper_* — imports NO order/IBKR/outbox code, CANNOT reach the real
+// account. Writer-gated (same as Elite) so it ticks once, server-side. The engine
+// self-skips weekends / off-hours / blackouts and caches FMP bars+quotes internally.
+let ambushPaperRunning = false;
+setInterval(async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;          // background paper book runs only on the always-on writer
+  if (ambushPaperRunning) return;              // re-entrancy guard: skip if the prior 10s tick is still running
+  ambushPaperRunning = true;
+  try {
+    const r = await runAmbushPaperTick();
+    if (r.changed) console.log(`[Ambush Paper] ${r.entries} new, ${r.reentries} re-entry, ${r.fills} fill(s), ${r.exits} exit(s) / ${r.managed} pos, ${r.candidates} candidates`);
+  } catch (e) { console.error('[Ambush Paper] tick failed:', e.message); }
+  finally { ambushPaperRunning = false; }
+}, 10_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
 // ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.

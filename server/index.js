@@ -42,6 +42,7 @@ import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks,
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
+import { getFundComparison } from './fundCompareService.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks } from './treePaperBook.js';
@@ -2635,6 +2636,12 @@ app.post('/api/admin/ambush-paper/tick', authenticateJWT, requireAdmin, async (r
 });
 app.post('/api/admin/ambush-paper/reset', authenticateJWT, requireAdmin, async (req, res) => {
   try { res.json(await resetAmbushPaperDryRun()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 3-fund comparison (Tree LIVE vs Elite PAPER vs Ambush PAPER) — investor dashboard ──
+app.get('/api/fund-compare', authenticateJWT, async (req, res) => {
+  try { res.json(await getFundComparison()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {

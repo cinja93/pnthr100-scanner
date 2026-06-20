@@ -386,26 +386,37 @@ function CrisisAlphaTable({ crisisNet, fundLabel = 'AI Elite' }) {
 
 const MONTH_LABELS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
+// edge() is value-aware AND fund-aware: it reads correctly whether the fund runs a
+// low or high beta (the Tree is a directional, long-only momentum fund with beta well
+// above 1.0, so the old "near/below 1.0, low correlation, low R-squared" claims were false).
 const CORR_INFO = {
   Beta: {
     what: 'Beta measures how much the fund moves relative to the market. A beta of 1.0 means it moves in lockstep with the index. Below 1.0 means the fund is less volatile than the market. Above 1.0 means it amplifies market moves.',
-    edge: 'The PNTHR AI Elite 300 Fund maintains a beta near or below 1.0, meaning it carries similar or less market risk than the S&P 500. The critical advantage: the fund delivers annual returns that are multiples higher than the index while taking on equal or less systematic risk. You are not paying for returns with extra volatility. That combination is rare and valuable.',
+    edge: (v, name) => v == null ? '' : (v <= 1.1
+      ? `${name} runs a beta near or below 1.0 (${v.toFixed(2)}), so it carries similar or less market risk than the benchmark while targeting higher returns.`
+      : `${name} runs a beta of ${v.toFixed(2)}, above 1.0, so it is a directional, long-only strategy that AMPLIFIES market moves (roughly ${v.toFixed(1)}x): it adds to gains in up markets and to losses in down markets. The Fund does not hedge market risk; its edge comes from which names it owns and its trailing-stop exits, not from low market exposure. It should be sized as a higher-volatility, higher-return position.`),
   },
   Correlation: {
     what: 'Correlation measures how closely the fund\'s daily returns move with the benchmark on a scale from -1.0 (perfectly inverse) to +1.0 (perfectly in sync). A correlation near zero means the fund moves independently of the market.',
-    edge: 'The PNTHR AI Elite 300 Fund has a low correlation to both the S&P 500 and Nasdaq. This means the fund\'s profits come from its own stock selection engine, not from passively riding the same market wave. For investors, this is powerful: it provides genuine diversification. Adding this fund to a portfolio of index funds reduces overall risk while dramatically increasing return potential.',
+    edge: (v, name) => v == null ? '' : (Math.abs(v) < 0.6
+      ? `${name} has a relatively low correlation (${v.toFixed(2)}) to the benchmark, so a meaningful part of its return comes from its own selection rather than broad market direction.`
+      : `${name} is highly correlated (${v.toFixed(2)}) to the benchmark: as a long-only strategy it rises and falls with broad equity direction. It is not a market-neutral diversifier; it is a directional strategy whose edge is security selection and exit discipline, not independence from the market.`),
   },
   'R-Squared': {
     what: 'R-Squared shows what percentage of the fund\'s returns are explained by broad market movements. An R-Squared of 100% means the fund is just tracking the index. A low R-Squared means returns are driven by the manager\'s skill, not market direction.',
-    edge: 'The PNTHR AI Elite 300 Fund has a very low R-Squared, proving that the vast majority of its returns come from active stock picking and sector rotation, not from broad market exposure. This is the definition of alpha. The fund is not a disguised index fund or a leveraged bet on the market. It generates independent, skill-based returns that you simply cannot replicate with a passive strategy.',
+    edge: (v, name) => v == null ? '' : (v < 0.5
+      ? `A low R-Squared means most of ${name}'s return comes from active selection rather than broad market direction.`
+      : `A high R-Squared (${(v * 100).toFixed(0)}%) means much of ${name}'s day-to-day movement is explained by the market, consistent with a directional long-only strategy. Its outperformance comes from security selection and disciplined exits, not from being uncorrelated to the market.`),
   },
   'CAPM Alpha (ann.)': {
     what: 'CAPM Alpha is the annualized excess return the fund delivers above what the Capital Asset Pricing Model predicts based on its beta. It isolates pure manager skill from market exposure. Positive alpha means the fund earns more than its risk level would suggest.',
-    edge: 'The PNTHR AI Elite 300 Fund generates an exceptionally large CAPM Alpha, placing it among the highest alpha-producing strategies in the hedge fund industry. This number proves that the fund\'s returns are not borrowed from market risk. They are earned through disciplined momentum selection, systematic pyramiding, and automated risk management. This is return you cannot access through any index fund or passive strategy.',
+    edge: (v, name) => v == null ? '' : (v >= 0
+      ? `After adjusting for its market exposure (beta), ${name} still shows positive annualized alpha (+${v.toFixed(1)}%) from its selection. Because the Fund runs a high beta, part of its raw return reflects amplified market exposure rather than pure alpha.`
+      : `After adjusting for its market exposure (beta), ${name}'s CAPM alpha is ${v.toFixed(1)}% over this window, meaning its excess return did not fully compensate for its market risk; raw returns were driven substantially by amplified market exposure.`),
   },
 };
 
-function CorrelationCards({ marketCorrelation }) {
+function CorrelationCards({ marketCorrelation, fundName = 'The Fund' }) {
   const [openInfo, setOpenInfo] = useState(null);
 
   return (
@@ -417,10 +428,10 @@ function CorrelationCards({ marketCorrelation }) {
           <div key={bench} style={{ flex: '1 1 250px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 20px' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, marginBottom: 12 }}>vs {bench.toUpperCase()}</div>
             {[
-              { l: 'Beta', v: c.beta?.toFixed(2) },
-              { l: 'Correlation', v: c.correlation?.toFixed(2) },
-              { l: 'R-Squared', v: `${(c.rSquared * 100).toFixed(1)}%` },
-              { l: 'CAPM Alpha (ann.)', v: `${c.capmAlpha >= 0 ? '+' : ''}${c.capmAlpha?.toFixed(1)}%`, color: retColor(c.capmAlpha) },
+              { l: 'Beta', v: c.beta?.toFixed(2), raw: c.beta },
+              { l: 'Correlation', v: c.correlation?.toFixed(2), raw: c.correlation },
+              { l: 'R-Squared', v: `${(c.rSquared * 100).toFixed(1)}%`, raw: c.rSquared },
+              { l: 'CAPM Alpha (ann.)', v: `${c.capmAlpha >= 0 ? '+' : ''}${c.capmAlpha?.toFixed(1)}%`, color: retColor(c.capmAlpha), raw: c.capmAlpha },
             ].map(r => (
               <div key={r.l} style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid rgba(255,255,255,0.05)` }}>
@@ -436,7 +447,7 @@ function CorrelationCards({ marketCorrelation }) {
                 {openInfo === `${bench}-${r.l}` && CORR_INFO[r.l] && (
                   <div style={{ background: '#1a1a1a', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px', marginTop: 4, marginBottom: 4 }}>
                     <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.6, marginBottom: 8 }}>{CORR_INFO[r.l].what}</div>
-                    <div style={{ fontSize: 11, color: GREEN, lineHeight: 1.6, fontWeight: 600 }}>{CORR_INFO[r.l].edge}</div>
+                    <div style={{ fontSize: 11, color: GREEN, lineHeight: 1.6, fontWeight: 600 }}>{CORR_INFO[r.l].edge(r.raw, fundName)}</div>
                   </div>
                 )}
               </div>
@@ -1156,7 +1167,7 @@ export default function IrLivePage({ fund = 'ai300' }) {
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 16 }}>
                     Computed from {d.marketCorrelation.observations} daily observations since {d.marketCorrelation.fromDate}
                   </div>
-                  <CorrelationCards marketCorrelation={d.marketCorrelation} />
+                  <CorrelationCards marketCorrelation={d.marketCorrelation} fundName={fc.name} />
                   <div style={{ background: 'rgba(255,215,0,0.05)', border: `1px solid rgba(255,215,0,0.15)`, borderRadius: 8, padding: '14px 18px', marginBottom: 24 }}>
                     <div style={{ fontSize: 12, color: GOLD, fontWeight: 700, marginBottom: 6 }}>INTERPRETATION</div>
                     <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.7 }}>

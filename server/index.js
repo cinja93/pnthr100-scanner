@@ -6455,9 +6455,11 @@ cron.schedule('0 14 * * 5', async () => {
 // Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
 // ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
 let dailyOrdersRunning = false;
-// PNTHR Tree — 52wk-high engine tick (every 2 min during US market hours; no-ops when mode='off')
+// PNTHR Tree — 42wk-high engine tick (every 2 min during the ET cash session; no-ops when mode='off').
+// Timezone-pinned to America/New_York (matches the sibling crons) so '9-16' is correct regardless of
+// the host TZ; the engine ALSO gates entries to 9:30-16:00 ET + a fresh confirmed snapshot internally.
 let pnthrTreeTickRunning = false;
-cron.schedule('*/2 13-20 * * 1-5', async () => {
+cron.schedule('*/2 9-16 * * 1-5', async () => {
   if (pnthrTreeTickRunning) return;
   pnthrTreeTickRunning = true;
   try {
@@ -6469,7 +6471,7 @@ cron.schedule('*/2 13-20 * * 1-5', async () => {
     if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
   finally { pnthrTreeTickRunning = false; }
-});
+}, { timezone: 'America/New_York' });
 
 // PNTHR Tree — EOD daily trade log, 4:35pm ET Mon–Fri (after the close, before
 // the 4:40 orders cron). Snapshots IBKR truth: NAV, open positions w/ IBKR P&L,

@@ -564,9 +564,27 @@ export async function runPnthrTreeTick(db) {
   }
   const grossCap = MAX_GROSS_X * nav;
 
+  // ── ENTRY SAFETY GATE (2026-06-20 audit) — only OPEN new positions when it's safe: ──
+  //   (a) inside the 9:30–16:00 ET cash session, computed in ET so it is correct no matter
+  //       the host timezone (the cron window is a backstop, not the gate); and
+  //   (b) in LIVE mode, only off a FRESH (≤10m) + IBKR-CONFIRMED snapshot — otherwise a stale
+  //       or unconfirmed snapshot reads `held` as empty and the engine could re-buy the whole
+  //       book, with the reconcile backstop stood down while Tree is live. Stop MANAGEMENT
+  //       below is intentionally NOT gated (raise-only; safe on any snapshot, any hour).
+  const _etp = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' }).formatToParts(new Date());
+  const _eo = {}; for (const x of _etp) _eo[x.type] = x.value; let _eh = parseInt(_eo.hour, 10); if (_eh === 24) _eh = 0;
+  const _etMin = _eh * 60 + parseInt(_eo.minute, 10);
+  const inSession = _etMin >= 570 && _etMin <= 960;                  // 9:30 AM – 4:00 PM ET
+  const snapAgeMin = snap.syncedAt ? (Date.now() - new Date(snap.syncedAt).getTime()) / 60000 : Infinity;
+  const snapFreshConfirmed = snapAgeMin <= 10 && snap.positionsConfirmed === true;
+  const entriesAllowed = inSession && (cfg.mode !== 'live' || snapFreshConfirmed);
+  if (cfg.mode === 'live' && inSession && !snapFreshConfirmed) {
+    actions.push({ type: 'ENTRY_GATE_SKIP', reason: snapAgeMin > 10 ? `snapshot ${snapAgeMin === Infinity ? 'missing' : snapAgeMin.toFixed(0) + 'm stale'}` : 'snapshot unconfirmed' });
+  }
+
   // 1) ENTRIES — any AI-300 name at a NEW intraday 42wk high we don't already hold
   const attackFired = [];   // names firing the ATTACK signal this tick (new 42wk high, not held) — for trigger timestamps
-  for (const t of AI_TICKERS) {
+  if (entriesAllowed) for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
     if (excl.has(t)) continue;   // manual-only (IPO seasoning / split re-sync pending) → don't trade
     const q = quotes[t]; if (!q) continue;

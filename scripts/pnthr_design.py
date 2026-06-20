@@ -80,7 +80,8 @@ PALETTE_YELLOW      = HexColor("#fcf000")  # top accent bar, footer brand
 PALETTE_BLACK       = HexColor("#0a0a0a")  # cover background, footer band
 PALETTE_PURE_BLACK  = HexColor("#000000")  # body text on content pages
 PALETTE_WHITE       = HexColor("#ffffff")  # content bg, cover title, footer text
-PALETTE_DIM_GRAY    = HexColor("#4d4d4d")  # cover confidential, breadcrumb
+PALETTE_DIM_GRAY    = HexColor("#4d4d4d")  # content-page breadcrumb (on white)
+PALETTE_COVER_GRAY  = HexColor("#b0b0b0")  # cover meta/disclaimer text on black (readable)
 PALETTE_LIGHT_GRAY  = HexColor("#dddddd")  # content thin separator rule
 PALETTE_TABLE_GRAY  = HexColor("#e8e8e8")  # table header row shading
 
@@ -180,11 +181,11 @@ COVER_SUBTITLE_YELLOW = ParagraphStyle(
 )
 COVER_META_GRAY = ParagraphStyle(
     name="cover_meta_gray", fontName="Helvetica", fontSize=10, leading=13,
-    alignment=TA_LEFT, textColor=PALETTE_DIM_GRAY, spaceBefore=1, spaceAfter=1,
+    alignment=TA_LEFT, textColor=PALETTE_COVER_GRAY, spaceBefore=1, spaceAfter=1,
 )
 COVER_CONFIDENTIAL_BLOCK = ParagraphStyle(
     name="cover_confidential_block", fontName="Helvetica", fontSize=9, leading=12,
-    alignment=TA_CENTER, textColor=PALETTE_DIM_GRAY, spaceBefore=6, spaceAfter=6,
+    alignment=TA_CENTER, textColor=PALETTE_COVER_GRAY, spaceBefore=6, spaceAfter=6,
 )
 COVER_NOTICE_WHITE = ParagraphStyle(
     name="cover_notice_white", fontName="Helvetica-Bold", fontSize=10, leading=13,
@@ -252,8 +253,8 @@ def _draw_cover_chrome(canvas, doc, middle_footer_text, footer_doc_breadcrumb):
     if os.path.exists(PANTHER_HEAD_PATH):
         canvas.saveState()
         try:
-            canvas.setFillAlpha(0.08)
-            canvas.setStrokeAlpha(0.08)
+            canvas.setFillAlpha(0.22)
+            canvas.setStrokeAlpha(0.22)
         except Exception:
             pass
         wm_size = 6.5 * inch
@@ -272,8 +273,8 @@ def _draw_cover_chrome(canvas, doc, middle_footer_text, footer_doc_breadcrumb):
     canvas.setLineWidth(0.75)
     canvas.line(0.75 * inch, COVER_RULE_Y, W - 0.75 * inch, COVER_RULE_Y)
 
-    # Breadcrumb strip (dim gray, centered)
-    canvas.setFillColor(PALETTE_DIM_GRAY)
+    # Breadcrumb strip (centered)
+    canvas.setFillColor(PALETTE_COVER_GRAY)
     canvas.setFont("Helvetica", 8)
     canvas.drawCentredString(W / 2.0, COVER_BREADCRUMB_Y, middle_footer_text)
 

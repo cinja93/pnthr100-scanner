@@ -997,12 +997,8 @@ export default function IrLivePage({ fund = 'ai300' }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MONTHLY RETURNS HEATMAP (STRATEGY)</div>
               <MonthlyHeatmap monthlyReturns={net?.monthlyReturns} firstTradeDate={data?.firstTradeDate} />
 
-              {/* Crisis Alpha — hidden for the Tree: these are broad-market, non-AI events
-                  (Liberation Day / bank crisis / pullbacks), not relevant to an AI-universe fund. */}
-              {fund !== 'tree' && (<>
-                <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CRISIS ALPHA</div>
-                <CrisisAlphaTable crisisNet={d.crisisAlphaNet} fundLabel={fc.crisisHeader} />
-              </>)}
+              {/* Crisis Alpha removed: these are broad-market, non-AI events (Liberation Day /
+                  bank crisis / pullbacks) and are not shown on any fund's IR. */}
 
               {/* Rolling 12M */}
               {net?.rolling12m?.length > 0 && (

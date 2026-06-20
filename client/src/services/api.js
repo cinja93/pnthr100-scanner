@@ -36,6 +36,13 @@ export function authHeaders(extra = {}) {
   };
 }
 
+// ── 3-fund comparison dashboard ──
+export async function fetchFundComparison() {
+  const response = await apiFetch(`${API_BASE}/api/fund-compare`, { headers: authHeaders() });
+  if (!response.ok) throw new Error('Failed to fetch fund comparison');
+  return response.json();
+}
+
 // ── Auth ──
 
 export async function fetchUserProfile() {

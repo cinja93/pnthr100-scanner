@@ -64,6 +64,7 @@ import ReentryBanner from './components/ReentryBanner';
 import OrdersPage from './components/OrdersPage';
 import EliteAiPage from './components/EliteAiPage';
 import PnthrTreePage from './components/PnthrTreePage';
+import FundComparisonPage from './components/FundComparisonPage';
 import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
@@ -1752,6 +1753,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR Elite AI — automated funnel for AI 300 Elite (read-only v1, new isolated page) */}
           {renderPage === 'eliteAi' && <EliteAiPage />}
           {renderPage === 'pnthrTree' && <PnthrTreePage />}
+          {renderPage === 'fundComparison' && <FundComparisonPage />}
 
           {/* PNTHR AI Kill — v1 ranked predatory scoring */}
           {renderPage === 'aiKill' && <AiKillPage />}

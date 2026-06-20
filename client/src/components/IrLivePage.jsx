@@ -864,30 +864,30 @@ export default function IrLivePage({ fund = 'ai300' }) {
               <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: GREEN, margin: '0 0 8px', textTransform: 'uppercase' }}>
                 Net — After All Fees <span style={{ color: '#888', fontWeight: 600 }}>(2% management + tiered performance fee + trading costs)</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-                <MetricCard label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gap: 6, marginBottom: 24 }}>
+                <MetricCard small label="Net Total Return" value={fmtPct(net?.totalReturn)} color={retColor(net?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
                   info="Your money, multiplied. This is the total profit on every dollar invested after all fees and costs are paid. While the S&P 500 historically grows around 10% a year, this fund makes money at a pace that dramatically outperforms passive investing. This number gives you confidence that PNTHR's systematic approach builds real, compounding wealth." />
-                <MetricCard label="NET Compound Annual Growth Rate (CAGR)" value={fmtPct(net?.cagr)} color={GREEN}
+                <MetricCard small label="NET Compound Annual Growth Rate (CAGR)" value={fmtPct(net?.cagr)} color={GREEN}
                   info="The annual rate your money grows, year after year, net of all fees. The average hedge fund earns 8-12% annually. Warren Buffett averages roughly 20%. A CAGR at this level means your capital is growing faster than nearly every professional money manager on the planet. This is highly profitable, consistent compounding that builds generational wealth." />
-                <MetricCard label="Sharpe Ratio" value={fmt(net?.sharpe)} color={net?.sharpe >= 1 ? GREEN : '#fff'}
+                <MetricCard small label="Sharpe Ratio" value={fmt(net?.sharpe)} color={net?.sharpe >= 1 ? GREEN : '#fff'}
                   info={`How efficiently your money is working. This measures profit earned per unit of risk taken. The average hedge fund scores around 0.5. Above 1.0 is strong. Being that the ${fc.name} is ${fmt(net?.sharpe)}, it is amongst the top 10% of hedge funds globally, most with significantly less annual return. A high Sharpe gives you confidence that this fund makes money without taking reckless risks. Your capital is protected by institutional-grade discipline while still delivering outsized returns.`} />
-                <MetricCard label="Sortino Ratio" value={fmt(net?.sortino)} color={net?.sortino >= 2 ? GREEN : '#fff'}
+                <MetricCard small label="Sortino Ratio" value={fmt(net?.sortino)} color={net?.sortino >= 2 ? GREEN : '#fff'}
                   info={`Measures how much money the fund makes relative to only the bad volatility, the losses. Unlike the Sharpe, big profitable moves are rewarded here, not penalized. The ${fc.name} above 2.0 is excellent. A high Sortino gives investors peace of mind: the fund captures large gains while aggressively protecting capital on the downside. Your money works hard and stays safe.`} />
-                <MetricCard label="Profit Factor" value={`${fmt(trades?.combined?.profitFactor)}x`} color={trades?.combined?.profitFactor >= 2 ? GREEN : '#fff'} sub="net"
+                <MetricCard small label="Profit Factor" value={`${fmt(trades?.combined?.profitFactor)}x`} color={trades?.combined?.profitFactor >= 2 ? GREEN : '#fff'} sub="net"
                   info={`For every dollar lost, this is how many dollars are made. A profit factor of 1.0x is breakeven. Most trading systems land between 1.2x and 1.8x. The ${fc.name} being above 2.0x is a dominant, highly profitable edge. At this level, the fund's winners overwhelm the losers, meaning your money compounds aggressively. This is the engine that turns capital into wealth.`} />
-                <MetricCard label="Calmar Ratio" value={fmt(net?.calmar)}
+                <MetricCard small label="Calmar Ratio" value={fmt(net?.calmar)}
                   info={`Measures how much money you make relative to the worst dip you would have experienced. Above 1.0 means annual returns exceed the worst drawdown. The ${fc.name} above 2.0 is outstanding and means you earn more than double the pain of the worst pullback every single year. A strong Calmar gives you confidence to stay invested because the returns far outweigh the temporary setbacks. You are well compensated for any short-term pain.`} />
-                <MetricCard label="Recovery Factor" value={`${fmt(net?.recoveryFactor, 0)}x`}
+                <MetricCard small label="Recovery Factor" value={`${fmt(net?.recoveryFactor, 0)}x`}
                   info="How many times over the fund has earned back its worst drawdown. Most hedge funds target a recovery factor above 3x. Elite quant funds aim for 5-10x. A recovery factor above 20x is exceptionally rare and means the strategy has generated more than twenty times the profit needed to erase its deepest loss. Drawdowns become a footnote, not a threat." />
-                <MetricCard label="Positive Months" value={`${net?.positivePct}%`} color={net?.positivePct >= 50 ? GREEN : '#fff'}
+                <MetricCard small label="Positive Months" value={`${net?.positivePct}%`} color={net?.positivePct >= 50 ? GREEN : '#fff'}
                   info="The percentage of months that made money. Your account trends upward consistently rather than swinging wildly. This saves you from the emotional rollercoaster that causes most investors to sell at the worst time." />
-                <MetricCard label="Win Rate" value={`${trades?.combined?.winRate}%`} sub={`${fmt(trades?.combined?.payoffRatio, 1)}x payoff`}
+                <MetricCard small label="Win Rate" value={`${trades?.combined?.winRate}%`} sub={`${fmt(trades?.combined?.payoffRatio, 1)}x payoff`}
                   info="The percentage of trades that made money, paired with the payoff ratio showing how much bigger winners are than losers. PNTHR's pyramid system holds winners longer and cuts losers fast. Even with a moderate win rate, the fund is highly profitable because each winning trade earns multiples of what each loser costs. The math is powerfully in your favor." />
-                <MetricCard label="Total Closed" value={trades?.closed?.toLocaleString()} sub={`${trades?.open || 0} active`}
+                <MetricCard small label="Total Closed" value={trades?.closed?.toLocaleString()} sub={`${trades?.open || 0} active`}
                   info="The total completed trades in the backtest. A large sample size gives you confidence this is a proven, repeatable edge, not a few lucky picks. With this many trades, the results are statistically significant. You can invest with conviction knowing the strategy has been battle-tested across thousands of real market conditions." />
-                <MetricCard label="Ending Equity" value={fmtNav(net?.endNav)} color={GREEN}
+                <MetricCard small label="Ending Equity" value={fmtNav(net?.endNav)} color={GREEN}
                   info="What your initial investment grew to after every fee, commission, and cost was paid. This is real money, not a hypothetical. Fully modeled with real-world execution costs, borrowing fees, and slippage. This number shows you exactly how much wealth the fund builds. Your capital doesn't just grow, it multiplies." />
-                <MetricCard label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GREEN}
+                <MetricCard small label="Alpha vs S&P" value={d.alphaVsSpy ? fmtDollar(d.alphaVsSpy.endingEquityDelta) : '—'} color={GREEN}
                   info="The extra dollars earned above what a simple S&P 500 index fund would have returned. This is pure profit from active management, money you would have left on the table with a passive strategy. Every dollar of alpha is a direct benefit of choosing PNTHR. This number proves the fund doesn't just keep up with the market, it dramatically beats it." />
               </div>
 
@@ -895,22 +895,22 @@ export default function IrLivePage({ fund = 'ai300' }) {
               <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, color: '#9ab', margin: '0 0 8px', textTransform: 'uppercase' }}>
                 Gross — Before Fund Fees <span style={{ color: '#888', fontWeight: 600 }}>(strategy after trading costs, before the 2% + performance fee)</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-                <MetricCard label="Gross Total Return" value={fmtPct(gross?.totalReturn)} color={retColor(gross?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 6, marginBottom: 24 }}>
+                <MetricCard small label="Gross Total Return" value={fmtPct(gross?.totalReturn)} color={retColor(gross?.totalReturn)} sub={`${fmtNav(d.seedNav)} start`}
                   info="The strategy's total return before fund management and performance fees, but after real trading commissions and slippage. This is the raw strategy result. The Net figures above show what an investor actually keeps after the 2% management fee and the tiered performance fee are deducted." />
-                <MetricCard label="Gross CAGR" value={fmtPct(gross?.cagr)} color={GREEN}
+                <MetricCard small label="Gross CAGR" value={fmtPct(gross?.cagr)} color={GREEN}
                   info="The strategy's annual compound growth rate before fund fees. Net CAGR (above) is the after-fee figure the investor earns." />
-                <MetricCard label="Gross Sharpe" value={fmt(gross?.sharpe)} color={gross?.sharpe >= 1 ? GREEN : '#fff'}
+                <MetricCard small label="Gross Sharpe" value={fmt(gross?.sharpe)} color={gross?.sharpe >= 1 ? GREEN : '#fff'}
                   info="Risk-adjusted return of the underlying strategy (profit per unit of risk), measured before fund fees." />
-                <MetricCard label="Gross Sortino" value={fmt(gross?.sortino)} color={gross?.sortino >= 2 ? GREEN : '#fff'}
+                <MetricCard small label="Gross Sortino" value={fmt(gross?.sortino)} color={gross?.sortino >= 2 ? GREEN : '#fff'}
                   info="Like Sharpe but penalizing only downside volatility, measured on the strategy before fund fees." />
-                <MetricCard label="Gross Calmar" value={fmt(gross?.calmar)}
+                <MetricCard small label="Gross Calmar" value={fmt(gross?.calmar)}
                   info="Strategy annual return relative to its worst drawdown, before fund fees." />
-                <MetricCard label="Gross Recovery Factor" value={`${fmt(gross?.recoveryFactor, 0)}x`}
+                <MetricCard small label="Gross Recovery Factor" value={`${fmt(gross?.recoveryFactor, 0)}x`}
                   info="How many times over the strategy earned back its deepest drawdown, before fund fees." />
-                <MetricCard label="Gross Ending Equity" value={fmtNav(gross?.endNav)} color={GREEN}
+                <MetricCard small label="Gross Ending Equity" value={fmtNav(gross?.endNav)} color={GREEN}
                   info="What the seed investment grew to before fund fees were deducted. Net Ending Equity (above) is the after-fee figure the investor keeps." />
-                <MetricCard label="Gross Alpha vs S&P" value={spy && gross ? fmtDollar(gross.endNav - spy.endingEquity) : '—'} color={GREEN}
+                <MetricCard small label="Gross Alpha vs S&P" value={spy && gross ? fmtDollar(gross.endNav - spy.endingEquity) : '—'} color={GREEN}
                   info="Extra dollars the strategy earned over an S&P 500 index fund, measured before fund fees." />
               </div>
 

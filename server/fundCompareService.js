@@ -115,6 +115,20 @@ export async function getFundComparison() {
   const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
   const pct = (eq) => baselineNav > 0 ? +(((eq / baselineNav) - 1) * 100).toFixed(2) : 0;
 
+  // Fund fees applied uniformly so the comparison shows "what an investor keeps" — the same
+  // basis as the Tree tearsheet: 2% annual management + 30% performance (Filet tier, the
+  // ~$89k baseline's tier), with the start NAV as the high-water mark (perf fee only on gains).
+  const FEE_MGMT = 0.02, FEE_PERF = 0.30;
+  const elapsedDays = (started && cfg?.startDate) ? Math.max(0, (new Date(today) - new Date(cfg.startDate)) / 86400000) : 0;
+  const pctNet = (eq) => {
+    if (baselineNav <= 0) return 0;
+    const grossPnl = eq - baselineNav;
+    const mgmt = baselineNav * FEE_MGMT * (elapsedDays / 365);
+    const afterMgmt = grossPnl - mgmt;
+    const perf = afterMgmt > 0 ? afterMgmt * FEE_PERF : 0;
+    return +(((grossPnl - mgmt - perf) / baselineNav) * 100).toFixed(2);
+  };
+
   // ── Record today's equity point per fund (one row per fund per day) ────────
   if (started) {
     for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]]) {
@@ -141,19 +155,19 @@ export async function getFundComparison() {
   const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
   const funds = [
     { id: 'tree', name: 'PNTHR Tree', strategy: '42-week-high momentum (daily)', mode: 'LIVE', simulated: false,
-      baselineNav, currentEquity: Math.round(treeEquity), returnPct: pct(treeEquity),
+      baselineNav, currentEquity: Math.round(treeEquity), returnPct: pct(treeEquity), returnPctNet: pctNet(treeEquity),
       pnlSinceStart: Math.round(treeEquity - baselineNav), openPnl: Math.round(treeOpenPnl),
       riskAtStop: Math.round(treeRisk), openCount: treePos.length, positions: treePos.map(slim),
       tradeStats: computeTradeStats(treeTrades, baselineNav, 1), avgWinnerHold: avgWinnerHold(treeTrades),
       risk: riskMetrics(await series('tree')) },
     { id: 'elite', name: 'Elite AI', strategy: 'AI-300 Elite / MCE (daily breakout, long-only)', mode: 'PAPER', simulated: true,
-      baselineNav, currentEquity: Math.round(eliteEquity), returnPct: pct(eliteEquity),
+      baselineNav, currentEquity: Math.round(eliteEquity), returnPct: pct(eliteEquity), returnPctNet: pctNet(eliteEquity),
       pnlSinceStart: Math.round(eliteEquity - baselineNav), openPnl: Math.round(eliteOpenPnl),
       riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.map(slim),
       tradeStats: computeTradeStats(eliteTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(eliteTr),
       risk: riskMetrics(await series('elite')) },
     { id: 'ambush', name: 'Ambush V7.6', strategy: 'AI-300 intraday breakout + pyramid (long/short)', mode: 'PAPER', simulated: true,
-      baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity),
+      baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity), returnPctNet: pctNet(ambushEquity),
       pnlSinceStart: Math.round(ambushEquity - baselineNav), openPnl: Math.round(ambOpenPnl),
       riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slim),
       tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
@@ -162,6 +176,7 @@ export async function getFundComparison() {
 
   const result = {
     started, startDate: START_DATE, baselineNav: Math.round(baselineNav), asOf: new Date().toISOString(),
+    fees: { mgmtPct: FEE_MGMT * 100, perfPct: FEE_PERF * 100, basis: '2% annual management + 30% performance (Filet tier), high-water mark — net = what an investor keeps' },
     note: started ? `Common start ${START_DATE} at $${Math.round(baselineNav).toLocaleString()} NAV.`
                    : `Comparison begins ${START_DATE} (Tree's first live trading day). Showing live previews.`,
     disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',

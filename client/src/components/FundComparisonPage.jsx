@@ -43,11 +43,15 @@ function FundCard({ f, acknowledged, startDate }) {
       </div>
       <div style={{ fontSize: 11, color: '#777', marginBottom: 12 }}>{f.strategy}</div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 1 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: pctc(f.returnPct), fontFamily: 'monospace' }}>
           {f.returnPct >= 0 ? '+' : ''}{f.returnPct}%
         </span>
-        <span style={{ fontSize: 13, color: MUT }}>since {startDate || 'start'}</span>
+        <span style={{ fontSize: 11, color: MUT }}>gross · since {startDate || 'start'}</span>
+      </div>
+      <div style={{ fontSize: 13, marginBottom: 2 }}>
+        <b style={{ color: pctc(f.returnPctNet), fontFamily: 'monospace' }}>{f.returnPctNet >= 0 ? '+' : ''}{f.returnPctNet}%</b>
+        <span style={{ color: MUT, fontSize: 11 }}> net, after fund fees</span>
       </div>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Equity {usd(f.currentEquity)} · from {usd(f.baselineNav)} baseline</div>
 
@@ -114,7 +118,8 @@ export default function FundComparisonPage() {
   const rdy = (f) => f.risk?.status === 'ready';
   const ts = (f) => f.tradeStats?.combined || {};
   const metricRows = [
-    ['Total return', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
+    ['Total return (gross)', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
+    ['Total return (net, after fees)', f => `${f.returnPctNet >= 0 ? '+' : ''}${f.returnPctNet}%`, f => pctc(f.returnPctNet)],
     ['P&L since start', f => signed(f.pnlSinceStart), f => pctc(f.pnlSinceStart)],
     ['Ending equity', f => usd(f.currentEquity)],
     ['CAGR', f => rdy(f) ? `${f.risk.cagr}%` : 'building'],
@@ -180,7 +185,7 @@ export default function FundComparisonPage() {
             <span>I am a verified accredited investor, I understand that Elite AI and Ambush V7.6 figures above are <b>simulated/paper</b> results and not a track record, and I have read the disclosures. (Required to express interest.)</span>
           </label>
           <div style={{ fontSize: 10.5, color: '#666', lineHeight: 1.5, marginTop: 8 }}>
-            Paper figures are gross of commissions and borrow costs; entries/exits include modeled slippage where the strategy specifies. PNTHR Tree reflects the actual net result of a live account. Risk-adjusted statistics require several weeks of data before they are meaningful. This page is an internal comparison tool; nothing herein is an offer, solicitation, or recommendation to buy or sell any security.
+            <b>Gross vs net:</b> {data.fees?.basis || 'net is after 2% management + 30% performance fee (high-water mark)'}. Gross figures are before fund fees; paper figures are also gross of commissions and borrow costs, with modeled slippage where the strategy specifies. PNTHR Tree gross reflects the actual live account. Risk-adjusted statistics require several weeks of data before they are meaningful. This page is an internal comparison tool; nothing herein is an offer, solicitation, or recommendation to buy or sell any security.
           </div>
         </>
       )}

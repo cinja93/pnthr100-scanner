@@ -153,7 +153,7 @@ def build():
         ["Item", "Detail"],
         [
             ["Fund Name",
-             "PNTHR Funds, PNTHR Tree Fund, LP"],
+             "PNTHR Tree Fund, LP"],
             ["General Partner",
              "PNTHR Funds, LLC"],
             ["Investment Manager",
@@ -381,7 +381,7 @@ def build():
              "863 trading sessions; frozen at go-live). Long-only momentum-breakout on new 42-week "
              "highs in the PNTHR AI 300 Universe. The Fund has not yet traded non-affiliated Limited "
              "Partner capital."],
-            ["Total Closed Trades (by tier)",
+            ["Total Trades (by tier)",
              "Filet (100K): 1,351; Porterhouse (500K): 1,684; Wagyu (1M+): 1,815 - all long. Counts "
              "rise at larger tiers as the average-daily-volume participation cap admits more, smaller "
              "positions"],
@@ -391,8 +391,8 @@ def build():
             ["Gross Sharpe / Sortino",
              "Filet: 1.43 / 2.25; Porterhouse: 1.20 / 1.90; Wagyu: 1.04 / 1.63 (daily resolution, "
              "excess over US 3-month Treasury)"],
-            ["Gross Profit Factor",
-             "2.28x (Filet 100K tier)"],
+            ["Profit Factor (trade-level, net of trading costs)",
+             "Filet: 1.93x; Porterhouse: 1.67x; Wagyu: 1.52x"],
             ["Gross Max Drawdown (daily NAV, MTM)",
              "Filet: -50.7%; Porterhouse: -47.9%; Wagyu: -50.0%"],
             ["Net CAGR (after all fund fees)",

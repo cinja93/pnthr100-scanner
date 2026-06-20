@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNTHR FUNDS, PNTHR Tree Fund, LP
+PNTHR Tree Fund, LP
 Private Placement Memorandum v1.0
 Effective Date of Memorandum: June 1, 2026
 
@@ -334,7 +334,7 @@ def build_cover():
         "SEE SECTION IX, &ldquo;RISK FACTORS AND CONFLICTS OF INTEREST.&rdquo;",
         CAPS_BODY))
     story.append(Spacer(1, 0.2 * inch))
-    story.append(P("PNTHR FUNDS,", TITLE_STYLE))
+    story.append(P("PNTHR FUNDS", TITLE_STYLE))
     story.append(P("PNTHR Tree Fund, LP", TITLE_STYLE))
     story.append(Spacer(1, 0.2 * inch))
     story.append(P("$25,000,000", TITLE_STYLE))
@@ -347,7 +347,7 @@ def build_cover():
         "is being furnished on a confidential basis by PNTHR Funds, LLC, a Delaware "
         "limited liability company (the &ldquo;General Partner&rdquo;), to a limited "
         "number of sophisticated prospective investors in connection with their "
-        "evaluation of a proposed investment in PNTHR FUNDS, PNTHR Tree Fund, LP, "
+        "evaluation of a proposed investment in PNTHR Tree Fund, LP, "
         "a Delaware limited partnership (the &ldquo;Partnership&rdquo; or the "
         "&ldquo;Fund&rdquo;).",
         COVER_BODY))
@@ -458,7 +458,7 @@ NOTICES_PARAS = [
     "THIS CONFIDENTIAL PRIVATE PLACEMENT MEMORANDUM (THE &ldquo;MEMORANDUM&rdquo;) IS BEING "
     "FURNISHED TO A LIMITED NUMBER OF SOPHISTICATED INVESTORS ON A CONFIDENTIAL BASIS FOR THE "
     "SOLE PURPOSE OF EVALUATING AN INVESTMENT IN LIMITED PARTNERSHIP INTERESTS (THE "
-    "&ldquo;INTERESTS&rdquo;) IN PNTHR FUNDS, PNTHR TREE FUND, LP (THE &ldquo;FUND&rdquo;) "
+    "&ldquo;INTERESTS&rdquo;) IN PNTHR TREE FUND, LP (THE &ldquo;FUND&rdquo;) "
     "AND MAY NOT BE USED FOR ANY OTHER PURPOSE. THE MEMORANDUM MAY NOT BE REPRODUCED OR PROVIDED "
     "TO ANY OTHER PERSON WITHOUT THE PRIOR WRITTEN CONSENT OF THE GENERAL PARTNER.",
 
@@ -543,7 +543,7 @@ def build_executive_summary():
     story.append(P("I.  EXECUTIVE SUMMARY", H1))
 
     story.append(P(
-        "PNTHR FUNDS, PNTHR Tree Fund, LP (the &ldquo;Partnership&rdquo; or the "
+        "PNTHR Tree Fund, LP (the &ldquo;Partnership&rdquo; or the "
         "&ldquo;Fund&rdquo;), launched by PNTHR Funds, LLC (the &ldquo;General Partner&rdquo;), "
         "is a private investment vehicle organized as a Delaware limited partnership. The "
         "Fund is focused on achieving attractive risk-adjusted returns and preserving "
@@ -721,7 +721,7 @@ def build_summary_of_terms():
     # Summary-of-Terms table: label | value
     rows = [
         ("Partnership",
-         "PNTHR FUNDS, PNTHR Tree Fund, LP, a Delaware limited partnership."),
+         "PNTHR Tree Fund, LP, a Delaware limited partnership."),
         ("General Partner",
          "PNTHR Funds, LLC, a Delaware limited liability company."),
         ("Investment Manager",
@@ -900,21 +900,21 @@ def build_investment_opportunity():
         "the performance dispersion among individual AI-related equities is substantial. "
         "In any given quarter, top-performing AI names may appreciate significantly while "
         "lagging names decline, even within the same sub-sector. The Fund&rsquo;s "
-        "systematic signal engine is designed to identify which names and sub-sectors are "
-        "exhibiting confirmed trend momentum and to avoid or short those exhibiting "
-        "structural deterioration, an advantage unavailable to passive, long-only AI "
-        "exposure.",
+        "systematic breakout engine is designed to identify which names are "
+        "exhibiting confirmed upside momentum and to own those names while avoiding "
+        "those exhibiting structural deterioration, an advantage unavailable to "
+        "passive, market-cap-weighted AI exposure.",
         BODY))
 
     story.append(P(
         "<b>Existing AI investment vehicles are narrow and rigid.</b> The largest publicly "
-        "available AI-themed ETFs typically hold between 45 and 110 names, concentrate "
-        "heavily in mega-cap hyperscalers, and offer no short-side capability. The "
-        "Fund&rsquo;s 303-name universe is approximately three to seven times broader "
-        "than any single AI ETF, spans the full technology stack from silicon to software, "
-        "and can profit from declining names through disciplined short positions, a "
-        "structural advantage the General Partner believes is not available through any "
-        "existing public AI vehicle.",
+        "available AI-themed ETFs typically hold between 45 and 110 names and concentrate "
+        "heavily in mega-cap hyperscalers. The Fund&rsquo;s universe of approximately 300 "
+        "names is roughly three to seven times broader than any single AI ETF and spans "
+        "the full technology stack from silicon to software. Rather than passively holding "
+        "a fixed, market-cap-weighted basket, the Fund actively buys names breaking out to "
+        "new highs and exits names that break down, a discipline the General Partner "
+        "believes is not available through any existing public AI vehicle.",
         BODY))
 
     story.append(P(
@@ -1485,7 +1485,7 @@ def build_detailed_summary_of_terms():
         return tbl
 
     story.append(row("Partnership",
-        "PNTHR FUNDS, PNTHR Tree Fund, LP, a Delaware limited partnership (the "
+        "PNTHR Tree Fund, LP, a Delaware limited partnership (the "
         "&ldquo;Partnership&rdquo; or the &ldquo;Fund&rdquo;)."))
 
     story.append(row("General Partner",
@@ -2143,14 +2143,16 @@ def build_risk_factors():
         "counterparty-related risks).")
 
     rf("Short Selling Risk",
-        "The Strategy involves short selling, which carries unique risks. Short positions "
-        "may theoretically incur unlimited losses if the market price of the security "
-        "being shorted rises instead of falls. In cases of market rallies or specific "
-        "stock-price surges, the Fund may be forced to cover short positions at a loss, "
-        "potentially resulting in significant financial exposure. The Fund&rsquo;s "
-        "prime broker may also recall borrowed securities, forcing the Fund to close a "
-        "short position at an inopportune time. The Fund does not engage in naked "
-        "short selling.")
+        "The Fund is authorized to take short positions, although its current systematic "
+        "implementation is long-only and the Fund does not presently engage in short "
+        "selling. If and when the Fund implements short positions, short selling carries "
+        "unique risks. Short positions may theoretically incur unlimited losses if the "
+        "market price of the security being shorted rises instead of falls. In cases of "
+        "market rallies or specific stock-price surges, the Fund may be forced to cover "
+        "short positions at a loss, potentially resulting in significant financial "
+        "exposure. The Fund&rsquo;s prime broker may also recall borrowed securities, "
+        "forcing the Fund to close a short position at an inopportune time. The Fund "
+        "does not engage in naked short selling.")
 
     rf("Sector Concentration Risk",
         "The Strategy does not impose a fixed numerical cap on the number of positions "
@@ -2166,8 +2168,8 @@ def build_risk_factors():
         "single-sector exposure should not invest in the Fund.")
 
     rf("Concentrated Position Risk",
-        "The Strategy may result in concentrated positions in specific securities or "
-        "ETFs based on the ranked output of the PNTHR Signal System. Although the Fund "
+        "The Strategy may result in concentrated positions in specific securities "
+        "based on the breakout signals generated by the PNTHR Signal System. Although the Fund "
         "applies a per-ticker position cap of 10% of Net Asset Value at entry, "
         "concentration can still increase exposure to company-specific or "
         "security-specific events, which may result in larger-than-expected losses if "
@@ -2175,7 +2177,7 @@ def build_risk_factors():
 
     rf("Dependence on Proprietary Software and Systems",
         "The Fund relies heavily on proprietary software and systems to generate "
-        "signals, score and rank candidates, manage position size, transmit trade "
+        "breakout signals, manage position size, transmit trade "
         "instructions, and monitor open positions. There is an inherent risk associated "
         "with the performance and reliability of this technology. If algorithms fail to "
         "function as expected, encounter bugs, or are exposed to external cybersecurity "
@@ -2216,6 +2218,20 @@ def build_risk_factors():
         "prices, fail to execute intended trades, or execute unintended trades. The "
         "Investment Manager retains oversight of Platform-facilitated trading, but no "
         "oversight process can fully eliminate these risks.")
+
+    rf("Directional Exposure, High Beta and Large Drawdowns",
+        "The Fund is a directional, long-only strategy and is not market-neutral or "
+        "hedged. It is therefore highly correlated to the broad equity market and "
+        "amplifies market moves: in its hypothetical backtest the Fund exhibited a beta "
+        "to the S&amp;P 500 of approximately 1.8, meaning it tended to rise and fall "
+        "roughly 1.8 times as much as the index. As a high-conviction momentum strategy, "
+        "the Fund will experience high volatility and large drawdowns. In the hypothetical, "
+        "survivorship-flattered backtest, the Fund&rsquo;s net maximum drawdown was on the "
+        "order of 50% to 58% (deeper than the broad market over the same period), and "
+        "future drawdowns may be larger and may not recover. The Fund is not a "
+        "diversifier and should be sized as a higher-volatility, higher-return position. "
+        "Investors must be financially able and willing to bear declines of this "
+        "magnitude.")
 
     rf("Leverage Risk",
         "The Investment Manager may use leverage of up to 2:1 gross exposure. While "
@@ -3532,7 +3548,7 @@ def build():
         rightMargin=0.75 * inch,
         topMargin=1.0 * inch,
         bottomMargin=1.0 * inch,
-        title="PNTHR Funds, PNTHR Tree Fund, LP - Private Placement Memorandum v1.0",
+        title="PNTHR Tree Fund, LP - Private Placement Memorandum v1.0",
         author="PNTHR Funds, LLC",
         subject="Private Placement Memorandum",
     )

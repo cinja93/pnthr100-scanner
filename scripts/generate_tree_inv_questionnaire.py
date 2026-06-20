@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNTHR FUNDS, PNTHR Tree Fund, LP
+PNTHR Tree Fund, LP
 Subscriber Information Form and Investor Questionnaire v1.0
 Effective: June 1, 2026
 
@@ -777,7 +777,7 @@ def build_part_ii():
          "the Series 7, Series 65, or Series 82 licenses."),
         ("<b>Rule 501(a)(4) (NEW).</b>&nbsp;&nbsp;The Subscriber is a "
          "director, executive officer, or general partner of the issuer "
-         "of the securities being offered or sold (i.e., PNTHR FUNDS, "
+         "of the securities being offered or sold (i.e., "
          "PNTHR Tree Fund, LP or PNTHR Funds, LLC), or a director, "
          "executive officer, or general partner of a general partner of "
          "that issuer."),
@@ -1236,7 +1236,7 @@ def build_part_iii():
 def build():
     doc = make_doc_template(
         OUT_PATH,
-        title_meta="PNTHR Funds, PNTHR Tree Fund, LP - Investor Questionnaire v1.0",
+        title_meta="PNTHR Tree Fund, LP - Investor Questionnaire v1.0",
         subject="Subscriber Information Form and Investor Questionnaire",
     )
     on_cover, on_page = make_page_handlers(

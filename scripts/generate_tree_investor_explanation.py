@@ -197,7 +197,7 @@ def build():
     #   Avg L/S equity HF: ~8% CAGR, 0.55 Sharpe, 0.80 Sortino, -15% MaxDD
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
-        ['', 'PNTHR Filet\n(Net, $100K)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
+        ['', 'PNTHR Filet\n($100K)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
         ['Total Return', '+528%', '+94%', '~40%', '~80%'],
         ['Gross CAGR', '+102.5%', '+21.2%', '~10%', '~18%'],
         ['Net CAGR', '+70.7%', '+21.2%', '~8%', '~15%'],
@@ -253,7 +253,7 @@ def build():
     s.append(Spacer(1, 4))
     s.append(Paragraph('<i>Backtest period: January 3, 2023 through June 11, 2026 (~3.45 years), frozen at go-live. S&amp;P 500 benchmark measured from the first trade date. '
         'Net returns include IBKR commissions, 5 bps slippage, and fund fees. '
-        '1,351 closed long trades (Filet tier; survivorship-flattered). "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
+        '1,351 long trades (Filet tier; survivorship-flattered). "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
         'HFR, and Preqin industry composites.</i>', note_style()))
 
     # Growth chart at bottom of page 1
@@ -274,7 +274,7 @@ def build():
         'our proprietary AI economy index.',
         body_style()))
     s.append(Paragraph(
-        'We hand-selected 302 companies across <b>16 AI-specific sectors</b> that we defined ourselves. '
+        'We hand-selected approximately 300 companies across <b>16 AI-specific sectors</b> that we defined ourselves. '
         'Not the standard 11 GICS sectors Wall Street uses. Ours are built for the AI revolution: '
         'AI Compute &amp; Semiconductors, AI Power &amp; Electrification, AI Optical &amp; Networking, '
         'AI Cloud &amp; Data Centers, Robotics &amp; Autonomous, AI Hyperscalers, AI Software &amp; Agentic Platforms, '
@@ -387,8 +387,8 @@ def build():
     ))
     s.append(Spacer(1, 10))
     s.append(Paragraph(
-        "1,351 closed long trades at the Filet tier over about 3.45 years. The win rate is low, around 28%, with a "
-        "profit factor near 2.3 net of trading costs: the strategy cuts losers quickly and lets a minority of large "
+        "1,351 long trades at the Filet tier over about 3.45 years. The win rate is low, around 28%, with a "
+        "profit factor near 1.9 net of trading costs: the strategy cuts losers quickly and lets a minority of large "
         "winners carry the return. That return profile comes with large drawdowns. The net maximum drawdown was "
         "roughly -53% to -58%, far deeper than the S&amp;P 500 at -19%, and the strategy's Sortino ratio and recovery "
         "factor are in line with or below the market. The Tree trades higher long-run return for materially higher "

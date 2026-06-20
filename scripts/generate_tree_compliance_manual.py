@@ -265,8 +265,8 @@ def build():
         "All Fund-related information is confidential, including but not limited to: trading "
         "strategies, positions, investor identities, performance data, and proprietary "
         "algorithms (including the PNTHR Signal System). Disclosure of confidential information "
-        "is permitted only with prior written authorization from the Managing Member or as "
-        "required by law."
+        "is permitted only with prior written authorization from the General Partner or the "
+        "Chief Compliance Officer, or as required by law."
     ))
 
     story.append(spacer(10))

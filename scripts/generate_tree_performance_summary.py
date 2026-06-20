@@ -118,7 +118,7 @@ def direction_table():
         [Paragraph(c, cell_style) for c in
          ["Win Rate", "27.5%", "20.8%", "19.1%"]],
         [Paragraph(c, cell_style) for c in
-         ["Total Closed Trades", "1,351", "1,684", "1,815"]],
+         ["Total Trades", "1,351", "1,684", "1,815"]],
     ]
 
     tbl = Table(data, colWidths=[2.2 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch])
@@ -130,48 +130,6 @@ def direction_table():
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING",   (0, 0), (-1, -1), 8),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-        ("TOPPADDING",    (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LINEABOVE",     (0, 0), (-1, 0),  1.5, PALETTE_YELLOW),
-    ]))
-    return tbl
-
-
-def crisis_table():
-    """Crisis alpha table from Wagyu IR v10.2."""
-    hdr_style = ParagraphStyle(
-        name="th3", fontName="Helvetica-Bold", fontSize=10, leading=13,
-        alignment=TA_LEFT, textColor=PALETTE_WHITE)
-    cell_style = ParagraphStyle(
-        name="td3", fontName="Helvetica", fontSize=10, leading=13,
-        alignment=TA_LEFT)
-
-    data = [
-        [Paragraph(c, hdr_style) for c in
-         ["Market Event", "Period", "S&amp;P 500", "PNTHR Fund", "PNTHR Alpha"]],
-        [Paragraph(c, cell_style) for c in
-         ["2025 Liberation Day Correction", "2025-02-19 to 2025-04-08",
-          "-19.0%", "-22.9%", "-3.9%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2024 August Correction", "2024-07-16 to 2024-08-05",
-          "-8.4%", "-22.9%", "-14.5%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2023 Regional Bank Crisis", "2023-02-02 to 2023-03-13",
-          "-7.5%", "-19.3%", "-11.8%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2024 April Pullback", "2024-03-28 to 2024-04-19",
-          "-5.3%", "-10.2%", "-4.9%"]],
-    ]
-
-    tbl = Table(data, colWidths=[1.8 * inch, 1.5 * inch, 0.9 * inch, 0.9 * inch, 1.0 * inch])
-    tbl.setStyle(TableStyle([
-        ("BOX",           (0, 0), (-1, -1), 0.5, colors.black),
-        ("INNERGRID",     (0, 0), (-1, -1), 0.3, colors.Color(0.85, 0.85, 0.85)),
-        ("BACKGROUND",    (0, 0), (-1, 0),  colors.Color(0.12, 0.12, 0.12)),
-        ("TEXTCOLOR",     (0, 0), (-1, 0),  PALETTE_WHITE),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
         ("TOPPADDING",    (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("LINEABOVE",     (0, 0), (-1, 0),  1.5, PALETTE_YELLOW),
@@ -191,7 +149,7 @@ def annual_table():
     data = [
         [Paragraph(c, hdr_style) for c in
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
-          "PNTHR AI Net", "Alpha"]],
+          "PNTHR Tree Net", "Alpha"]],
         [Paragraph(c, cell_style) for c in
          ["2023", "$1.00M", "$930K", "+24.81%", "-7.01%", "-31.83%"]],
         [Paragraph(c, cell_style) for c in
@@ -275,7 +233,7 @@ def build():
     story.append(Paragraph("Gross vs Net Returns by Investor Class", H1))
     story.append(spacer(4))
     story.append(P(
-        "Backtest period: January 2022 through May 2026 (53 months; first trade June 13, 2022). "
+        "Backtest period: January 2023 through June 2026 (~3.45 years; first trade January 3, 2023). "
         "The three classes below apply their own PPM-specified performance allocation rates. "
         "Higher classes (larger capital commitments) receive materially lower fee burdens, "
         "producing meaningfully higher net returns. This is an intentional incentive for capital scale."
@@ -346,7 +304,7 @@ def build():
     story.append(spacer(4))
     story.append(P(
         "Backtest period: January 2023 through June 2026 (frozen at go-live; ~3.45 years). "
-        "1,351 to 1,815 closed long trades by tier across the PNTHR AI 300 Universe (~300 names).",
+        "1,351 to 1,815 long trades by tier across the PNTHR AI 300 Universe (~300 names).",
         SMALL))
 
     # ── Annual Performance ────────────────────────────────────────────────

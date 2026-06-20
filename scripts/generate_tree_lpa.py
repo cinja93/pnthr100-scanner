@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNTHR FUNDS, PNTHR Tree Fund, LP
+PNTHR Tree Fund, LP
 Limited Partnership Agreement v3.1
 Effective: June 1, 2026
 
@@ -140,7 +140,7 @@ def build_legend():
     """
     story = []
     story.append(P(
-        "THE LIMITED PARTNERSHIP INTERESTS (THE &ldquo;INTERESTS&rdquo;) OF PNTHR FUNDS, "
+        "THE LIMITED PARTNERSHIP INTERESTS (THE &ldquo;INTERESTS&rdquo;) OF "
         "PNTHR Tree Fund, LP (the &ldquo;PARTNERSHIP&rdquo;) HAVE NOT BEEN REGISTERED "
         "UNDER THE SECURITIES ACT OF 1933, AS AMENDED (THE &ldquo;SECURITIES ACT&rdquo;), "
         "THE SECURITIES LAWS OF ANY STATE OR ANY OTHER APPLICABLE SECURITIES LAWS IN "
@@ -168,8 +168,8 @@ def build_preamble():
     story.append(spacer(4))
 
     story.append(P(
-        "This Limited Partnership Agreement (this &ldquo;Agreement&rdquo;) of PNTHR "
-        "FUNDS, PNTHR Tree Fund, LP, a Delaware limited partnership (the "
+        "This Limited Partnership Agreement (this &ldquo;Agreement&rdquo;) of "
+        "PNTHR Tree Fund, LP, a Delaware limited partnership (the "
         "&ldquo;Partnership&rdquo;), is entered into as of June 1, 2026 by and among "
         "PNTHR Funds, LLC, a Delaware limited liability company, as general partner "
         "(the &ldquo;General Partner&rdquo;) and those additional parties listed in "
@@ -946,7 +946,7 @@ def build_article_ii():
         "Partnership may elect to conduct business."))
 
     story.extend(section("2.02", "Name",
-        "The name of the Partnership is &ldquo;PNTHR FUNDS, PNTHR Tree Fund, "
+        "The name of the Partnership is &ldquo;PNTHR Tree Fund, "
         "LP.&rdquo; The General Partner is authorized to make any variations in the "
         "Partnership&rsquo;s name that the General Partner may deem necessary or "
         "advisable to comply with the laws of any jurisdiction in which the "
@@ -2578,7 +2578,7 @@ def build_article_xvi():
         BODY_INDENT))
     story.append(P(
         "<b>If to the Partnership:</b><br/>"
-        "PNTHR FUNDS, PNTHR Tree Fund, LP<br/>"
+        "PNTHR Tree Fund, LP<br/>"
         "c/o PNTHR Funds, LLC<br/>"
         "15150 W Park Place, Suite 215<br/>"
         "Goodyear, AZ 85395<br/>"
@@ -2754,7 +2754,7 @@ def build_stub(article_num, title, description):
 def build():
     doc = make_doc_template(
         OUT_PATH,
-        title_meta="PNTHR Funds, PNTHR Tree Fund, LP - Limited Partnership Agreement v1.0",
+        title_meta="PNTHR Tree Fund, LP - Limited Partnership Agreement v1.0",
         subject="Limited Partnership Agreement",
     )
     on_cover, on_page = make_page_handlers(

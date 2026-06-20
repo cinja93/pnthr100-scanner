@@ -45,7 +45,7 @@ function build() {
   // imported objects in THIS Node process only and does not affect the Elite
   // generator, which runs separately.
   const deElite = (t) => typeof t === 'string'
-    ? t.replace(/AI Elite Universe/g, 'AI-300 universe').replace(/AI Elite/g, 'AI-300')
+    ? t.replace(/AI Elite Universe/g, 'AI-300 universe').replace(/AI Elite/g, 'AI-300').replace(/\s*\bElite\b/g, '')
     : t;
   FUND_META.fullName = 'PNTHR Tree Fund, LP';
   FUND_META.fundName = 'PNTHR Tree Fund';

@@ -145,12 +145,14 @@ def build():
     story.append(spacer(4))
 
     story.append(P(
-        f"The {FUND} is engineered for capital preservation first, alpha generation second. "
-        "Every aspect of the system, from signal selection to position sizing to exit discipline, "
-        "ensures the portfolio can absorb adverse conditions without meaningful drawdown. The Fund "
-        "employs a multi-layered risk architecture spanning position sizing, portfolio-level "
-        "controls, and automated alert systems, all enforced systematically with zero "
-        "discretionary override."
+        f"The {FUND} is a directional, long-only, high-conviction momentum strategy. It is "
+        "high-beta and highly correlated to the equity market, and it will experience high "
+        "volatility and large portfolio drawdowns (see the Worst-Case Validation section "
+        "below). Its risk controls are designed to bound loss at the level of each individual "
+        "trade, not to cap overall portfolio drawdown. Every aspect of the system, from breakout "
+        "selection to position sizing to exit discipline, is enforced systematically with zero "
+        "discretionary override, spanning position sizing, portfolio-level exposure limits, and "
+        "automated alert systems."
     ))
 
     story.append(spacer(10))
@@ -266,19 +268,6 @@ def build():
         "not employ a fixed time-based or stale-position exit, an overbought-reduction "
         "(momentum-exhaustion) alert, or discretionary profit-taking. A single mechanical exit rule "
         "lets winners run and removes discretion from the exit decision."
-    ))
-    story.append(spacer(10))
-
-    # ==========================================================================
-    # Wash Sale Compliance
-    # ==========================================================================
-    story.append(Paragraph("Wash Sale Compliance", SECTION_TITLE))
-    story.append(yellow_rule())
-    story.append(spacer(4))
-    story.append(P(
-        "A 30-day re-entry lockout on losing trades is enforced by the pipeline. Any attempt to "
-        "re-enter a position within 30 calendar days of closing it at a loss is blocked at the "
-        "pre-trade stage, so realized losses are not disallowed under the wash-sale rule."
     ))
     story.append(spacer(10))
 

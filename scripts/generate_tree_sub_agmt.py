@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNTHR FUNDS, PNTHR Tree Fund, LP
+PNTHR Tree Fund, LP
 Subscription Agreement v2.3
 Effective: June 1, 2026
 
@@ -155,14 +155,14 @@ def rep_sub(letter_label, text):
 # =========================================================================
 def build_instructions():
     story = []
-    story.append(P("<b>PNTHR FUNDS,</b>", TITLE_STYLE))
+    story.append(P("<b>PNTHR FUNDS</b>", TITLE_STYLE))
     story.append(P("<b>PNTHR Tree Fund, LP</b>", TITLE_STYLE))
     story.append(spacer(4))
     story.append(P("<b>Subscription Instructions</b>", SUBTITLE_STYLE))
     story.append(spacer(6))
 
     story.append(P(
-        "A subscription to invest in PNTHR FUNDS, PNTHR Tree Fund, LP "
+        "A subscription to invest in PNTHR Tree Fund, LP "
         "(the &ldquo;<b>Fund</b>&rdquo;) may be made only by means of the "
         "completion, delivery, and acceptance of the subscription documents "
         "in this package. Completion of the following documents is required:",
@@ -280,7 +280,7 @@ def build_instructions():
         BODY))
 
     story.append(P(
-        "<b>PNTHR FUNDS, PNTHR Tree Fund, LP</b><br/>"
+        "<b>PNTHR Tree Fund, LP</b><br/>"
         "c/o NAV Fund Administration Group<br/>"
         "NAV Consulting &nbsp;|&nbsp; NAV Cayman &nbsp;|&nbsp; NAV Backoffice<br/>"
         "1 Trans Am Plaza Drive, Suite 400<br/>"
@@ -378,7 +378,7 @@ def build_signature_page():
         "is accurate and complete, (2) agrees to the terms of the Subscription "
         "Agreement and the Limited Partnership Agreement, and (3) requests that "
         "the records of the Fund reflect the Subscriber&rsquo;s acquisition of "
-        "limited partnership interests of PNTHR FUNDS, PNTHR Tree Fund, "
+        "limited partnership interests of PNTHR Tree Fund, "
         "LP.",
         BODY))
 
@@ -453,13 +453,13 @@ def build_signature_page():
     # GP acceptance
     story.append(P(
         "The Subscriber&rsquo;s subscription to acquire a limited partnership "
-        "Interest of PNTHR FUNDS, PNTHR Tree Fund, LP is accepted on the "
+        "Interest of PNTHR Tree Fund, LP is accepted on the "
         "date specified below, subject to the provisions of the Subscription "
         "Agreement and the Limited Partnership Agreement.",
         BODY))
 
     story.append(spacer(8))
-    story.append(P("<b>PNTHR FUNDS, PNTHR Tree Fund, LP</b>", BODY_LEFT))
+    story.append(P("<b>PNTHR Tree Fund, LP</b>", BODY_LEFT))
     story.append(P("By:  PNTHR Funds, LLC, its General Partner", BODY_LEFT))
     story.append(spacer(18))
     story.append(P("Name:  Scott R. McBrien", BODY_LEFT))
@@ -481,7 +481,7 @@ def build_subscription_agreement():
     story = []
 
     # Title
-    story.append(P("<b>PNTHR FUNDS,</b>", TITLE_STYLE))
+    story.append(P("<b>PNTHR FUNDS</b>", TITLE_STYLE))
     story.append(P("<b>PNTHR Tree Fund, LP</b>", TITLE_STYLE))
     story.append(spacer(2))
     story.append(P("<b>Subscription Agreement</b>", SUBTITLE_STYLE))
@@ -489,7 +489,7 @@ def build_subscription_agreement():
 
     # Address block
     story.append(P(
-        "PNTHR FUNDS, PNTHR Tree Fund, LP<br/>"
+        "PNTHR Tree Fund, LP<br/>"
         "c/o PNTHR Funds, LLC<br/>"
         "15150 W Park Place, Suite 215<br/>"
         "Goodyear, Arizona 85395",
@@ -502,7 +502,7 @@ def build_subscription_agreement():
     story.append(P(
         "The undersigned (the &ldquo;<b>Subscriber</b>&rdquo;) hereby "
         "acknowledges having (i) received and read a copy of the Limited "
-        "Partnership Agreement of <b>PNTHR FUNDS, PNTHR Tree Fund, "
+        "Partnership Agreement of <b>PNTHR Tree Fund, "
         "LP</b>, a limited partnership organized under the laws of the State "
         "of Delaware (the &ldquo;<b>Fund</b>&rdquo;), dated as of June 1, 2026, "
         "as amended from time to time (the &ldquo;<b>Fund Agreement</b>&rdquo;); "
@@ -1982,7 +1982,7 @@ def build_appendix_d():
 
     story.append(P(
         "This Appendix D summarizes certain risk factors relating to an "
-        "investment in PNTHR FUNDS, PNTHR Tree Fund, LP (the "
+        "investment in PNTHR Tree Fund, LP (the "
         "&ldquo;<b>Fund</b>&rdquo;). This summary is not exhaustive and "
         "does not include all risks to which an investment in the Fund "
         "may be subject. This Appendix D is a summary only and is not a "
@@ -2071,9 +2071,12 @@ def build_appendix_d():
         ("7. General Market Risk and Loss of Capital",
          "An investment in the Fund involves a high degree of risk, "
          "including the risk of loss of all invested capital. The Fund "
-         "trades long and short positions in publicly traded U.S. "
-         "equity securities and exchange-traded funds and may use "
-         "leverage up to a gross exposure of 2:1. Market, liquidity, "
+         "is a directional, long-only strategy (authorized, but not "
+         "currently implementing, short positions) in publicly traded "
+         "U.S. equity securities and may use leverage up to a gross "
+         "exposure of 2:1; it is high-beta, highly correlated to the "
+         "equity market, and has experienced large drawdowns in its "
+         "hypothetical backtest. Market, liquidity, "
          "counterparty, execution, and technology risks apply. Past "
          "performance is not a guarantee or predictor of future "
          "results, and no assurance can be given that the Fund&rsquo;s "
@@ -2102,7 +2105,7 @@ def build_appendix_d():
 def build():
     doc = make_doc_template(
         OUT_PATH,
-        title_meta="PNTHR Funds, PNTHR Tree Fund, LP - Subscription Agreement v1.0",
+        title_meta="PNTHR Tree Fund, LP - Subscription Agreement v1.0",
         subject="Subscription Agreement",
     )
     on_cover, on_page = make_page_handlers(

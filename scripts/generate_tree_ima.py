@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNTHR FUNDS, PNTHR Tree Fund, LP
+PNTHR Tree Fund, LP
 Investment Management Agreement v1.0
 Effective: June 1, 2026
 
@@ -82,7 +82,7 @@ def build_legend():
     story = []
     story.append(P(
         "THIS INVESTMENT MANAGEMENT AGREEMENT CONTAINS CONFIDENTIAL INFORMATION "
-        "RELATING TO PNTHR FUNDS, PNTHR Tree Fund, LP (the &ldquo;FUND&rdquo;) "
+        "RELATING TO PNTHR Tree Fund, LP (the &ldquo;FUND&rdquo;) "
         "AND STT CAPITAL ADVISORS LLC (THE &ldquo;INVESTMENT MANAGER&rdquo;). THIS "
         "AGREEMENT SUPPLEMENTS THE LIMITED PARTNERSHIP AGREEMENT OF THE FUND AND "
         "THE PRIVATE PLACEMENT MEMORANDUM OF THE FUND AND MUST BE READ IN "
@@ -106,7 +106,7 @@ def build_preamble():
         "THIS INVESTMENT MANAGEMENT AGREEMENT (this &ldquo;Agreement&rdquo;) is "
         "made as of June 1, 2026, by and between <b>STT Capital Advisors LLC</b>, "
         "a Delaware limited liability company (the &ldquo;Investment Manager&rdquo; "
-        "or &ldquo;Manager&rdquo;), and <b>PNTHR FUNDS, PNTHR Tree Fund, LP</b>, "
+        "or &ldquo;Manager&rdquo;), and <b>PNTHR Tree Fund, LP</b>, "
         "a Delaware limited partnership (the &ldquo;Fund&rdquo;).",
         BODY))
 
@@ -115,9 +115,11 @@ def build_preamble():
     # Recital A
     story.append(P(
         "<b>A.</b>&nbsp;&nbsp;The Fund has been formed for the purpose of investing "
-        "principally in long and short positions in publicly traded United States "
-        "equity securities and exchange-traded funds, guided by the PNTHR Signal "
-        "System (a proprietary quantitative signal framework), as more fully "
+        "principally in long positions in publicly traded United States equity "
+        "securities drawn from the Fund&rsquo;s AI-300 universe, applying the PNTHR "
+        "Signal System (a proprietary quantitative new-high breakout strategy). The "
+        "Fund is authorized to take both long and short positions; its current "
+        "systematic implementation is long-only. The strategy is more fully "
         "described in the Private Placement Memorandum prepared by the Fund dated "
         "June 1, 2026, as amended and supplemented from time to time (the "
         "&ldquo;PPM&rdquo;).",
@@ -661,7 +663,7 @@ def build_signatures():
 
     # FUND
     story.append(P("<b>FUND:</b>", BODY))
-    story.append(P("PNTHR FUNDS, PNTHR Tree Fund, LP", BODY))
+    story.append(P("PNTHR Tree Fund, LP", BODY))
     story.append(P("a Delaware limited partnership", BODY))
     story.append(spacer(10))
     story.append(P("By:  PNTHR Funds, LLC, its General Partner", BODY))
@@ -689,7 +691,7 @@ def build_signatures():
 def build():
     doc = make_doc_template(
         OUT_PATH,
-        title_meta="PNTHR Funds, PNTHR Tree Fund, LP - Investment Management Agreement v1.0",
+        title_meta="PNTHR Tree Fund, LP - Investment Management Agreement v1.0",
         subject="Investment Management Agreement",
     )
     on_cover, on_page = make_page_handlers(

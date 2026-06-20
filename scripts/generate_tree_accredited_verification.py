@@ -153,14 +153,14 @@ story.append(Spacer(1, 4))
 story.append(Paragraph(
     '<b>2.</b>&nbsp;&nbsp;&nbsp;&nbsp;I have taken reasonable steps to verify that the Investor is an "Accredited Investor" '
     'within the meaning of Rule 501(a) of SEC Regulation D as of _________________________________ '
-    '(applicable date within 60 days of this letter).', styles['B']))
+    '(applicable date within 90 days of this letter).', styles['B']))
 
 # ============================================================
 # Section 3
 # ============================================================
 story.append(Paragraph(
     '<b>3.</b>&nbsp;&nbsp;&nbsp;&nbsp;I have determined that the Investor also meets the qualifications of a "Qualified Client" '
-    'as per Section 205-3 of the Investment Advisers Act of 1940 as of such date.', styles['B']))
+    'as per Rule 205-3 under the Investment Advisers Act of 1940 as of such date.', styles['B']))
 
 # ============================================================
 # Section 4

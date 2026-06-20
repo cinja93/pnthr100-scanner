@@ -17,7 +17,8 @@ FUND_UPPER = "PNTHR TREE FUND, LP"
 VERSION    = "v1.0"
 
 OUTPUT = os.path.expanduser(f"~/Downloads/PNTHR_Tree_Fund_Accredited_Investor_Verification_{VERSION}_2026.pdf")
-LOGO   = os.path.expanduser("~/Downloads/PNTHR FUNDS Logo white background 2 lines (3).png")
+# Plain PNTHR FUNDS logo (panther + wordmark, white bg, NO fund subtitle).
+LOGO   = os.path.expanduser("~/pnthr100-scanner/client/public/pnthr-funds-logo-white-bg.png")
 
 _CB_IMG_PATH = os.path.expanduser("~/Downloads/_checkbox_empty.png")
 def _make_checkbox_image():

@@ -117,9 +117,15 @@ export async function getFundComparison() {
   }
 
   // ── Assemble per-fund payload ──────────────────────────────────────────────
-  const slim = (p) => ({ ticker: p.ticker, direction: p.direction, avgCost: +(+(p.avgCost ?? p.entryPrice ?? 0)).toFixed(2),
-    last: +(+(p.currentPrice ?? p.last ?? p.avgCost ?? 0)).toFixed(2), shares: +(p.totalShares ?? p.shares ?? 0),
-    pnl: Math.round(+(p.livePnl ?? p.pnl ?? 0)), stop: +(+(p.stop ?? p.stopPrice ?? 0)).toFixed(2) });
+  // Direction: use the explicit field when set, else infer from the share sign. Tree is
+  // long-only and stores no `direction` (shares > 0) — without this it mis-renders as short.
+  const slim = (p) => {
+    const sh = +(p.totalShares ?? p.shares ?? 0);
+    const direction = (String(p.direction || '').toUpperCase() === 'SHORT' || sh < 0) ? 'SHORT' : 'LONG';
+    return { ticker: p.ticker, direction, avgCost: +(+(p.avgCost ?? p.entryPrice ?? 0)).toFixed(2),
+      last: +(+(p.currentPrice ?? p.last ?? p.avgCost ?? 0)).toFixed(2), shares: Math.abs(sh),
+      pnl: Math.round(+(p.livePnl ?? p.pnl ?? 0)), stop: +(+(p.stop ?? p.stopPrice ?? 0)).toFixed(2) };
+  };
   const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
 
   const funds = [

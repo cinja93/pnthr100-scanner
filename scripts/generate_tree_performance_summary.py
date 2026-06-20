@@ -349,19 +349,6 @@ def build():
         "1,351 to 1,815 closed long trades by tier across the PNTHR AI 300 Universe (~300 names).",
         SMALL))
 
-    # ── Crisis Alpha ──────────────────────────────────────────────────────
-    story.append(Paragraph(
-        "Behavior During Market Drawdowns", H1))
-    story.append(spacer(4))
-    story.append(P(
-        "Behavior during market corrections is shown on a Gross Fund NAV basis for the "
-        "periods listed. The current implementation is long-only, so the Fund participates "
-        "in broad equity selloffs; the trailing-stop discipline reduces exposure as names "
-        "break down (drawdown behavior is primarily a gross-level phenomenon; full-period "
-        "fee drag is disclosed in the Gross vs Net tables above)."
-    ))
-    story.append(crisis_table())
-
     # ── Annual Performance ────────────────────────────────────────────────
     story.append(Paragraph("Annual Performance: PNTHR Tree vs S&amp;P 500", H1))
     story.append(spacer(4))

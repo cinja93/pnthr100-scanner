@@ -200,8 +200,7 @@ def build():
         ("Notable Achievement",
          "Architect of the PNTHR Signal System, a proprietary systematic "
          "trading methodology validated through multi-year backtesting across "
-         "bull markets and major drawdowns (the COVID crash, the 2022 bear "
-         "market, and the 2025 Liberation Day correction)"),
+         "bull and bear market regimes"),
     ]))
 
     story.append(PageBreak())

@@ -66,6 +66,7 @@ const NAV_GROUPS = [
     info: 'pnthrLive',
     items: [
       { key: 'pnthrTree', label: 'PNTHR Tree', badge: 'LIVE' },
+      { key: 'eliteAi',   label: 'Elite AI', badge: 'NEW' },
     ],
   },
   {
@@ -335,7 +336,6 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
           { key: 'data-room',         label: 'Data Room (AI/Carn)', badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'ambush',            label: 'Ambush V7.6', badge: 'LIVE' },
           { key: 'orders',            label: 'Orders', badge: 'AI | Carnivore', badgeType: 'split' },
-          { key: 'eliteAi',           label: 'Elite AI', badge: 'NEW' },
           { key: 'signal-history',    label: 'Signal History',    badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'history',           label: 'Kill 10',           info: 'kill10', badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'kill-test',         label: 'Kill Test',         info: 'killTest', badge: 'AI | Carnivore', badgeType: 'split' },

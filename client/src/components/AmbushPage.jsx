@@ -853,7 +853,7 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
   // fee-add-back, so we show the honest net figure once rather than a misleading gross column).
   const riskPanel = (m) => (
     <div style={{ border: '1px solid #b45309', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
-      {rowLabel('MONTHLY & RISK PROFILE · NET OF TRADING COSTS')}
+      {rowLabel('MONTHLY & RISK PROFILE · NET OF ALL FUND FEES')}
       {tileGrid([
         ['Avg Month', '+' + m.avgMonthPct + '%', '#22c55e', 'positive ' + m.positiveMonthsPct + '%'],
         ['Best Month', '+' + m.bestMonthPct + '%', '#22c55e'],
@@ -975,8 +975,14 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       {/* Hedge-fund metric cards — NET row (green box) + GROSS row (red box) when gross present */}
       {projection.metrics && (projection.metricsGross ? (
         <>
-          <div style={{ border: '1px solid #22c55e', borderRadius: 10, padding: '0 10px 10px', marginTop: 12 }}>
-            {rowLabel('NET OF TRADING COSTS · BEFORE FUND FEES')}
+          {projection.metricsNetFees && (
+            <div style={{ border: '2px solid #22c55e', borderRadius: 10, padding: '0 10px 10px', marginTop: 12 }}>
+              {rowLabel('NET · AFTER ALL FUND FEES — what an investor keeps (2% mgmt + performance fee)')}
+              {metricTiles(projection.metricsNetFees, 'Net', true)}
+            </div>
+          )}
+          <div style={{ border: '1px solid #6b7280', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
+            {rowLabel('STRATEGY · NET OF TRADING COSTS (before fund fees)')}
             {metricTiles(projection.metrics, 'Net', true)}
           </div>
           <div style={{ border: '1px solid #ef4444', borderRadius: 10, padding: '0 10px 10px', marginTop: 10 }}>
@@ -989,7 +995,7 @@ export function AumTracker({ projection, hideForward, cashLedger, onActualTable 
       ))}
 
       {/* Drawdown & risk profile (Tree only — data-gated; Ambush baseline lacks these fields) */}
-      {projection.metrics?.maxMonthlyDDPct != null && riskPanel(projection.metrics)}
+      {projection.metrics?.maxMonthlyDDPct != null && riskPanel(projection.metricsNetFees || projection.metrics)}
 
       {/* Context facts: backtest window, average hold time, and when live (actual) tracking began */}
       {(projection.meta?.backtestStart || projection.meta?.avgHoldDays != null || projection.meta?.actualStart) && (

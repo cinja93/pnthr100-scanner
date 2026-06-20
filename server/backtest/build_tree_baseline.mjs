@@ -17,6 +17,7 @@ import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { computeInputHash } from '../treeBaselineGuard.js';   // single shared fingerprint of the backtest inputs
 import { loadTreeData, simulateTree, ENTRY_HIGH_LOOKBACK, BE_SNAP_PROFIT, DEFAULT_START, DEFAULT_END } from './treeSim.js';
+import { applyFeeEngine } from './ai300FeeOverlay.js';   // PPM fee schedule (mgmt + perf + hurdle + HWM)
 
 // Sweep knobs (env overrides; production runs use the LOCKED defaults from treeSim.js).
 const LOOKBACK = +(process.env.LOOKBACK) || ENTRY_HIGH_LOOKBACK;   // 42wk = 210d; override to sweep (60=12wk … 252=52wk)
@@ -113,8 +114,19 @@ function computeMetrics(eqArr, pnlField, mDDfrac, mDDdollar) {
 const holds = closed.map(c => c.holdDays).filter(h => h != null).sort((a, b) => a - b);
 const avgHoldDays = holds.length ? +(holds.reduce((a, b) => a + b, 0) / holds.length).toFixed(1) : null;
 const medianHoldDays = holds.length ? holds[Math.floor(holds.length / 2)] : null;
-const metrics = computeMetrics(equity, 'pnl', maxDDfrac, maxDDdollar);              // NET (dashboard headline)
+const metrics = computeMetrics(equity, 'pnl', maxDDfrac, maxDDdollar);              // NET of trading costs (before fund fees)
 const grossMetrics = computeMetrics(equityGross, 'pnlGross', maxDDfracG, maxDDdollarG);  // GROSS (before costs)
+
+// NET AFTER FUND FEES (Filet $100K): apply the canonical PPM fee engine (2% mgmt + 30% perf
+// w/ US-2Y hurdle + HWM + loyalty step-down) to the net-of-costs curve — IDENTICAL to the IR's
+// Filet net (genTreeIrData). Fund fees are a portfolio-level overlay, so per-trade stats
+// (PF/win-rate from closed[].pnl) are unchanged; only the return/risk metrics move.
+const _filetGross = equity.map(e => ({ date: e.date, equity: +e.eq }));
+const { netCurve: _feeNetCurve } = applyFeeEngine(_filetGross, { startingCapital: NAV0, baseRate: 0.30, loyaltyRate: 0.25 });
+const _feeEq = _feeNetCurve.map(s => ({ date: s.date, eq: +s.netEquity }));
+let _fPk = -Infinity, _fMddFrac = 0, _fMddDollar = 0;
+for (const p of _feeEq) { if (p.eq > _fPk) _fPk = p.eq; const df = (p.eq - _fPk) / _fPk, dd = p.eq - _fPk; if (df < _fMddFrac) _fMddFrac = df; if (dd < _fMddDollar) _fMddDollar = dd; }
+const metricsNetFees = computeMetrics(_feeEq, 'pnl', _fMddFrac, Math.abs(_fMddDollar));  // NET after fund fees (Filet)
 const factors = equity.map((e, i) => ({ i, date: e.date, factor: +(e.eq / NAV0).toFixed(6) }));  // projection uses NET curve
 const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs so the drift guard can detect future data changes
 
@@ -134,6 +146,7 @@ const out = {
   inputNames: inputFingerprint.names,
   metrics,                     // NET (dashboard headline)
   metricsGross: grossMetrics,  // GROSS (before commission + slippage) — frontend renders a 2nd row when present
+  metricsNetFees,              // NET after PPM fund fees (Filet $100K) — the true investor net (matches the IR)
   costs: { commission: Math.round(totalComm), slippage: Math.round(totalSlip) },
   factors,
 };
@@ -143,7 +156,8 @@ if (process.env.NO_WRITE !== '1') fs.writeFileSync(outPath, JSON.stringify(out, 
 console.log('\n  ════ TREE BASELINE WRITTEN ════');
 console.log('  ' + outPath);
 console.log(`  Period ${equity[0].date}→${lastDate} · ${factors.length} sessions · ${closed.length} trades`);
-console.log('  NET  :', JSON.stringify(metrics));
+console.log('  NET (of costs):', JSON.stringify(metrics));
 console.log('  GROSS:', JSON.stringify(grossMetrics));
+console.log('  NET (after fund fees, Filet):', JSON.stringify(metricsNetFees));
 console.log(`  costs: comm $${Math.round(totalComm).toLocaleString()} · slip $${Math.round(totalSlip).toLocaleString()}`);
 process.exit(0);

@@ -806,6 +806,7 @@ export async function getPnthrTreeProjection(db, opts = {}) {
     forward,
     metrics: proj.metrics || null,
     metricsGross: proj.metricsGross || null,   // GROSS tiles (AumTracker renders a 2nd row when present)
+    metricsNetFees: proj.metricsNetFees || null,  // NET after PPM fund fees (Filet) — the true investor net (matches the IR)
     cashLedger: opts.noCashLedger ? null : loadCashLedger(),
     meta: {
       backtestStart: proj.backtestStart || null,

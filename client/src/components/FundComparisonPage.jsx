@@ -30,7 +30,7 @@ function Row({ label, value, color }) {
   );
 }
 
-function FundCard({ f, acknowledged }) {
+function FundCard({ f, acknowledged, startDate }) {
   const r = f.risk || {};
   const ts = f.tradeStats?.combined || {};
   return (
@@ -46,11 +46,11 @@ function FundCard({ f, acknowledged }) {
         <span style={{ fontSize: 30, fontWeight: 800, color: pctc(f.returnPct), fontFamily: 'monospace' }}>
           {f.returnPct >= 0 ? '+' : ''}{f.returnPct}%
         </span>
-        <span style={{ fontSize: 13, color: MUT }}>since {f.startDate || 'start'}</span>
+        <span style={{ fontSize: 13, color: MUT }}>since {startDate || 'start'}</span>
       </div>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Equity {usd(f.currentEquity)} · from {usd(f.baselineNav)} baseline</div>
 
-      <Row label="Open P&L" value={signed(f.openPnl)} color={pctc(f.openPnl)} />
+      <Row label={`P&L since ${startDate || 'start'}`} value={signed(f.pnlSinceStart)} color={pctc(f.pnlSinceStart)} />
       <Row label="Risk at stop" value={usd(f.riskAtStop)} color={AMBER} />
       <Row label="Open positions" value={f.openCount} />
       <div style={{ borderTop: '1px solid #1a1a22', margin: '8px 0' }} />
@@ -114,7 +114,7 @@ export default function FundComparisonPage() {
   const metricRows = [
     ['Return %', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
     ['Equity', f => usd(f.currentEquity)],
-    ['Open P&L', f => signed(f.openPnl), f => pctc(f.openPnl)],
+    ['P&L since start', f => signed(f.pnlSinceStart), f => pctc(f.pnlSinceStart)],
     ['Win rate', f => `${f.tradeStats?.combined?.winRate ?? 0}%`],
     ['Profit factor', f => f.tradeStats?.combined?.profitFactor ?? 0],
     ['Payoff', f => f.tradeStats?.combined?.payoffRatio ?? 0],
@@ -142,7 +142,7 @@ export default function FundComparisonPage() {
       {data && (
         <>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-            {funds.map(f => <FundCard key={f.id} f={f} acknowledged={ack} />)}
+            {funds.map(f => <FundCard key={f.id} f={f} acknowledged={ack} startDate={data.startDate} />)}
           </div>
 
           {/* Side-by-side comparison table */}

@@ -6756,12 +6756,27 @@ setInterval(async () => {
   }
 }, 60_000);
 
+// ── ENGINE WRITER GATE ───────────────────────────────────────────────────────
+// Only the designated always-on writer instance (Render carries
+// RECONCILIATION_CRON_ENABLED=true) runs the engine loops below, so a stray
+// local/dev server can never double-process against the same Atlas DB. Set
+// AMBUSH_CRON_ENABLED=true to force a specific instance on; an instance with
+// neither stays silent. Gates the live Ambush cron AND the Elite AI paper loop, so
+// the background paper book ticks ONCE, on the always-on server — never twice (no
+// double-processing if a dev laptop also runs index.js) and never dependent on that
+// laptop being up. (Confirm Monday's open that it ticks server-side.)
+const AMBUSH_CRON_IS_WRITER =
+  process.env.RECONCILIATION_CRON_ENABLED === 'true' || process.env.AMBUSH_CRON_ENABLED === 'true';
+
 // ── Elite AI — paper dry-run manage loop — every 60s during market hours ──────
 // Paper only: fills L2-L5 as price clears triggers, ratchets the stop, exits on
 // a stop hit. Writes ONLY to pnthr_elite_positions / pnthr_elite_trades — never
-// touches Ambush, pnthr_portfolio, or any live order path.
+// touches Ambush, pnthr_portfolio, or any live order path. Runs ONLY on the
+// always-on writer instance (gate above) so it keeps papering in the background
+// server-side, independent of PNTHR Tree and of whether the dev laptop is up.
 let eliteManageRunning = false;
 setInterval(async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;          // background paper book runs only on the always-on writer
   if (eliteManageRunning) return;
   const now = new Date();
   const [hStr, mStr] = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false }).split(':');
@@ -6903,12 +6918,8 @@ cron.schedule('15 17 * * 1-5', async () => {
 // The engine's own isMarketHours() gate prevents processing outside 9:30-16:05.
 // Gated by AMBUSH_ENABLED in the pnthr_ambush_config MongoDB collection.
 //
-// WRITER GATE: only the designated writer instance ticks, so a stray local/dev
-// server can NEVER double-process against the same Atlas DB (which would double
-// orders). Render carries RECONCILIATION_CRON_ENABLED=true; set AMBUSH_CRON_ENABLED=true
-// to force a specific instance on. Any instance with neither stays silent.
-const AMBUSH_CRON_IS_WRITER =
-  process.env.RECONCILIATION_CRON_ENABLED === 'true' || process.env.AMBUSH_CRON_ENABLED === 'true';
+// WRITER GATE (AMBUSH_CRON_IS_WRITER) is declared above, just before the Elite paper
+// loop, so the live Ambush cron and the background paper loop share one source of truth.
 if (!AMBUSH_CRON_IS_WRITER) {
   console.log('[Ambush Cron] writer gate OFF on this instance — not ticking (set AMBUSH_CRON_ENABLED=true to enable)');
 }

@@ -38,9 +38,17 @@ async function realNav(db) {
 // Normalize any engine's trade docs into the shape computeTradeStats expects.
 function normTrades(trades) {
   return (trades || []).map(t => ({
-    exitDate: t.exitDate, exitReason: t.exitReason || 'STOP', signal: t.signal || 'BL',
+    entryDate: t.entryDate, exitDate: t.exitDate, exitReason: t.exitReason || 'STOP', signal: t.signal || 'BL',
     netDollarPnl: +t.pnl || 0, grossDollarPnl: +t.pnl || 0,
   }));
+}
+
+// Average holding days of WINNING closed trades (matches the tearsheet "avg winner hold").
+function avgWinnerHold(trades) {
+  const wins = (trades || []).filter(t => (+t.netDollarPnl || 0) > 0 && t.entryDate && t.exitDate);
+  if (!wins.length) return null;
+  const days = wins.map(t => Math.max(0, (new Date(t.exitDate) - new Date(t.entryDate)) / 86400000));
+  return +(days.reduce((s, d) => s + d, 0) / days.length).toFixed(1);
 }
 
 // Risk-adjusted metrics from a daily equity series — only once it's long enough to
@@ -53,7 +61,8 @@ function riskMetrics(series) {
   try {
     const m = computeSide(pts.map(s => ({ date: s.date, equity: s.equity })), 'equity');
     return { status: 'ready', sharpe: m.sharpe, sortino: m.sortino, maxDD: m.maxDD, calmar: m.calmar,
-      cagr: m.cagr, ulcerIndex: m.ulcerIndex, timeUnderWater: m.timeUnderWater, equityCurve: m.equityCurve };
+      cagr: m.cagr, recoveryFactor: m.recoveryFactor, positiveMonthsPct: m.positivePct,
+      ulcerIndex: m.ulcerIndex, timeUnderWater: m.timeUnderWater, equityCurve: m.equityCurve };
   } catch { return { status: 'building', points: pts.length, need: MIN_RISK_POINTS }; }
 }
 
@@ -128,25 +137,26 @@ export async function getFundComparison() {
   };
   const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
 
+  const treeTrades = recent(await db.collection('pnthr_tree_trades').find({}).toArray());
+  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
   const funds = [
     { id: 'tree', name: 'PNTHR Tree', strategy: '42-week-high momentum (daily)', mode: 'LIVE', simulated: false,
       baselineNav, currentEquity: Math.round(treeEquity), returnPct: pct(treeEquity),
       pnlSinceStart: Math.round(treeEquity - baselineNav), openPnl: Math.round(treeOpenPnl),
-      riskAtStop: Math.round(treeRisk), openCount: treePos.length, positions: treePos.slice(0, 8).map(slim),
-      trades: recent(await db.collection('pnthr_tree_trades').find({}).sort({ exitDate: -1 }).limit(8).toArray()),
-      tradeStats: computeTradeStats(recent(await db.collection('pnthr_tree_trades').find({}).toArray()), baselineNav, 1),
+      riskAtStop: Math.round(treeRisk), openCount: treePos.length, positions: treePos.map(slim),
+      tradeStats: computeTradeStats(treeTrades, baselineNav, 1), avgWinnerHold: avgWinnerHold(treeTrades),
       risk: riskMetrics(await series('tree')) },
     { id: 'elite', name: 'Elite AI', strategy: 'AI-300 Elite / MCE (daily breakout, long-only)', mode: 'PAPER', simulated: true,
       baselineNav, currentEquity: Math.round(eliteEquity), returnPct: pct(eliteEquity),
       pnlSinceStart: Math.round(eliteEquity - baselineNav), openPnl: Math.round(eliteOpenPnl),
-      riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.slice(0, 8).map(slim),
-      trades: recent(eliteClosed).slice(0, 8), tradeStats: computeTradeStats(recent(eliteClosed), baselineNav, 1),
+      riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.map(slim),
+      tradeStats: computeTradeStats(eliteTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(eliteTr),
       risk: riskMetrics(await series('elite')) },
     { id: 'ambush', name: 'Ambush V7.6', strategy: 'AI-300 intraday breakout + pyramid (long/short)', mode: 'PAPER', simulated: true,
       baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity),
       pnlSinceStart: Math.round(ambushEquity - baselineNav), openPnl: Math.round(ambOpenPnl),
-      riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.slice(0, 8).map(slim),
-      trades: recent(ambClosed).slice(0, 8), tradeStats: computeTradeStats(recent(ambClosed), baselineNav, 1),
+      riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slim),
+      tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
       risk: riskMetrics(await series('ambush')) },
   ];
 

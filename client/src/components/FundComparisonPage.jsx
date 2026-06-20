@@ -34,7 +34,8 @@ function FundCard({ f, acknowledged, startDate }) {
   const r = f.risk || {};
   const ts = f.tradeStats?.combined || {};
   return (
-    <div style={{ flex: 1, minWidth: 300, background: '#0d0d0f', border: `1px solid ${f.simulated ? '#2a2a3a' : '#1e3a26'}`,
+    <div style={{ flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column', background: '#0d0d0f',
+      border: `1px solid ${f.simulated ? '#2a2a3a' : '#1e3a26'}`,
       borderTop: `3px solid ${f.mode === 'LIVE' ? GREEN : BLUE}`, borderRadius: 10, padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
         <span style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>{f.name}</span>
@@ -74,21 +75,20 @@ function FundCard({ f, acknowledged, startDate }) {
 
       {f.positions?.length > 0 && (
         <div style={{ marginTop: 10, borderTop: '1px solid #1a1a22', paddingTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#777', marginBottom: 4 }}>OPEN POSITIONS</div>
-          {f.positions.slice(0, 6).map((p, i) => (
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#777', marginBottom: 4 }}>OPEN POSITIONS ({f.openCount})</div>
+          {f.positions.map((p, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'monospace', padding: '1px 0' }}>
               <span style={{ color: '#ccc' }}>{p.ticker}<span style={{ color: p.direction === 'LONG' ? GREEN : RED, marginLeft: 5, fontSize: 9 }}>{p.direction === 'LONG' ? 'L' : 'S'}</span></span>
               <span style={{ color: pctc(p.pnl) }}>{signed(p.pnl)}</span>
             </div>
           ))}
-          {f.openCount > 6 && <div style={{ fontSize: 10, color: '#666', marginTop: 3 }}>+{f.openCount - 6} more</div>}
         </div>
       )}
 
       <button
         disabled={!acknowledged}
         onClick={() => { window.location.href = `mailto:Scott@pnthrfunds.com?subject=${encodeURIComponent('Interest in ' + f.name)}&body=${encodeURIComponent('I am a verified accredited investor and would like to learn more about the ' + f.name + ' strategy.')}`; }}
-        style={{ marginTop: 12, width: '100%', padding: '8px 0', borderRadius: 6, fontSize: 12, fontWeight: 700,
+        style={{ marginTop: 'auto', width: '100%', padding: '10px 0', borderRadius: 6, fontSize: 12, fontWeight: 700,
           cursor: acknowledged ? 'pointer' : 'not-allowed', opacity: acknowledged ? 1 : 0.4,
           background: 'transparent', color: f.mode === 'LIVE' ? GREEN : BLUE, border: `1px solid ${f.mode === 'LIVE' ? GREEN : BLUE}` }}>
         Express interest in {f.name}
@@ -111,16 +111,26 @@ export default function FundComparisonPage() {
   useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, [load]);
 
   const funds = data?.funds || [];
+  const rdy = (f) => f.risk?.status === 'ready';
+  const ts = (f) => f.tradeStats?.combined || {};
   const metricRows = [
-    ['Return %', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
-    ['Equity', f => usd(f.currentEquity)],
+    ['Total return', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
     ['P&L since start', f => signed(f.pnlSinceStart), f => pctc(f.pnlSinceStart)],
-    ['Win rate', f => `${f.tradeStats?.combined?.winRate ?? 0}%`],
-    ['Profit factor', f => f.tradeStats?.combined?.profitFactor ?? 0],
-    ['Payoff', f => f.tradeStats?.combined?.payoffRatio ?? 0],
+    ['Ending equity', f => usd(f.currentEquity)],
+    ['CAGR', f => rdy(f) ? `${f.risk.cagr}%` : 'building'],
+    ['Sharpe', f => rdy(f) ? f.risk.sharpe : 'building'],
+    ['Sortino', f => rdy(f) ? f.risk.sortino : 'building'],
+    ['Calmar', f => rdy(f) ? f.risk.calmar : 'building'],
+    ['Max drawdown', f => rdy(f) ? `${f.risk.maxDD}%` : '—'],
+    ['Recovery factor', f => rdy(f) ? `${f.risk.recoveryFactor}x` : 'building'],
+    ['Positive months', f => rdy(f) ? `${f.risk.positiveMonthsPct}%` : 'building'],
+    ['Profit factor', f => `${ts(f).profitFactor ?? 0}x`],
+    ['Payoff ratio', f => `${ts(f).payoffRatio ?? 0}x`],
+    ['Win rate', f => `${ts(f).winRate ?? 0}%`],
+    ['Avg win', f => usd(ts(f).avgWin ?? 0), () => GREEN],
+    ['Avg loss', f => usd(ts(f).avgLoss ?? 0), () => RED],
+    ['Avg winner hold', f => f.avgWinnerHold != null ? `${f.avgWinnerHold}d` : '—'],
     ['Closed trades', f => f.tradeStats?.closed ?? 0],
-    ['Sharpe', f => f.risk?.status === 'ready' ? f.risk.sharpe : 'building'],
-    ['Max drawdown', f => f.risk?.status === 'ready' ? `${f.risk.maxDD}%` : '—'],
   ];
 
   return (

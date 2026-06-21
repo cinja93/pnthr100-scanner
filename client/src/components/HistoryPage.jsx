@@ -297,8 +297,9 @@ export default function HistoryPage() {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
   const [sortClosed,  setSortClosed]  = useState({ col: 'exitDate', dir: -1 });
-  const [sortActive,  setSortActive]  = useState({ col: 'entryRank', dir: 1 });
-  const [tab,         setTab]         = useState('active');
+  const [sortActive,  setSortActive]  = useState({ col: 'entryDate', dir: -1 }); // newest entry at top
+  const [sortAll,     setSortAll]     = useState({ col: 'entryDate', dir: -1 }); // All Trades: newest at top, oldest at bottom
+  const [tab,         setTab]         = useState('all');
   const [fund,        setFund]        = useState(activeFund === 'ai' ? 'ai300' : '679');
   const [dataSource,  setDataSource]  = useState('kill10'); // 'kill10' | 'orders'
   const [ordersData,  setOrdersData]  = useState(null);
@@ -829,6 +830,7 @@ export default function HistoryPage() {
 
   const ClosedSortTh = makeSortTh(sortClosed, setSortClosed);
   const ActiveSortTh = makeSortTh(sortActive, setSortActive);
+  const AllSortTh    = makeSortTh(sortAll, setSortAll);
 
   if (loading) return (
     <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Loading Kill History...</div>
@@ -995,6 +997,7 @@ export default function HistoryPage() {
       {/* ── Tab bar (mirrors Kill Test layout) ──────────────────────────── */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, marginBottom: 0 }}>
         {[
+          { key: 'all',       label: () => `All Trades (${dataSource === 'orders' ? (ordersActive.length + ordersClosed.length) : pyramidTrades.length > 0 ? pyramidTrades.length : all.length})` },
           { key: 'active',    label: () => `Active (${(() => { const usePyramid = dataSource === 'orders' || pyramidActive.length > 0; return (dataSource === 'orders' ? ordersActive : usePyramid ? pyramidActive : activeWithDerived).length; })()})` },
           { key: 'closed',    label: () => `Closed (${dataSource === 'orders' ? ordersClosed.length : pyramidClosed.length > 0 ? pyramidClosed.length : closed.length})` },
           { key: 'equity',    label: () => 'Equity & Breakdown' },
@@ -1023,6 +1026,103 @@ export default function HistoryPage() {
       }}>
 
         {/* ── Active tab ───────────────────────────────────────────────── */}
+        {/* ── All Trades tab (open + closed combined, newest first) ────── */}
+        {tab === 'all' && (() => {
+          const usePyramid = dataSource === 'orders' || pyramidTrades.length > 0;
+          const baseRows = dataSource === 'orders'
+            ? [...ordersActive, ...ordersClosed]
+            : usePyramid
+              ? pyramidTrades
+              : all.map(s => ({ ...s, _pnlPct: s.status === 'CLOSED' ? (s.pnlPct ?? 0) : (s.weeklySnapshots?.slice(-1)[0]?.pnlPct ?? 0) }));
+
+          if (baseRows.length === 0) return (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: '#555', fontSize: 13 }}>
+              No trades yet. Picks appear here once a stock enters the Kill top 10.
+            </div>
+          );
+
+          const rows = sortRows(baseRows, sortAll, {
+            pnlPct:      r => usePyramid ? (r.pnlPct ?? 0) : (r.status === 'CLOSED' ? (r.pnlPct ?? 0) : (r._pnlPct ?? 0)),
+            pnlDollar:   r => r.pnlDollar ?? 0,
+            lotsFilledCount: r => r.lotsFilledCount ?? 0,
+            holdingDays: r => usePyramid ? (r.holdingDays ?? 0) : (r.holdingWeeks ?? 0),
+            status:      r => r.status === 'ACTIVE' ? 0 : 1, // open first
+          });
+
+          return (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <AllSortTh col="status" align="left">Status</AllSortTh>
+                    <AllSortTh col="ticker" align="left">Ticker</AllSortTh>
+                    <AllSortTh col="direction" align="left">Dir</AllSortTh>
+                    <AllSortTh col="entryDate">Entry</AllSortTh>
+                    <AllSortTh col="entryPrice">Entry $</AllSortTh>
+                    <AllSortTh col="entryRank">Entry Rank</AllSortTh>
+                    {usePyramid && <AllSortTh col="lotsFilledCount">Lots</AllSortTh>}
+                    <AllSortTh col="exitDate">Exit</AllSortTh>
+                    <AllSortTh col="pnlPct">P&L %</AllSortTh>
+                    {usePyramid && <AllSortTh col="pnlDollar">P&L $</AllSortTh>}
+                    <AllSortTh col="holdingDays">{usePyramid ? 'Days' : 'Weeks'}</AllSortTh>
+                    <th style={{ padding: '9px 10px', color: '#888', fontWeight: 600 }}>Tier</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(s => {
+                    const isOpen = s.status === 'ACTIVE';
+                    const pnlPct = usePyramid ? (s.pnlPct ?? 0) : (isOpen ? (s._pnlPct ?? 0) : (s.pnlPct ?? 0));
+                    const isPos  = (pnlPct ?? 0) >= 0;
+                    return (
+                      <tr key={s.id || `${s.ticker}-${s.entryDate}`} style={{
+                        borderBottom: `1px solid ${BORDER}`,
+                        background: isOpen
+                          ? 'rgba(0,150,255,0.05)'
+                          : pnlPct !== 0 ? (isPos ? 'rgba(40,167,69,0.05)' : 'rgba(220,53,69,0.05)') : 'transparent',
+                      }}>
+                        <td style={{ padding: '7px 10px' }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                            background: isOpen ? 'rgba(0,150,255,0.15)' : 'rgba(150,150,150,0.12)',
+                            color: isOpen ? '#0096ff' : '#999',
+                          }}>{isOpen ? 'OPEN' : 'CLOSED'}</span>
+                        </td>
+                        <td style={{ padding: '7px 10px', fontWeight: 800, color: YELLOW }}>{s.ticker}</td>
+                        <td style={{ padding: '7px 10px', color: s.direction === 'SHORT' ? RED : GREEN, fontWeight: 700 }}>
+                          {s.direction === 'SHORT' ? 'SS' : 'BL'}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>{fmtD(s.entryDate)}</td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px' }}>${s.entryPrice?.toFixed(2)}</td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: YELLOW, fontWeight: 700 }}>#{s.entryRank}</td>
+                        {usePyramid && (
+                          <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>{s.lotsFilledCount}/5</td>
+                        )}
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>
+                          {isOpen ? '—' : fmtD(s.exitDate)}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                          color: pnlPct === 0 ? '#555' : isPos ? GREEN : RED }}>
+                          {fmt(pnlPct)}
+                        </td>
+                        {usePyramid && (
+                          <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
+                            color: (s.pnlDollar ?? 0) >= 0 ? GREEN : RED }}>
+                            {fmtP(s.pnlDollar)}
+                          </td>
+                        )}
+                        <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa' }}>
+                          {usePyramid ? s.holdingDays : s.holdingWeeks}
+                        </td>
+                        <td style={{ padding: '7px 10px' }}><TierBadge tier={s.entryTier} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+
         {tab === 'active' && (() => {
           const usePyramid = dataSource === 'orders' || pyramidActive.length > 0;
           const openRows = dataSource === 'orders' ? ordersActive

@@ -82,6 +82,7 @@ import {
   updateAi300KillAppearances,
 } from './ai300KillHistory.js';
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
+import { rebuildAi300Kill } from './ai300KillBackfill.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
 import { ambushIrMetricsHandler, ambushIrTradesHandler } from './ambushIrService.js';
@@ -2800,6 +2801,22 @@ app.post('/api/admin/run-ai-kill', authenticateJWT, requireAdmin, async (req, re
     res.json({ ok: true, weekOf: doc.weekOf, scoredCount: doc.scoredCount, tierBreakdown: doc.tierBreakdown });
   } catch (err) {
     console.error('[AI Kill] manual run failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deterministic rebuild of the AI 300 Kill 10 track record (case studies + appearances)
+// from the stored weekly candles. ?dryRun=1 previews without writing; a real run
+// copies each collection to <coll>_bak first. ?part=both|case_studies|appearances.
+app.post('/api/admin/ai300-kill-rebuild', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
+    const part   = ['both', 'case_studies', 'appearances'].includes(req.query.part) ? req.query.part : 'both';
+    const fullMonthly = req.query.fullMonthly === '1' || req.query.fullMonthly === 'true';
+    const result = await rebuildAi300Kill({ dryRun, part, fullMonthly });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[AI300 Kill Rebuild] failed:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -6534,20 +6551,13 @@ cron.schedule('30 16 * * 1-5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── Cron: AI 300 Kill Test daily price tracking Mon–Fri at 4:31pm ET ────────
-let ai300KillTestDailyRunning = false;
-cron.schedule('31 16 * * 1-5', async () => {
-  if (ai300KillTestDailyRunning) return;
-  ai300KillTestDailyRunning = true;
-  try {
-    console.log('[AI300 KillTest Daily] Starting daily price tracking...');
-    await runAi300KillTestDailyUpdate();
-  } catch (err) {
-    console.error('[AI300 KillTest Daily] Failed:', err.message);
-  } finally {
-    ai300KillTestDailyRunning = false;
-  }
-}, { timezone: 'America/New_York' });
+// ── AI 300 Kill Test daily price tracking — RETIRED 2026-06-21 ──────────────
+// The appearances collection is now owned by the single deterministic engine
+// rebuildAi300Kill() (run in the AI-Universe daily chain above). Keeping this
+// FMP-based incremental updater active would mean two writers on the same
+// collection with two different methodologies — exactly the kind of divergence
+// that froze the track record. Retired to keep one source of truth.
+// (runAi300KillTestDailyUpdate remains available for manual/diagnostic use.)
 
 // ── Cron: AI 300 Kill Test monthly snapshot — first Friday of month, 6:15 PM ET
 let ai300KillTestMonthlyRunning = false;
@@ -6646,19 +6656,16 @@ cron.schedule('15 16 * * 1-5', async () => {
       const killDoc = await runAiKillPipeline();
       console.log(`[AI Kill] done: ${killDoc.scoredCount} scored, top=${killDoc.scores[0]?.ticker}`);
     } catch (e) { console.error('[CRON] AI Kill pipeline failed:', e.message); }
-    // AI 300 Kill case studies + appearance tracking — consumes AI Kill scores.
+    // AI 300 Kill 10 track record (case studies + appearances) — deterministic rebuild.
+    // Replaces the old incremental updaters (checkAi300CaseStudyEntries /
+    // updateAi300KillAppearances), which read the latest score doc with a bad
+    // `sort:{scoredAt:-1}` (no such field) and silently froze the whole track record
+    // from ~2026-05-22. rebuildAi300Kill re-derives both collections from the weekly
+    // candle store every run — one deterministic engine cannot drift like two paths can.
     try {
-      const { connectToDatabase } = await import('./database.js');
-      const db = await connectToDatabase();
-      const killDoc = await db.collection('pnthr_ai_kill_scores').findOne({}, { sort: { scoredAt: -1 } });
-      if (killDoc?.scores?.length) {
-        const signalData = getCachedSignalStocks?.() ?? [];
-        await checkAi300CaseStudyEntries(db, killDoc.scores, signalData, 'DAILY_PIPELINE');
-        const ai300Settings = await getAi300KillTestSettings();
-        await updateAi300KillAppearances(db, killDoc, signalData, ai300Settings);
-        console.log('[AI300 Kill History] case studies + appearances updated');
-      }
-    } catch (e) { console.error('[CRON] AI300 Kill History failed:', e.message); }
+      const rebuilt = await rebuildAi300Kill({ part: 'both' });
+      console.log(`[AI300 Kill History] rebuilt: CS active=${rebuilt.caseStudies?.active} closed=${rebuilt.caseStudies?.closed} | AP active=${rebuilt.appearances?.active} closed=${rebuilt.appearances?.closed} (latest ${rebuilt.caseStudies?.latestEntry})`);
+    } catch (e) { console.error('[CRON] AI300 Kill History rebuild failed:', e.message); }
     // ── SIGNAL GENERATION — READ-ONLY, ALWAYS RUNS (ungated 2026-06-04) ───────────
     // The 679 carnivore refresh + the AI Orders sheet are READ-ONLY (verified: no
     // enqueueOutbox / order placement anywhere in ordersPipeline.js or aiOrdersPipeline.js).

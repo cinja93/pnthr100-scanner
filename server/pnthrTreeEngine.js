@@ -605,36 +605,63 @@ export async function runPnthrTreeTick(db) {
     actions.push({ type: 'ENTRY_GATE_SKIP', reason: snapAgeMin > 10 ? `snapshot ${snapAgeMin === Infinity ? 'missing' : snapAgeMin.toFixed(0) + 'm stale'}` : 'snapshot unconfirmed' });
   }
 
-  // 1) ENTRIES — any AI-300 name at a NEW intraday 42wk high we don't already hold
-  const attackFired = [];   // names firing the ATTACK signal this tick (new 42wk high, not held) — for trigger timestamps
+  // 1) ENTRIES — names at a NEW 42wk high we don't already hold. Build the qualified ATTACK set,
+  // then deploy capital CLOSEST-TO-TRIGGER first, RESIZING the marginal name to fit when capital
+  // is tight. This is IDENTICAL to the prior list-order full-size loop whenever capital is
+  // plentiful (every name's full size fits → same positions, same sizes; only the enqueue order
+  // differs, which can't change the outcome when all are bought). The ranking + resize change the
+  // OUTCOME only when capital is CONSTRAINED — i.e. exactly the "a stop-out just freed a few dollars
+  // and ATTACK names are waiting to be adopted" case (Scott 2026-06-22). Everything else unchanged:
+  // same 42wk-high trigger, same full-size sizing (sizeFor) when affordable, same 2× gross cap,
+  // same stop, same entry gate. For a long-only Reg-T account the 2× gross headroom (grossCap −
+  // gross) IS the available buying power. [Green-current-hour filter = a separate, backtest-gated
+  // addition — NOT wired here yet.]
+  const attackFired = [];   // every new-42wk-high name we don't hold (for trigger timestamps), bought or not
+  const candidates = [];
   if (entriesAllowed) for (const t of AI_TICKERS) {
     if (held.has(t)) continue;
     if (excl.has(t)) continue;   // manual-only (IPO seasoning / split re-sync pending) → don't trade
     const q = quotes[t]; if (!q) continue;
     const price = +q.price, dayHigh = +q.dayHigh || +q.price;
-    const priorHigh = highs[t];   // real prior 42wk high (excl today)
+    const priorHigh = highs[t];   // real prior 42wk high (excl today) = the breakout / trigger price
     if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 42wk high
-    attackFired.push(t);   // a new 42wk high we don't hold → ATTACK; record its trigger time after the loop
+    attackFired.push(t);
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
-    const { shares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
-    if (!stop || shares < 1) continue;
-    if (gross + shares * price > grossCap) {                              // 2× gross leverage cap
-      actions.push({ type: 'SKIP_GROSS_CAP', ticker: t, grossX: +(gross / nav).toFixed(2) });
+    const { shares: fullShares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
+    if (!stop || fullShares < 1) continue;   // unchanged: no valid stop / sub-1-share full size → not a candidate
+    candidates.push({ t, price, priorHigh, stop, fullShares });
+  }
+  // CLOSEST-TO-TRIGGER first: the freshest breakout (price nearest its breakout line) gets scarce
+  // capital first. When capital is plentiful every candidate buys full-size regardless of order.
+  candidates.sort((a, b) => Math.abs(a.price - a.priorHigh) / a.priorHigh - Math.abs(b.price - b.priorHigh) / b.priorHigh);
+  // SMA_BUFFER: a new entry must leave at least this much room under the 2× cap so buying power is
+  // never driven to zero (Scott 2026-06-22 — "keep ≥$500 SMA available"). Anchored to the engine's
+  // own room (grossCap − gross), computed from live positions + live NAV, because the broker's stored
+  // SMA/buyingPower fields are unreliable here. MIN_ENTRY_FRACTION: don't deploy a freed-capital sliver
+  // — take ≥ half a full position or leave the name in the pound for a later tick (no dust trades).
+  const SMA_BUFFER = 500;
+  const MIN_ENTRY_FRACTION = 0.5;
+  for (const c of candidates) {
+    const room = grossCap - gross - SMA_BUFFER;                          // 2× firm, less the $500 cushion
+    const shares = Math.min(c.fullShares, room > 0 ? Math.floor(room / c.price) : 0);   // RESIZE: only ever shrink to fit, never grow
+    if (shares < 1 || shares < Math.ceil(c.fullShares * MIN_ENTRY_FRACTION)) {          // too little room for a meaningful position → wait
+      actions.push({ type: 'SKIP_GROSS_CAP', ticker: c.t, grossX: +(gross / nav).toFixed(2) });
       continue;
     }
-    gross += shares * price;   // reserve the exposure so the cap holds across this tick's entries
+    const resized = shares < c.fullShares;                              // true ONLY in the freed-capital / tight-cap case
+    gross += shares * c.price;   // reserve the exposure so the cap holds across this tick's entries
 
     if (cfg.mode === 'paper') {
       await db.collection(POS).insertOne({
-        ticker: t, direction: 'LONG', entryPrice: price, avgCost: price, totalShares: shares, shares,
-        stop, status: 'ACTIVE', mode: 'paper', source: 'TREE_42WH', entryDate: new Date().toISOString().slice(0, 10), createdAt: new Date(),
+        ticker: c.t, direction: 'LONG', entryPrice: c.price, avgCost: c.price, totalShares: shares, shares,
+        stop: c.stop, status: 'ACTIVE', mode: 'paper', source: 'TREE_42WH', entryDate: new Date().toISOString().slice(0, 10), createdAt: new Date(),
       });
-      actions.push({ type: 'PAPER_ENTRY', ticker: t, shares, price, stop });
+      actions.push({ type: 'PAPER_ENTRY', ticker: c.t, shares, price: c.price, stop: c.stop, resized });
     } else if (cfg.mode === 'live') {
       // Bridge BUY_ENTRY places the market buy AND the protective stop in one command (Ambush shape).
       // Requires the bridge running + draining the outbox, and the Ambush engine OFF (no reconcile contention).
-      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: t, shares, price, direction: 'LONG', stopPrice: stop, source: 'TREE_42WH' });
-      actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: t, shares, price, stop });
+      await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: c.t, shares, price: c.price, direction: 'LONG', stopPrice: c.stop, source: 'TREE_42WH' });
+      actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: c.t, shares, price: c.price, stop: c.stop, resized });
     }
   }
 

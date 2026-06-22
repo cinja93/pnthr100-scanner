@@ -572,13 +572,16 @@ export async function runPnthrTreeTick(db) {
   // within the propagation window as already held, and reserve its exposure so the 2× gross
   // cap can't be breached by entries the snapshot hasn't shown yet. (Live only; paper books
   // its entries straight into POS, already counted in `held` above — the outbox is empty.)
+  // Time-bounded so a command stuck PENDING/EXECUTING (e.g. the bridge died mid-flight and
+  // the restarted bridge only resumes PENDING, leaving an EXECUTING orphan) can NEVER block a
+  // ticker forever — anything older than the window is stale, not in flight. FAILED is excluded
+  // so a genuinely failed entry stays retryable.
   const ENTRY_INFLIGHT_MS = 5 * 60 * 1000;   // fill → snapshot propagation window
+  const inflightCutoff = new Date(Date.now() - ENTRY_INFLIGHT_MS);
   for (const c of await db.collection('pnthr_ambush_outbox').find({
     command: 'BUY_ENTRY',
-    $or: [
-      { status: { $in: ['PENDING', 'EXECUTING'] } },
-      { status: 'DONE', createdAt: { $gte: new Date(Date.now() - ENTRY_INFLIGHT_MS) } },
-    ],
+    status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
+    createdAt: { $gte: inflightCutoff },
   }).toArray()) {
     const t = (c.request?.ticker || '').toUpperCase();
     if (t && !held.has(t)) { held.add(t); gross += (+c.request?.shares || 0) * (+c.request?.price || 0); }
@@ -697,10 +700,8 @@ export async function runPnthrTreeTick(db) {
     const pendingStop = {};
     for (const c of await db.collection('pnthr_ambush_outbox').find({
       command: 'MODIFY_STOP',
-      $or: [
-        { status: { $in: ['PENDING', 'EXECUTING'] } },
-        { status: 'DONE', createdAt: { $gte: new Date(Date.now() - ENTRY_INFLIGHT_MS) } },
-      ],
+      status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
+      createdAt: { $gte: inflightCutoff },   // same time bound: a stuck command can't freeze a ticker's trailing
     }).toArray()) {
       const t = (c.request?.ticker || '').toUpperCase();
       if (t) pendingStop[t] = Math.max(pendingStop[t] || 0, +c.request?.newStopPrice || 0);

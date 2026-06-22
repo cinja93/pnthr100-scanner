@@ -564,6 +564,26 @@ export async function runPnthrTreeTick(db) {
   }
   const grossCap = MAX_GROSS_X * nav;
 
+  // ── DOUBLE-ACTION GUARD: in-flight BUY_ENTRY dedup (2026-06-22 AMD incident) ──────
+  // The IBKR snapshot's `held` set lags a fill by up to one 60s sync (worse right after
+  // a bridge reconnect, when TWS confirmations arrive late). Without this, a second tick
+  // saw AMD still "not held" and enqueued a SECOND BUY_ENTRY → 2 lots (32sh), one stop,
+  // 16sh naked. Treat any name whose entry is still in flight (PENDING/EXECUTING) or filled
+  // within the propagation window as already held, and reserve its exposure so the 2× gross
+  // cap can't be breached by entries the snapshot hasn't shown yet. (Live only; paper books
+  // its entries straight into POS, already counted in `held` above — the outbox is empty.)
+  const ENTRY_INFLIGHT_MS = 5 * 60 * 1000;   // fill → snapshot propagation window
+  for (const c of await db.collection('pnthr_ambush_outbox').find({
+    command: 'BUY_ENTRY',
+    $or: [
+      { status: { $in: ['PENDING', 'EXECUTING'] } },
+      { status: 'DONE', createdAt: { $gte: new Date(Date.now() - ENTRY_INFLIGHT_MS) } },
+    ],
+  }).toArray()) {
+    const t = (c.request?.ticker || '').toUpperCase();
+    if (t && !held.has(t)) { held.add(t); gross += (+c.request?.shares || 0) * (+c.request?.price || 0); }
+  }
+
   // ── ENTRY SAFETY GATE (2026-06-20 audit) — only OPEN new positions when it's safe: ──
   //   (a) inside the 9:30–16:00 ET cash session, computed in ET so it is correct no matter
   //       the host timezone (the cron window is a backstop, not the gate); and
@@ -663,6 +683,28 @@ export async function runPnthrTreeTick(db) {
   if (cfg.mode === 'live') {
     const liveLongs = (snap.positions || []).filter(p => { const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares; return AI_META[t] && sh > 0 && !excl.has(t); });
     const greenHour = await fetchGreenHourMap([...new Set(liveLongs.map(p => (p.ticker || p.symbol || '').toUpperCase()))]).catch(() => ({}));
+    // ── DOUBLE-ACTION GUARD: in-flight MODIFY_STOP dedup (2026-06-22 STX/ALAB incident) ──
+    // The bridge places a stop as "cancel-all then place". When TWS confirms the place LATE
+    // (post-reconnect congestion) the bridge reports FAILED though the stop rests, and `cur`
+    // below (read from the lagging snapshot) still shows the OLD low level — so the next tick
+    // re-enqueued the same raise and the bridge stacked another resting stop (STX = ~8 copies
+    // @ $1063.45 against 8 shares → over-sell-flip risk). Skip enqueuing when an equal-or-higher
+    // raise for this name is already PENDING/EXECUTING; once it clears and the snapshot reflects
+    // it, `cur` rises and the (target > cur) test naturally stops re-enqueuing.
+    // Cover PENDING/EXECUTING AND recently-DONE raises: a late-confirmed place is marked DONE,
+    // but `cur` (from the lagging snapshot) can still show the old level for up to one sync — so
+    // without the recent-DONE window a re-enqueue would still slip through and stack a duplicate.
+    const pendingStop = {};
+    for (const c of await db.collection('pnthr_ambush_outbox').find({
+      command: 'MODIFY_STOP',
+      $or: [
+        { status: { $in: ['PENDING', 'EXECUTING'] } },
+        { status: 'DONE', createdAt: { $gte: new Date(Date.now() - ENTRY_INFLIGHT_MS) } },
+      ],
+    }).toArray()) {
+      const t = (c.request?.ticker || '').toUpperCase();
+      if (t) pendingStop[t] = Math.max(pendingStop[t] || 0, +c.request?.newStopPrice || 0);
+    }
     for (const p of (snap.positions || [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
@@ -674,6 +716,10 @@ export async function runPnthrTreeTick(db) {
       const target = Math.max(lowStop, beStop); if (!target) continue;   // broker-resting stops are inherently forward-only
       const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
       if (target > cur + 0.01) {
+        if ((pendingStop[t] || 0) >= target - 0.01) {   // an equal-or-higher raise is already in flight → don't stack
+          actions.push({ type: 'STOP_INFLIGHT_SKIP', ticker: t, queued: pendingStop[t], target });
+          continue;
+        }
         const beSnap = beStop && target === beStop && beStop > lowStop;
         await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: target, shares: sh, reason: beSnap ? 'TREE_BE_SNAP' : 'TREE_TRAIL' });
         actions.push({ type: beSnap ? 'LIVE_BE_SNAP' : 'LIVE_TRAIL', ticker: t, newStop: target, from: cur });

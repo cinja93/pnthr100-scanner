@@ -6477,6 +6477,15 @@ let dailyOrdersRunning = false;
 // the host TZ; the engine ALSO gates entries to 9:30-16:00 ET + a fresh confirmed snapshot internally.
 let pnthrTreeTickRunning = false;
 cron.schedule('*/2 9-16 * * 1-5', async () => {
+  // WRITER GATE (2026-06-22): only the always-on Render writer ticks the LIVE engine.
+  // This cron was previously UN-gated, so any second process running the same code — the
+  // local `npm run dev` server, which registers every cron — co-ticked every 2 min and
+  // DOUBLE-ENQUEUED real orders into the shared outbox. That two-writer race produced the
+  // AMD double-entry (32sh held against one 16sh stop) and the STX/ALAB stacked-stop
+  // incident. AMBUSH_CRON_IS_WRITER (declared further below) is the same gate the Ambush
+  // and Elite loops use; only Render sets RECONCILIATION_CRON_ENABLED=true, so the local
+  // dev/API server no longer touches the live book. Manual ticks via /api still work.
+  if (!AMBUSH_CRON_IS_WRITER) return;
   if (pnthrTreeTickRunning) return;
   pnthrTreeTickRunning = true;
   try {

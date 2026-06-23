@@ -145,12 +145,6 @@ export default function FundComparisonPage() {
         {data?.note || 'Three PNTHR strategies, one common baseline.'} {last && <span style={{ color: '#666' }}>· refreshed {last.toLocaleTimeString()} · updates every 10s</span>}
       </div>
 
-      {/* MANDATORY disclaimer banner */}
-      <div style={{ background: '#1a1206', border: `1px solid ${AMBER}`, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 11.5, color: '#e8c88a', lineHeight: 1.5 }}>
-        <b style={{ color: AMBER }}>HYPOTHETICAL / SIMULATED PERFORMANCE.</b> {data?.disclaimer ||
-          'Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.'}
-      </div>
-
       {error && <div style={{ color: RED, marginBottom: 12 }}>Error: {error}</div>}
       {!data && !error && <div style={{ color: '#666', padding: '40px 0' }}>Loading…</div>}
 
@@ -189,6 +183,12 @@ export default function FundComparisonPage() {
           </div>
         </>
       )}
+
+      {/* MANDATORY disclaimer banner — pinned to the BOTTOM of the page (always rendered) */}
+      <div style={{ background: '#1a1206', border: `1px solid ${AMBER}`, borderRadius: 8, padding: '10px 14px', marginTop: 16, fontSize: 11.5, color: '#e8c88a', lineHeight: 1.5 }}>
+        <b style={{ color: AMBER }}>HYPOTHETICAL / SIMULATED PERFORMANCE.</b> {data?.disclaimer ||
+          'Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.'}
+      </div>
     </div>
   );
 }

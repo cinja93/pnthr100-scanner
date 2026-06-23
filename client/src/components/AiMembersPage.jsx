@@ -15,6 +15,18 @@ const TABS = [
   { key: 'search',    label: 'Search' },
 ];
 
+// Current Positions columns — sortable. `cls` reuses the body column widths; `type`
+// drives string vs numeric sort. Numeric columns default to descending (biggest first).
+const POS_COLS = [
+  { key: 'ticker',        label: 'Ticker',      type: 'str', cls: 'ticker' },
+  { key: 'companyName',   label: 'Company',     type: 'str', cls: 'company' },
+  { key: 'sector',        label: 'Sector',      type: 'str', cls: 'sectorCell' },
+  { key: 'shares',        label: 'Shares',      type: 'num', cls: 'numCell' },
+  { key: 'marketPrice',   label: 'Price',       type: 'num', cls: 'numCell' },
+  { key: 'marketValue',   label: 'Mkt Value',   type: 'num', cls: 'numCell' },
+  { key: 'unrealizedPnl', label: 'Unreal. P&L', type: 'num', cls: 'numCell' },
+];
+
 const fmtMoney = (n) => (n == null ? '—' : (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString());
 const fmtPx    = (n) => (n == null ? '—' : '$' + Number(n).toFixed(2));
 const fmtShares = (n) => (n == null ? '—' : Math.round(n).toLocaleString());
@@ -33,7 +45,8 @@ export default function AiMembersPage({ isAdmin = true }) {
   const [tab, setTab]         = useState('positions');
   const [query, setQuery]     = useState('');
   const [selected, setSelected]       = useState(null);   // member -> summary modal
-  const [chartTicker, setChartTicker] = useState(null);   // -> AiTickerChartModal
+  const [chartGroup, setChartGroup]   = useState(null);   // { tickers, index } -> scrollable AiTickerChartModal group
+  const [posSort, setPosSort]         = useState({ key: 'marketValue', dir: 'desc' });   // Current Positions sort
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -77,6 +90,42 @@ export default function AiMembersPage({ isAdmin = true }) {
       })
       .slice(0, 60);
   }, [members, query]);
+
+  // Current Positions, sorted by the active column.
+  const heldSorted = useMemo(() => {
+    const { key, dir } = posSort;
+    const mult = dir === 'asc' ? 1 : -1;
+    const col = POS_COLS.find(c => c.key === key) || POS_COLS[5];
+    return [...held].sort((a, b) => {
+      if (col.type === 'str') return String(a[key] || '').localeCompare(String(b[key] || '')) * mult;
+      const av = a[key] == null ? -Infinity : a[key];
+      const bv = b[key] == null ? -Infinity : b[key];
+      return (av - bv) * mult;
+    });
+  }, [held, posSort]);
+
+  function handleSort(key) {
+    setPosSort(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: (POS_COLS.find(c => c.key === key)?.type === 'str') ? 'asc' : 'desc' });
+  }
+
+  // Ordered tickers of whatever the active tab is showing — so the chart group
+  // scrolls through exactly what you're looking at (in its current order).
+  function viewTickers() {
+    if (tab === 'positions') return heldSorted.map(m => m.ticker);
+    if (tab === 'alpha')     return alpha.map(m => m.ticker);
+    if (tab === 'sector')    return [...sectors].sort((a, b) => a.id - b.id).flatMap(s => (bySector[s.id] || []).map(m => m.ticker));
+    if (tab === 'search')    return results.map(m => m.ticker);
+    return [];
+  }
+
+  function openChart(ticker) {
+    const list = viewTickers();
+    const idx = Math.max(0, list.indexOf(ticker));
+    setChartGroup({ tickers: list.length ? list : [ticker], index: idx });
+    setSelected(null);   // close the summary so the chart's prev/next isn't confusing
+  }
 
   if (!isAdmin) {
     return <div className={styles.page}><div className={styles.empty}>This page is admin-only.</div></div>;
@@ -140,15 +189,19 @@ export default function AiMembersPage({ isAdmin = true }) {
             ) : (
               <div className={styles.table}>
                 <div className={`${styles.row} ${styles.headRow}`}>
-                  <span className={styles.ticker}>Ticker</span>
-                  <span className={styles.company}>Company</span>
-                  <span className={styles.sectorCell}>Sector</span>
-                  <span className={styles.numCell}>Shares</span>
-                  <span className={styles.numCell}>Price</span>
-                  <span className={styles.numCell}>Mkt Value</span>
-                  <span className={styles.numCell}>Unreal. P&amp;L</span>
+                  {POS_COLS.map(col => (
+                    <button
+                      key={col.key}
+                      className={`${styles[col.cls]} ${styles.sortHead} ${col.type === 'num' ? styles.sortHeadNum : ''} ${posSort.key === col.key ? styles.sortHeadActive : ''}`}
+                      onClick={() => handleSort(col.key)}
+                      title={`Sort by ${col.label}`}
+                    >
+                      {col.label}
+                      {posSort.key === col.key && <span className={styles.sortArrow}>{posSort.dir === 'asc' ? '▲' : '▼'}</span>}
+                    </button>
+                  ))}
                 </div>
-                {held.map(m => <Row key={m.ticker} m={m} showPosition />)}
+                {heldSorted.map(m => <Row key={m.ticker} m={m} showPosition />)}
               </div>
             )
           )}
@@ -235,16 +288,20 @@ export default function AiMembersPage({ isAdmin = true }) {
             <div className={styles.thesisLabel}>PNTHR Thesis</div>
             <div className={styles.thesis}>{selected.thesis || 'No thesis on file for this member.'}</div>
 
-            <button className={styles.viewChartBtn} onClick={() => setChartTicker(selected.ticker)}>
+            <button className={styles.viewChartBtn} onClick={() => openChart(selected.ticker)}>
               View Chart →
             </button>
           </div>
         </div>
       )}
 
-      {/* CHART */}
-      {chartTicker && (
-        <AiTickerChartModal ticker={chartTicker} onClose={() => setChartTicker(null)} />
+      {/* CHART — scrollable group: prev/next walks the current view's tickers */}
+      {chartGroup && (
+        <AiTickerChartModal
+          tickers={chartGroup.tickers}
+          initialIndex={chartGroup.index}
+          onClose={() => setChartGroup(null)}
+        />
       )}
     </div>
   );

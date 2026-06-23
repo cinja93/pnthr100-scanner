@@ -44,10 +44,11 @@ export default function AiMembersPage({ isAdmin = true }) {
   const [error, setError]     = useState(null);
   const [tab, setTab]         = useState('positions');
   const [query, setQuery]     = useState('');
-  const [selected, setSelected]       = useState(null);   // member -> summary modal
+  const [summaryGroup, setSummaryGroup] = useState(null); // { members, index } -> scrollable summary/definition group
   const [chartGroup, setChartGroup]   = useState(null);   // { tickers, index } -> scrollable AiTickerChartModal group
   const [posSort, setPosSort]         = useState({ key: 'marketValue', dir: 'desc' });   // Current Positions sort
   const searchRef = useRef(null);
+  const cardRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -110,22 +111,52 @@ export default function AiMembersPage({ isAdmin = true }) {
       : { key, dir: (POS_COLS.find(c => c.key === key)?.type === 'str') ? 'asc' : 'desc' });
   }
 
-  // Ordered tickers of whatever the active tab is showing — so the chart group
-  // scrolls through exactly what you're looking at (in its current order).
-  function viewTickers() {
-    if (tab === 'positions') return heldSorted.map(m => m.ticker);
-    if (tab === 'alpha')     return alpha.map(m => m.ticker);
-    if (tab === 'sector')    return [...sectors].sort((a, b) => a.id - b.id).flatMap(s => (bySector[s.id] || []).map(m => m.ticker));
-    if (tab === 'search')    return results.map(m => m.ticker);
+  // Ordered members of whatever the active tab is showing — so BOTH the summary and
+  // the chart scroll through exactly what you're looking at, in its current order.
+  function viewMembers() {
+    if (tab === 'positions') return heldSorted;
+    if (tab === 'alpha')     return alpha;
+    if (tab === 'sector')    return [...sectors].sort((a, b) => a.id - b.id).flatMap(s => bySector[s.id] || []);
+    if (tab === 'search')    return results;
     return [];
   }
 
+  function openSummary(member) {
+    const list = viewMembers();
+    const idx = Math.max(0, list.findIndex(m => m.ticker === member.ticker));
+    setSummaryGroup({ members: list.length ? list : [member], index: idx });
+  }
+
+  // Walk the summary backward/forward through the current view (wraps around the ends).
+  function stepSummary(delta) {
+    setSummaryGroup(g => {
+      if (!g) return g;
+      const n = g.members.length;
+      return { ...g, index: (g.index + delta + n) % n };
+    });
+  }
+
   function openChart(ticker) {
-    const list = viewTickers();
+    const list = viewMembers().map(m => m.ticker);
     const idx = Math.max(0, list.indexOf(ticker));
     setChartGroup({ tickers: list.length ? list : [ticker], index: idx });
-    setSelected(null);   // close the summary so the chart's prev/next isn't confusing
+    setSummaryGroup(null);   // close the summary so the chart's prev/next isn't confusing
   }
+
+  // Arrow keys page the open summary; Esc closes it. (Inactive while the chart modal is up.)
+  useEffect(() => {
+    if (!summaryGroup) return;
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); stepSummary(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); stepSummary(1); }
+      else if (e.key === 'Escape') setSummaryGroup(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [summaryGroup]);
+
+  // Scroll the summary card back to the top when paging to a new member.
+  useEffect(() => { if (cardRef.current) cardRef.current.scrollTop = 0; }, [summaryGroup?.index]);
 
   if (!isAdmin) {
     return <div className={styles.page}><div className={styles.empty}>This page is admin-only.</div></div>;
@@ -133,10 +164,11 @@ export default function AiMembersPage({ isAdmin = true }) {
 
   const heldCount = data?.heldCount ?? held.length;
   const asOf = data?.asOf ? new Date(data.asOf) : null;
+  const current = summaryGroup ? summaryGroup.members[summaryGroup.index] : null;
 
   function Row({ m, showPosition }) {
     return (
-      <button className={styles.row} onClick={() => setSelected(m)}>
+      <button className={styles.row} onClick={() => openSummary(m)}>
         <span className={styles.ticker}>{m.ticker}</span>
         <span className={styles.company}>{m.companyName}</span>
         <span className={styles.sectorCell}>{m.sector}</span>
@@ -247,7 +279,7 @@ export default function AiMembersPage({ isAdmin = true }) {
                   placeholder="Type a ticker or company name…"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && results.length) setSelected(results[0]); }}
+                  onKeyDown={e => { if (e.key === 'Enter' && results.length) openSummary(results[0]); }}
                 />
                 {query && <button className={styles.searchClear} onClick={() => setQuery('')}>×</button>}
               </div>
@@ -263,32 +295,41 @@ export default function AiMembersPage({ isAdmin = true }) {
         </div>
       )}
 
-      {/* SUMMARY (definition + thesis) */}
-      {selected && (
-        <div className={styles.overlay} onClick={() => setSelected(null)}>
-          <div className={styles.summaryCard} onClick={e => e.stopPropagation()}>
-            <button className={styles.summaryClose} onClick={() => setSelected(null)} aria-label="Close">×</button>
-            <div className={styles.summaryHead}>
-              <span className={styles.summaryTicker}>{selected.ticker}</span>
-              {selected.held && <span className={styles.heldBadge}>HELD</span>}
-            </div>
-            <div className={styles.summaryCompany}>{selected.companyName}</div>
-            <div className={styles.summarySector}>{selected.sector}</div>
+      {/* SUMMARY (definition + thesis) — scrollable group, ← → pages between members */}
+      {current && (
+        <div className={styles.overlay} onClick={() => setSummaryGroup(null)}>
+          <div className={styles.summaryCard} ref={cardRef} onClick={e => e.stopPropagation()}>
+            <button className={styles.summaryClose} onClick={() => setSummaryGroup(null)} aria-label="Close">×</button>
 
-            {selected.held && (
+            {summaryGroup.members.length > 1 && (
+              <div className={styles.summaryNav}>
+                <button className={styles.navArrow} onClick={() => stepSummary(-1)} aria-label="Previous member">←</button>
+                <span className={styles.navCount}>{summaryGroup.index + 1} of {summaryGroup.members.length}</span>
+                <button className={styles.navArrow} onClick={() => stepSummary(1)} aria-label="Next member">→</button>
+              </div>
+            )}
+
+            <div className={styles.summaryHead}>
+              <span className={styles.summaryTicker}>{current.ticker}</span>
+              {current.held && <span className={styles.heldBadge}>HELD</span>}
+            </div>
+            <div className={styles.summaryCompany}>{current.companyName}</div>
+            <div className={styles.summarySector}>{current.sector}</div>
+
+            {current.held && (
               <div className={styles.summaryPosition}>
-                <span>{fmtShares(selected.shares)} sh</span>
-                <span>avg {fmtPx(selected.avgCost)}</span>
-                <span>last {fmtPx(selected.marketPrice)}</span>
-                <span>{fmtMoney(selected.marketValue)}</span>
-                <span className={selected.unrealizedPnl >= 0 ? styles.pnlPos : styles.pnlNeg}>{fmtMoney(selected.unrealizedPnl)}</span>
+                <span>{fmtShares(current.shares)} sh</span>
+                <span>avg {fmtPx(current.avgCost)}</span>
+                <span>last {fmtPx(current.marketPrice)}</span>
+                <span>{fmtMoney(current.marketValue)}</span>
+                <span className={current.unrealizedPnl >= 0 ? styles.pnlPos : styles.pnlNeg}>{fmtMoney(current.unrealizedPnl)}</span>
               </div>
             )}
 
             <div className={styles.thesisLabel}>PNTHR Thesis</div>
-            <div className={styles.thesis}>{selected.thesis || 'No thesis on file for this member.'}</div>
+            <div className={styles.thesis}>{current.thesis || 'No thesis on file for this member.'}</div>
 
-            <button className={styles.viewChartBtn} onClick={() => openChart(selected.ticker)}>
+            <button className={styles.viewChartBtn} onClick={() => openChart(current.ticker)}>
               View Chart →
             </button>
           </div>

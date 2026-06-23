@@ -144,6 +144,15 @@
   color: #6b7280; font-size: 26px; cursor: pointer; line-height: 1;
 }
 .summaryClose:hover { color: #e5e7eb; }
+.summaryNav { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.navArrow {
+  background: #1f2937; border: 1px solid #374151; color: #e5e7eb;
+  border-radius: 8px; width: 36px; height: 30px; font-size: 16px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.navArrow:hover { background: #fcf000; color: #111; border-color: #fcf000; }
+.navCount { color: #9ca3af; font-size: 12px; font-variant-numeric: tabular-nums; }
 .summaryHead { display: flex; align-items: center; gap: 12px; }
 .summaryTicker { font-size: 30px; font-weight: 800; color: #fcf000; letter-spacing: 0.5px; }
 .heldBadge {

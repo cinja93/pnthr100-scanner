@@ -42,10 +42,10 @@ import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks,
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
-import { getFundComparison } from './fundCompareService.js';
+import { getFundComparison, getFundComparisonForMember } from './fundCompareService.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
-import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks } from './treePaperBook.js';
+import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks, listPaperBooks } from './treePaperBook.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -2642,8 +2642,14 @@ app.post('/api/admin/ambush-paper/reset', authenticateJWT, requireAdmin, async (
 
 // ── 3-fund comparison (Tree LIVE vs Elite PAPER vs Ambush PAPER) — investor dashboard ──
 app.get('/api/fund-compare', authenticateJWT, async (req, res) => {
-  try { res.json(await getFundComparison()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  // Admin (Scott) → the HOUSE comparison (live Tree + house paper Elite/Ambush, real NAV).
+  // Any non-admin member (e.g. Brennan) → his OWN fully-isolated $50k paper comparison —
+  // owner-scoped books only, never the house account.
+  try {
+    if (req.user?.role === 'admin') { res.json(await getFundComparison()); return; }
+    const db = await connectToDatabase();
+    res.json(await getFundComparisonForMember(db, req.user.userId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/new-highs-lows', authenticateJWT, async (req, res) => {
   try {
@@ -6495,6 +6501,15 @@ cron.schedule('*/2 9-16 * * 1-5', async () => {
     // Member paper books (e.g. Brennan $50k) — same strategy, simulated, no IBKR.
     const pb = await runAllPaperBookTicks(db);
     if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));
+    // Member Elite + Ambush PAPER books — owner-scoped (pnthr_elite_*__<id> / pnthr_ambush_paper_*__<id>),
+    // sized to the member's own $50k, NEVER touch the house books or IBKR. Same 2-min cadence as Tree.
+    for (const bk of await listPaperBooks(db)) {
+      try {
+        await runEliteAiDryRun({ ownerId: bk.ownerId });
+        await manageEliteAiDryRun({ ownerId: bk.ownerId });
+        await runAmbushPaperTick({ ownerId: bk.ownerId });
+      } catch (e) { console.error('[Member paper engines] tick failed for', bk.ownerId, e.message); }
+    }
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
   finally { pnthrTreeTickRunning = false; }
 }, { timezone: 'America/New_York' });

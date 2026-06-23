@@ -44,14 +44,37 @@ async function getActualNav(db) {
   return actualNav;
 }
 
-export async function runEliteAiDryRun({ nav } = {}) {
+// Resolve the BOOK context (collections + NAV) for the house or a member.
+//  • HOUSE (no ownerId): the exact current behavior — shared `pnthr_elite_*`
+//    collections + house NAV from getActualNav (pnthr_ambush_config / admin profile).
+//  • MEMBER (ownerId): owner-scoped `pnthr_elite_*__<ownerId>` collections + the
+//    member's OWN mark-to-market NAV = base (profile.accountSize or $50k) + realized
+//    (sum of pnl over the member's TRADES) + unrealized (sum of livePnl over the
+//    member's ACTIVE/PARTIAL positions). The member path NEVER reads the house
+//    collections, the house NAV, or any other owner's collections.
+async function resolveBook(db, ownerId) {
+  if (!ownerId) return { COLL, TRADES, nav: await getActualNav(db) };
+  const memColl = `pnthr_elite_positions__${ownerId}`;
+  const memTrades = `pnthr_elite_trades__${ownerId}`;
+  let base = 50000;
+  try { const p = await getUserProfile(ownerId); if (p?.accountSize > 0) base = p.accountSize; } catch { /* default $50k */ }
+  const closed = await db.collection(memTrades).find({}, { projection: { pnl: 1 } }).toArray();
+  const realized = closed.reduce((s, t) => s + (+t.pnl || 0), 0);
+  const active = await db.collection(memColl).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }, { projection: { livePnl: 1 } }).toArray();
+  const unrealized = active.reduce((s, p) => s + (+p.livePnl || 0), 0);
+  return { COLL: memColl, TRADES: memTrades, nav: Math.round(base + realized + unrealized) };
+}
+
+export async function runEliteAiDryRun({ nav, ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return { error: 'NO_DB', created: [] };
+  const book = await resolveBook(db, ownerId);
+  const COLL = book.COLL, TRADES = book.TRADES;
 
   // Graduated sizing: paper book sized against the REAL account NAV (not a notional $100k)
   // → 50 / 75 / 100% at the $125K / $166K steps (getSizingMultiplier). At the current
   // sub-$125K NAV that's 50% → ~$150 risk/name. Keeps risk-per-trade / NAV constant.
-  const paperNav = nav || (await getActualNav(db));
+  const paperNav = nav || book.nav;
   const sizingMult = getSizingMultiplier(paperNav);
   const sizingPct = Math.round(sizingMult * 100);
 
@@ -150,11 +173,13 @@ export function verifyElitePosition(pos, nav = 100000) {
   return { rollup, checks, reasons };
 }
 
-export async function getElitePositions() {
+export async function getElitePositions({ ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return [];
+  const book = await resolveBook(db, ownerId);
+  const COLL = book.COLL;
   const positions = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).sort({ createdAt: -1 }).toArray();
-  const nav = await getActualNav(db);   // 10%-cap / risk checks against the REAL NAV
+  const nav = book.nav;   // 10%-cap / risk checks against the book NAV (house = REAL NAV, member = own MtM)
   return positions.map(p => ({ ...p, rec: verifyElitePosition(p, nav) }));
 }
 
@@ -184,9 +209,11 @@ async function fetchQuotes(tickers) {
 // Paper only — touches nothing but pnthr_elite_positions / pnthr_elite_trades.
 const RATCHET_AT = { 3: 0, 4: 1, 5: 2 }; // nextLot reached → stop anchored at LOT_OFFSETS[index]
 
-export async function manageEliteAiDryRun() {
+export async function manageEliteAiDryRun({ ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return { fills: 0, exits: 0, changed: false };
+  const book = await resolveBook(db, ownerId);
+  const COLL = book.COLL, TRADES = book.TRADES;
   const positions = await db.collection(COLL).find({ status: { $in: ['ACTIVE', 'PARTIAL'] } }).toArray();
   if (!positions.length) return { fills: 0, exits: 0, changed: false };
 
@@ -239,9 +266,11 @@ export async function manageEliteAiDryRun() {
   return { fills, exits, changed: fills > 0 || exits > 0, managed: positions.length };
 }
 
-export async function getEliteTrades(limit = 30) {
+export async function getEliteTrades(limit = 30, { ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return [];
+  const book = await resolveBook(db, ownerId);
+  const TRADES = book.TRADES;
   return db.collection(TRADES).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 

@@ -17,6 +17,17 @@ import { computeSide, computeTradeStats } from './irLiveService.js';
 import { getElitePositions } from './eliteAiEngine.js';
 import { getAmbushPaperPositions } from './ambushPaperEngine.js';
 import { getPnthrTreeState } from './pnthrTreeEngine.js';
+import { getPaperBookState } from './treePaperBook.js';
+
+// Position → slim card (module-level so both the house and per-member builders share it).
+// Direction: explicit field when set, else infer from share sign (Tree is long-only, stores none).
+function slimPos(p) {
+  const sh = +(p.totalShares ?? p.shares ?? 0);
+  const direction = (String(p.direction || '').toUpperCase() === 'SHORT' || sh < 0) ? 'SHORT' : 'LONG';
+  return { ticker: p.ticker, direction, avgCost: +(+(p.avgCost ?? p.entryPrice ?? 0)).toFixed(2),
+    last: +(+(p.currentPrice ?? p.last ?? p.avgCost ?? 0)).toFixed(2), shares: Math.abs(sh),
+    pnl: Math.round(+(p.livePnl ?? p.pnl ?? 0)), stop: +(+(p.stop ?? p.stopPrice ?? 0)).toFixed(2) };
+}
 
 const CFG = 'pnthr_fund_compare_config';
 const DAILY = 'pnthr_fund_compare_daily';
@@ -183,5 +194,125 @@ export async function getFundComparison() {
     funds,
   };
   _cache.at = Date.now(); _cache.data = result;
+  return result;
+}
+
+// ── PER-MEMBER comparison — all 3 strategies PAPER, owner-scoped, walled off ──
+// Brennan (and any non-admin member) gets a fully INDEPENDENT comparison: his own
+// $50k baseline, his own owner-suffixed paper books for ALL THREE strategies, his
+// own config/daily-series collections. It NEVER calls getPnthrTreeState (the live
+// house book), NEVER reads the house NAV, and NEVER touches the singleton
+// pnthr_fund_compare_* collections. The only shared inputs are public strategy
+// signals + live market prices — never the house account's positions or NAV.
+const _memCache = new Map();   // ownerId -> { at, data }
+export async function getFundComparisonForMember(db, ownerId) {
+  if (!ownerId) return { error: 'NO_OWNER' };
+  const oid = String(ownerId);
+  const hit = _memCache.get(oid);
+  if (hit && Date.now() - hit.at < 8000) return hit.data;
+  if (!db) db = await connectToDatabase();
+  if (!db) return { error: 'NO_DB' };
+  const today = todayET();
+  const started = today >= START_DATE;
+
+  // Base capital = the MEMBER's own account size ($50k default) — never the house NAV.
+  let base = 50000;
+  try { const p = await getUserProfile(oid); if (p?.accountSize > 0) base = p.accountSize; } catch { /* default $50k */ }
+
+  // Owner-scoped collections (every read/write below is walled to this member).
+  const CFG_M = `${CFG}__${oid}`, DAILY_M = `${DAILY}__${oid}`;
+  const treeTradesC = `pnthr_tree_trades__${oid}`, eliteTradesC = `pnthr_elite_trades__${oid}`, ambTradesC = `pnthr_ambush_paper_trades__${oid}`;
+
+  // Tree — the member's PAPER book (NOT getPnthrTreeState — that's the live house book).
+  let tree = { nav: base, positions: [], treePnl: 0, totalRisk: { actual: 0 } };
+  try { tree = await getPaperBookState(db, oid); } catch { /* default */ }
+  const treeNav = tree?.nav || base;
+  const treePos = tree?.positions || [];
+  const treeOpenPnl = tree?.treePnl ?? 0;
+  const treeRisk = tree?.totalRisk?.actual ?? 0;
+
+  // Elite — the member's PAPER book (owner-scoped via ownerId).
+  const elitePos = await getElitePositions({ ownerId: oid }).catch(() => []);
+  const eliteClosed = await db.collection(eliteTradesC).find({}).toArray();
+  const eliteOpenPnl = elitePos.reduce((s, p) => s + (+p.livePnl || 0), 0);
+  const eliteRealized = eliteClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
+  const eliteTotalPnl = eliteOpenPnl + eliteRealized;
+  const eliteRisk = elitePos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice || 0)) * (+p.totalShares || 0)), 0);
+
+  // Ambush — the member's PAPER book (owner-scoped via ownerId).
+  const ambPos = await getAmbushPaperPositions({ ownerId: oid }).catch(() => []);
+  const ambClosed = await db.collection(ambTradesC).find({}).toArray();
+  const ambOpenPnl = ambPos.reduce((s, p) => s + (+p.livePnl || 0), 0);
+  const ambRealized = ambClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
+  const ambTotalPnl = ambOpenPnl + ambRealized;
+  const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
+
+  // Common baseline = the member's $50k, locked on/after Monday in his OWN config doc.
+  let cfg = await db.collection(CFG_M).findOne({ key: 'fund_compare' });
+  if (started && (!cfg || !cfg.locked)) {
+    cfg = { key: 'fund_compare', locked: true, startDate: today, baselineNav: base,
+      treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, ambushBaselinePnl: ambTotalPnl, lockedAt: new Date() };
+    await db.collection(CFG_M).updateOne({ key: 'fund_compare' }, { $set: cfg }, { upsert: true });
+  }
+  const baselineNav = cfg?.baselineNav || base;
+
+  const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : baselineNav;
+  const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
+  const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
+  const pct = (eq) => baselineNav > 0 ? +(((eq / baselineNav) - 1) * 100).toFixed(2) : 0;
+
+  const FEE_MGMT = 0.02, FEE_PERF = 0.30;
+  const elapsedDays = (started && cfg?.startDate) ? Math.max(0, (new Date(today) - new Date(cfg.startDate)) / 86400000) : 0;
+  const pctNet = (eq) => {
+    if (baselineNav <= 0) return 0;
+    const grossPnl = eq - baselineNav;
+    const mgmt = baselineNav * FEE_MGMT * (elapsedDays / 365);
+    const afterMgmt = grossPnl - mgmt;
+    const perf = afterMgmt > 0 ? afterMgmt * FEE_PERF : 0;
+    return +(((grossPnl - mgmt - perf) / baselineNav) * 100).toFixed(2);
+  };
+
+  if (started) {
+    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]]) {
+      await db.collection(DAILY_M).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
+    }
+  }
+  const series = async (fund) => (await db.collection(DAILY_M).find({ fund }, { projection: { _id: 0, date: 1, equity: 1 } }).sort({ date: 1 }).toArray());
+  const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
+  const treeTrades = recent(await db.collection(treeTradesC).find({}).toArray());
+  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
+
+  // ALL THREE are PAPER for a member (he has no live account).
+  const funds = [
+    { id: 'tree', name: 'PNTHR Tree', strategy: '42-week-high momentum (daily)', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(treeEquity), returnPct: pct(treeEquity), returnPctNet: pctNet(treeEquity),
+      pnlSinceStart: Math.round(treeEquity - baselineNav), openPnl: Math.round(treeOpenPnl),
+      riskAtStop: Math.round(treeRisk), openCount: treePos.length, positions: treePos.map(slimPos),
+      tradeStats: computeTradeStats(treeTrades, baselineNav, 1), avgWinnerHold: avgWinnerHold(treeTrades),
+      risk: riskMetrics(await series('tree')) },
+    { id: 'elite', name: 'Elite AI', strategy: 'AI-300 Elite / MCE (daily breakout, long-only)', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(eliteEquity), returnPct: pct(eliteEquity), returnPctNet: pctNet(eliteEquity),
+      pnlSinceStart: Math.round(eliteEquity - baselineNav), openPnl: Math.round(eliteOpenPnl),
+      riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.map(slimPos),
+      tradeStats: computeTradeStats(eliteTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(eliteTr),
+      risk: riskMetrics(await series('elite')) },
+    { id: 'ambush', name: 'Ambush V7.6', strategy: 'AI-300 intraday breakout + pyramid (long/short)', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity), returnPctNet: pctNet(ambushEquity),
+      pnlSinceStart: Math.round(ambushEquity - baselineNav), openPnl: Math.round(ambOpenPnl),
+      riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slimPos),
+      tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
+      risk: riskMetrics(await series('ambush')) },
+  ];
+
+  const result = {
+    started, startDate: START_DATE, baselineNav: Math.round(baselineNav), asOf: new Date().toISOString(),
+    member: true, ownerId: oid,
+    fees: { mgmtPct: FEE_MGMT * 100, perfPct: FEE_PERF * 100, basis: '2% annual management + 30% performance (Filet tier), high-water mark — net = what an investor keeps' },
+    note: started ? `Common start ${START_DATE} at $${Math.round(baselineNav).toLocaleString()} NAV (paper).`
+                   : `Comparison begins ${START_DATE}. Showing live previews.`,
+    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. All three strategies shown here — PNTHR Tree, Elite AI, and Ambush V7.6 — are PAPER-TRADED simulations seeded from a $50,000 starting balance; none reflect real trading and none are a track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
+    funds,
+  };
+  _memCache.set(oid, { at: Date.now(), data: result });
   return result;
 }

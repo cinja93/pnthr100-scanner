@@ -147,14 +147,41 @@ async function getActualNav(db) {
   return nav;
 }
 
+// ── Book resolution: HOUSE (no ownerId) vs MEMBER (owner-scoped, walled off) ──
+// HOUSE: the production book — house collections + house NAV. EXACT current behavior.
+// MEMBER: owner-scoped `__${ownerId}` collections + the member's OWN mark-to-market NAV
+//   (base + realized + unrealized). NEVER reads the house collections, the house NAV
+//   (pnthr_ambush_config), or any other owner's book — only `__${ownerId}` + profile.accountSize.
+//   Mirrors markToMarketNav in server/treePaperBook.js.
+async function resolveBook(db, ownerId) {
+  if (!ownerId) {
+    return { COLL, TRADES, CFG, nav: await getActualNav(db) };
+  }
+  const mColl   = `pnthr_ambush_paper_positions__${ownerId}`;
+  const mTrades = `pnthr_ambush_paper_trades__${ownerId}`;
+  const mCfg    = `pnthr_ambush_paper_config__${ownerId}`;
+  let base = 50000;
+  try { const p = await getUserProfile(ownerId); if (p?.accountSize > 0) base = p.accountSize; } catch { /* default */ }
+  let realized = 0, unrealized = 0;
+  try {
+    const trades = await db.collection(mTrades).find({}).toArray();
+    realized = trades.reduce((s, t) => s + (+t.pnl || 0), 0);
+    const active = await db.collection(mColl).find({ status: 'ACTIVE' }).toArray();
+    unrealized = active.reduce((s, a) => s + (+a.livePnl || 0), 0);
+  } catch { /* leave 0 */ }
+  const nav = Math.round(base + realized + unrealized);
+  return { COLL: mColl, TRADES: mTrades, CFG: mCfg, nav };
+}
+
 // ── Main paper tick: manage held → re-enter STALKING → open new (single pass) ─
 // opts.probe = run the full decision path but write NOTHING (read-only diagnostic);
 //   opts.asOf ('YYYY-MM-DD') + opts.nowMin (ET minutes since midnight) replay a past
 //   session for verification. The live loop calls runAmbushPaperTick() with no opts.
 export async function runAmbushPaperTick(opts = {}) {
-  const { probe = false, asOf = null, nowMin = null } = opts;
+  const { ownerId = null, probe = false, asOf = null, nowMin = null } = opts;
   const db = await connectToDatabase();
   if (!db) return { error: 'NO_DB' };
+  const { COLL, TRADES, nav } = await resolveBook(db, ownerId);
   const live = etNow();
   const dow = live.dow;
   const totalMinutes = nowMin != null ? nowMin : live.totalMinutes;
@@ -170,7 +197,6 @@ export async function runAmbushPaperTick(opts = {}) {
   const inEntryBlackout = (totalMinutes >= 565 && totalMinutes <= 575) || (totalMinutes >= 960 && totalMinutes <= 965);
   const today = asOf || todayET();
 
-  const nav = await getActualNav(db);
   const sizeMult = getSizingMultiplier(nav);
   const ctx = await loadSignalContext(db);
 
@@ -376,17 +402,18 @@ export function verifyAmbushPaperPosition(pos, nav = 100000) {
   return { rollup, checks, reasons };
 }
 
-export async function getAmbushPaperPositions() {
+export async function getAmbushPaperPositions({ ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return [];
-  const nav = await getActualNav(db);
+  const { COLL, nav } = await resolveBook(db, ownerId);
   const positions = await db.collection(COLL).find({ status: 'ACTIVE' }).sort({ createdAt: -1 }).toArray();
   return positions.map(p => ({ ...p, rec: verifyAmbushPaperPosition(p, nav) }));
 }
 
-export async function getAmbushPaperTrades(limit = 30) {
+export async function getAmbushPaperTrades(limit = 30, { ownerId } = {}) {
   const db = await connectToDatabase();
   if (!db) return [];
+  const { TRADES } = await resolveBook(db, ownerId);
   return db.collection(TRADES).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 

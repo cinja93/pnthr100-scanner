@@ -31,7 +31,7 @@ import { runOrdersPipeline, runOrdersDailyUpdate, ordersGetLatest, ordersGetGate
 import { getKillTestSettings, saveKillTestSettings } from './killTestSettings.js';
 import { runKillTestDailyUpdate } from './killTestDailyUpdate.js';
 import { runDailySignalJob } from './dailySignalJob.js';
-import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, refreshDeactivatedTickers } from './aiUniverseService.js';
+import { getAiUniverse, clearAiUniverseCache, getAiUniverseHoldings, getAiMembersStatic, refreshDeactivatedTickers } from './aiUniverseService.js';
 import { runAiUniverseDailyUpdate } from './aiUniverseDailyJob.js';
 import { runCarnivoreDailyUpdate } from './carnivoreDailyJob.js';
 import { runSplitMaintenance } from './splitMaintenanceService.js';
@@ -2274,6 +2274,43 @@ app.get('/api/ai-universe/overlap', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-universe/overlap:', err);
     res.status(500).json({ error: 'Failed to compute overlap' });
+  }
+});
+
+// AI Members roster — admin-only. The static index roster + per-name PNTHR thesis
+// (instant, no FMP), with each member flagged held=true and enriched with live
+// shares/avgCost/P&L from THIS admin's real IBKR snapshot (pnthr_ibkr_positions).
+// "Current Positions" on the AI Members page is therefore the exact IBKR truth.
+app.get('/api/ai-members', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const base = getAiMembersStatic();   // { fundMeta, sectors, members }
+    const { connectToDatabase: getDb } = await import('./database.js');
+    const db = await getDb();
+    // The real IBKR account is keyed by ownerId = the admin's userId. Fall back to the
+    // most recent snapshot if this admin isn't the IBKR owner (so the page is never blank).
+    let snap = await db.collection('pnthr_ibkr_positions').findOne({ ownerId: req.user.userId });
+    if (!snap) snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || null;
+    const posByTicker = {};
+    for (const p of (snap?.positions || [])) {
+      const t = (p.symbol || p.ticker || '').toUpperCase();
+      const sh = p.shares ?? p.position ?? 0;
+      if (!t || !sh) continue;
+      posByTicker[t] = {
+        shares: sh,
+        avgCost: p.avgCost ?? null,
+        marketPrice: p.marketPrice ?? null,
+        marketValue: p.marketValue ?? null,
+        unrealizedPnl: p.unrealizedPNL ?? p.unrealizedPnl ?? null,
+      };
+    }
+    const members = base.members.map(m => {
+      const pos = posByTicker[m.ticker.toUpperCase()];
+      return pos ? { ...m, held: true, ...pos } : { ...m, held: false };
+    });
+    res.json({ ...base, members, heldCount: Object.keys(posByTicker).length, asOf: snap?.syncedAt || null });
+  } catch (err) {
+    console.error('Error in /api/ai-members:', err);
+    res.status(500).json({ error: 'Failed to load AI members' });
   }
 });
 

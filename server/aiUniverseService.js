@@ -57,6 +57,27 @@ export function getAiUniverseHoldings() { return FLAT_HOLDINGS.filter(h => !_dea
 export function getAiUniverseSectorMeta() { return SECTOR_META; }
 export function getAiUniverseFundMeta() { return FUND_META; }
 
+// ── Static membership + per-name thesis (for the AI Members page) ────────────
+// Returns the full index roster with each name's PNTHR investment thesis and the
+// 16 sector definitions, straight from the canonical aiUniverseData.js — NO FMP
+// calls, so it returns instantly. Live prices / held-status are layered on by the
+// /api/ai-members route from the live IBKR snapshot. Excludes deactivated tickers
+// (delisted / unpriceable) so the roster matches the live index.
+export function getAiMembersStatic() {
+  const sectors = SECTORS.map(s => ({
+    id: s.id, name: s.name, weight: s.weight, thesis: s.thesis || null,
+    count: s.holdings.filter(h => !_deactivated.has(h.ticker)).length,
+  }));
+  const members = [];
+  for (const s of SECTORS) {
+    for (const h of s.holdings) {
+      if (_deactivated.has(h.ticker)) continue;
+      members.push({ ticker: h.ticker, companyName: h.name, sector: s.name, sectorId: s.id, thesis: h.thesis || null });
+    }
+  }
+  return { fundMeta: FUND_META, sectors, members };
+}
+
 // ── In-memory cache (30s, refresh=1 bypass) ─────────────────────────────────
 // 30s matches the Den's auto-refresh cadence on AiJunglePage. The /api/ai-universe
 // payload is dominated by one batched FMP /quote call (300 tickers fits in a

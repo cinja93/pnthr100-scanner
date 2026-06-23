@@ -33,6 +33,7 @@ import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import Ai300IndexPage from './components/Ai300IndexPage';
+import AiMembersPage from './components/AiMembersPage';
 import BondHeatPage from './components/BondHeatPage';
 import NewHighsLowsPage from './components/NewHighsLowsPage';
 import AiHeatPage from './components/AiHeatPage';
@@ -1731,6 +1732,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR AI 300 Index — standalone chart page */}
           {renderPage === 'ai300Index' && <Ai300IndexPage />}
+
+          {/* AI Members — live index roster (admin-only) */}
+          {renderPage === 'aiMembers' && <AiMembersPage isAdmin={isAdmin} />}
 
           {/* PNTHR's Perch newsletter */}
           {renderPage === 'perch' && <NewsPage />}

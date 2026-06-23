@@ -58,6 +58,7 @@ const NAV_GROUPS = [
       { key: 'pulse',      label: 'Pulse',         badge: 'AI | Carnivore', badgeType: 'split' },
       { key: 'newHighsLows', label: 'New Highs' },
       { key: 'ai300Index', label: 'AI 300 Index' },
+      { key: 'aiMembers',  label: 'AI Members', needsAccess: true },
       { key: 'bondHeat',   label: 'Bond Yields' },
     ],
   },

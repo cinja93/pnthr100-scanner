@@ -1,0 +1,178 @@
+.page {
+  padding: 24px 28px 60px;
+  color: #e5e7eb;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.header { margin-bottom: 18px; }
+.title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fcf000;
+  margin: 0 0 6px;
+}
+.subtitle { font-size: 13px; color: #9ca3af; margin: 0; line-height: 1.5; }
+.accent { color: #fcf000; }
+
+/* ── Tabs ───────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #2a2a2a;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tab:hover { color: #e5e7eb; }
+.tabActive { color: #fcf000; border-bottom-color: #fcf000; }
+.tabCount {
+  background: #1f2937;
+  color: #fcf000;
+  border-radius: 10px;
+  font-size: 11px;
+  padding: 1px 7px;
+  font-weight: 700;
+}
+
+/* ── Tables / rows ──────────────────────────────────────── */
+.content { min-height: 200px; }
+.table { display: flex; flex-direction: column; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1c1c1c;
+  text-align: left;
+  cursor: pointer;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+.row:hover { background: rgba(252, 240, 0, 0.06); }
+
+.headRow {
+  cursor: default;
+  color: #6b7280;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  border-bottom: 1px solid #2a2a2a;
+}
+.headRow:hover { background: none; }
+
+.ticker { width: 76px; flex: 0 0 76px; font-weight: 700; color: #fcf000; }
+.company { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sectorCell {
+  width: 210px; flex: 0 0 210px; color: #9ca3af; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.numCell { width: 100px; flex: 0 0 100px; text-align: right; font-variant-numeric: tabular-nums; }
+.heldCell { width: 90px; flex: 0 0 90px; text-align: right; }
+.heldDot { color: #4ade80; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; }
+.dim { color: #4b5563; }
+.pnlPos { color: #4ade80; }
+.pnlNeg { color: #f87171; }
+
+/* ── By sector ──────────────────────────────────────────── */
+.sectorList { display: flex; flex-direction: column; gap: 22px; }
+.sectorGroup { }
+.sectorHeader {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 8px 10px; border-bottom: 2px solid #fcf000; margin-bottom: 2px;
+}
+.sectorName { color: #fcf000; font-weight: 700; font-size: 15px; }
+.sectorMeta { color: #6b7280; font-size: 12px; }
+
+/* ── Search ─────────────────────────────────────────────── */
+.searchPane { }
+.searchWrap {
+  display: flex; align-items: center; gap: 8px;
+  background: #111111; border: 1px solid #374151; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px; max-width: 560px;
+}
+.searchWrap:focus-within { border-color: #fcf000; }
+.searchIcon { color: #6b7280; font-size: 18px; }
+.searchInput {
+  flex: 1; background: none; border: none; outline: none;
+  color: #e5e7eb; font-size: 15px;
+}
+.searchClear {
+  background: none; border: none; color: #6b7280; font-size: 20px;
+  cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.searchClear:hover { color: #e5e7eb; }
+.hint { color: #6b7280; font-size: 13px; padding: 8px 2px; }
+
+/* ── States ─────────────────────────────────────────────── */
+.empty { color: #6b7280; font-size: 14px; padding: 40px 10px; text-align: center; }
+.error { color: #f87171; font-size: 14px; padding: 24px 10px; }
+
+/* ── Summary modal ──────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+}
+.summaryCard {
+  position: relative; background: #0e0e0e; border: 1px solid #374151;
+  border-radius: 14px; padding: 26px 28px; max-width: 600px; width: 100%;
+  max-height: 86vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.summaryClose {
+  position: absolute; top: 12px; right: 16px; background: none; border: none;
+  color: #6b7280; font-size: 26px; cursor: pointer; line-height: 1;
+}
+.summaryClose:hover { color: #e5e7eb; }
+.summaryHead { display: flex; align-items: center; gap: 12px; }
+.summaryTicker { font-size: 30px; font-weight: 800; color: #fcf000; letter-spacing: 0.5px; }
+.heldBadge {
+  background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid #4ade80;
+  border-radius: 6px; font-size: 11px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.5px;
+}
+.summaryCompany { font-size: 17px; color: #f3f4f6; margin-top: 4px; font-weight: 600; }
+.summarySector { font-size: 13px; color: #9ca3af; margin-top: 2px; }
+
+.summaryPosition {
+  display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; padding: 12px 14px;
+  background: #141414; border: 1px solid #2a2a2a; border-radius: 10px;
+  font-size: 13px; font-variant-numeric: tabular-nums; color: #cbd5e1;
+}
+
+.thesisLabel {
+  margin-top: 20px; color: #fcf000; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+.thesis { margin-top: 8px; font-size: 14px; line-height: 1.65; color: #d1d5db; }
+
+.viewChartBtn {
+  margin-top: 22px; background: #fcf000; color: #111; border: none;
+  border-radius: 9px; font-weight: 700; font-size: 14px; padding: 11px 22px;
+  cursor: pointer; transition: filter 0.12s;
+}
+.viewChartBtn:hover { filter: brightness(0.92); }
+
+@media (max-width: 720px) {
+  .sectorCell { display: none; }
+  .numCell { width: 78px; flex-basis: 78px; }
+}

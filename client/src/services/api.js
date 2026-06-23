@@ -557,6 +557,14 @@ export async function fetchAiUniverse(forceRefresh = false) {
   return response.json();
 }
 
+// AI Members roster (admin-only): full index + per-name PNTHR thesis + live held-status
+// from the real IBKR snapshot. Powers the AI Members sidebar page.
+export async function fetchAiMembers() {
+  const response = await apiFetch(`${API_BASE}/api/ai-members`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+}
+
 // PNTHR AI 5-day Sector Rotation rank (latest)
 export async function fetchAiSectorRotation() {
   const response = await apiFetch(`${API_BASE}/api/ai-sector-rotation/latest`, { headers: authHeaders() });

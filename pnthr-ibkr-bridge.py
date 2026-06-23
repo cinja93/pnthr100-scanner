@@ -640,6 +640,54 @@ class PNTHRBridge(EWrapper, EClient):
                 {'permId': o['permId'], 'orderId': o['orderId'], 'stopPrice': o.get('stopPrice'), 'result': res})
         return {'ok': len(failures) == 0, 'cancelled': cancelled, 'failures': failures}
 
+    def cancel_superseded_protective_stops(self, ticker, action, new_stop_price):
+        """Used by modify_stop ONLY. Cancel every protective stop the fresh stop SUPERSEDES,
+        so after the place there is EXACTLY ONE — even one whose PNTHR tag was stripped.
+
+        Why this exists (2026-06-23): after a TWS restart, our own stops come back UNBOUND
+        (orderId 0) and UNTAGGED. As client 0 the per-cycle reqOpenOrders() BINDS them (they
+        get a real, possibly NEGATIVE, orderId — "Use negative numbers to bind automatic
+        orders"), but they stay UNTAGGED, so the tag-only sweep (cancel_pnthr_protective_stops)
+        would leave them and stack a 2nd full-size stop on the next trail → over-sell/flip.
+
+        Rule, same `action` side only (so we never touch opposite-side pyramid lot triggers):
+          • PNTHR-tagged stop  -> cancel (ours; the new one replaces it).
+          • untagged + BOUND   -> cancel IFF it is NOT tighter than new_stop_price (an orphan
+                                  of ours, or a looser manual stop; the new stop supersedes it).
+          • untagged + TIGHTER -> KEEP (a genuine manual tighten — tightest-wins, never loosen).
+          • UNBOUND (orderId 0) -> KEEP + report (API can't cancel it; shouldn't occur under
+                                  client 0, but never silently drop it).
+        tighter = higher stop for a LONG exit (SELL), lower for a SHORT cover (BUY).
+        Idempotent (ALREADY_GONE = success)."""
+        if not self.connected:
+            return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
+        ticker = ticker.upper()
+        is_long = (action == 'SELL')
+        cancelled, failures, kept = [], [], []
+        for k, o in list(self.open_orders.items()):
+            if o.get('symbol') != ticker:
+                continue
+            if o.get('orderType') not in ('STP', 'STP LMT'):
+                continue
+            if action and o.get('action') and o.get('action') != action:
+                continue  # opposite side (lot-trigger add) — not a protective stop
+            ref   = (o.get('orderRef') or '').strip()
+            oid   = o.get('orderId') or 0
+            price = o.get('stopPrice')
+            if ref != self.PNTHR_ORDER_REF:
+                if not oid:
+                    kept.append({'permId': o.get('permId'), 'stopPrice': price, 'reason': 'UNBOUND_UNCANCELLABLE'})
+                    continue
+                tighter = (price is not None and new_stop_price is not None and
+                           (price > new_stop_price if is_long else price < new_stop_price))
+                if tighter:
+                    kept.append({'permId': o.get('permId'), 'stopPrice': price, 'reason': 'MANUAL_TIGHTER_KEPT'})
+                    continue
+            res = self.cancel_order_by_perm_id(o['permId'])
+            (cancelled if res['ok'] else failures).append(
+                {'permId': o['permId'], 'orderId': oid, 'stopPrice': price, 'ref': ref, 'result': res})
+        return {'ok': len(failures) == 0, 'cancelled': cancelled, 'failures': failures, 'kept': kept}
+
     def sell_position(self, ticker, action, shares, order_type='MKT',
                       limit_price=None, tif='DAY', rth=True):
         """Place a closing sell (LONG) or cover (SHORT) for an existing position.
@@ -714,11 +762,15 @@ class PNTHRBridge(EWrapper, EClient):
         so a position toggling stopExtendedHours mid-life rebuilds the order
         in the right form on the next 4c sync.
 
-        2026-06-03: cancels ALL PNTHR protective stops for this ticker+side, not just
+        2026-06-03: cancels ALL superseded protective stops for this ticker+side, not just
         old_perm_id, so a duplicate/orphan from a past cancel race or a cache-miss
-        'placed_new' is swept too — end state = exactly ONE PNTHR stop at the new
-        level. Manual TWS stops are untouched. old_perm_id is now advisory only."""
-        cancel = self.cancel_pnthr_protective_stops(ticker, action=action)
+        'placed_new' is swept too — end state = exactly ONE stop at the new level.
+        2026-06-23: the sweep now also clears a BOUND but UNTAGGED orphan (our own stop whose
+        PNTHR tag was stripped by a TWS restart, then re-bound by client 0) as long as it is
+        not tighter than the new level — so a trail can never stack a 2nd full-size stop on
+        top of a restart orphan. A genuinely tighter MANUAL stop is still kept (tightest-wins).
+        old_perm_id is advisory only."""
+        cancel = self.cancel_superseded_protective_stops(ticker, action, new_stop_price)
         place = self.place_protective_stop(
             ticker, action, shares, new_stop_price,
             tif=tif, rth=rth, order_type=order_type, limit_price=limit_price,

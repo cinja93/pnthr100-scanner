@@ -755,21 +755,24 @@ export async function runPnthrTreeTick(db) {
       if (!AI_META[t] || !(sh > 0)) continue;
       if (excl.has(t)) continue;   // split-stale / IPO → DON'T touch stops (could be at the wrong scale, above market)
 
-      // Every SELL protective stop resting on this name, with full identity. A stop is RELIABLY
-      // CANCELLABLE only when it carries a real orderId (>0): the bridge cancels by orderId, and
-      // an orderId-0 order — one TWS handed back UNBOUND after its nightly restart (orderId + PNTHR
-      // tag stripped) — is UNCANCELLABLE via the API (the bridge hits TWS error 10147 and reports a
-      // FALSE "already gone"). Trying to "cancel + replace" such an orphan is exactly what stacked
-      // the duplicate stops on 2026-06-23 (KLAC/LRCX/AMAT/AMKR/APH: a fresh tagged stop placed atop
-      // an uncancellable orphan = two full-size SELL stops → over-sell/flip risk). So an orphan is
-      // treated as a FIXED protective floor: keep it, never place a second stop on top, surface it
-      // for a manual TWS clear. Trailing resumes automatically once the orphan is gone.
+      // Every SELL protective stop resting on this name, with full identity. A stop is CANCELLABLE
+      // only when it is BOUND — i.e. it carries a NON-ZERO orderId. The bridge cancels by orderId;
+      // an orderId-0 order is UNBOUND (one TWS handed back after its nightly restart, orderId + PNTHR
+      // tag stripped) and UNCANCELLABLE via the API (the bridge hits TWS error 10147 and reports a
+      // FALSE "already gone"). NOTE: a bound orderId can be NEGATIVE — when TWS's "Use negative
+      // numbers to bind automatic orders" is on, client-0 binding assigns negative ids — and a
+      // negative id is still bound/cancellable. So the orphan test is strictly orderId === 0, never
+      // "> 0". Trying to "cancel + replace" an orphan is exactly what stacked the duplicate stops on
+      // 2026-06-23 (KLAC/LRCX/AMAT/AMKR/APH: a fresh tagged stop placed atop an uncancellable orphan
+      // = two full-size SELL stops → over-sell/flip risk). So an unbound orphan is treated as a FIXED
+      // protective floor: keep it, never place a second stop on top, surface it. Once the bridge
+      // (client 0) binds it, orderId becomes non-zero and trailing/trim resumes automatically.
       const stops = (snap.stopOrders || [])
         .filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL')
-        .map(o => ({ permId: o.permId, orderId: +o.orderId || 0, price: +o.stopPrice || 0 }))
+        .map(o => ({ permId: o.permId, orderId: Number(o.orderId) || 0, price: +o.stopPrice || 0 }))
         .filter(o => o.price > 0);
       const cur = stops.reduce((m, o) => Math.max(m, o.price), 0);
-      const hasOrphan = stops.some(o => !(o.orderId > 0));
+      const hasOrphan = stops.some(o => o.orderId === 0);   // unbound (orderId 0) = uncancellable
 
       // ── DUP TRIM: enforce EXACTLY ONE protective stop = the TIGHTEST (highest for a long). ─────
       // Cancel every OTHER cancellable stop (real orderId) by permId — auto-heals a cancellable
@@ -780,7 +783,7 @@ export async function runPnthrTreeTick(db) {
         const tightest = stops.reduce((best, o) => (o.price > best.price ? o : best), stops[0]);
         for (const o of stops) {
           if (o.permId === tightest.permId) continue;
-          if (!(o.orderId > 0)) { actions.push({ type: 'ORPHAN_STOP_UNCANCELLABLE', ticker: t, price: o.price }); continue; }
+          if (o.orderId === 0) { actions.push({ type: 'ORPHAN_STOP_UNCANCELLABLE', ticker: t, price: o.price }); continue; }   // unbound → can't cancel; flag it
           if (o.permId != null && pendingCancel.has(String(o.permId))) continue;
           await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: t, permId: o.permId, reason: 'TREE_DUP_PROTECTIVE_STOP' });
           actions.push({ type: 'CANCEL_DUP_STOP', ticker: t, permId: o.permId, price: o.price });

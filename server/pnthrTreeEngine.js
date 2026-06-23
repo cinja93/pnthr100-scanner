@@ -733,25 +733,82 @@ export async function runPnthrTreeTick(db) {
       const t = (c.request?.ticker || '').toUpperCase();
       if (t) pendingStop[t] = Math.max(pendingStop[t] || 0, +c.request?.newStopPrice || 0);
     }
-    for (const p of (snap.positions || [])) {
+    // Recent in-flight CANCEL_ORDER permIds, so the dup-trim never re-enqueues a cancel that's
+    // already working through the bridge (idempotent at the bridge, but this avoids outbox churn).
+    const pendingCancel = new Set();
+    for (const c of await db.collection('pnthr_ambush_outbox').find({
+      command: 'CANCEL_ORDER',
+      status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
+      createdAt: { $gte: inflightCutoff },
+    }).toArray()) {
+      const pid = c.request?.permId; if (pid != null) pendingCancel.add(String(pid));
+    }
+    // Stop MANAGEMENT acts on resting-order state, so it requires a FRESH + IBKR-CONFIRMED
+    // snapshot (same bar the entry gate uses). On a stale/unconfirmed snapshot the stop list
+    // can't be trusted — trailing or cancelling off it could stack or strip a stop — so we wait
+    // a tick. Stops already rest at the broker; skipping a tick never leaves a position naked.
+    if (cfg.mode === 'live' && !snapFreshConfirmed) {
+      actions.push({ type: 'STOP_MANAGE_SKIP_STALE', snapAgeMin: snapAgeMin === Infinity ? null : +snapAgeMin.toFixed(0) });
+    }
+    for (const p of (snapFreshConfirmed ? (snap.positions || []) : [])) {
       const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
       if (!AI_META[t] || !(sh > 0)) continue;
-      if (excl.has(t)) continue;   // split-stale / IPO → DON'T place a stop (could be at the wrong scale, above market)
+      if (excl.has(t)) continue;   // split-stale / IPO → DON'T touch stops (could be at the wrong scale, above market)
+
+      // Every SELL protective stop resting on this name, with full identity. A stop is RELIABLY
+      // CANCELLABLE only when it carries a real orderId (>0): the bridge cancels by orderId, and
+      // an orderId-0 order — one TWS handed back UNBOUND after its nightly restart (orderId + PNTHR
+      // tag stripped) — is UNCANCELLABLE via the API (the bridge hits TWS error 10147 and reports a
+      // FALSE "already gone"). Trying to "cancel + replace" such an orphan is exactly what stacked
+      // the duplicate stops on 2026-06-23 (KLAC/LRCX/AMAT/AMKR/APH: a fresh tagged stop placed atop
+      // an uncancellable orphan = two full-size SELL stops → over-sell/flip risk). So an orphan is
+      // treated as a FIXED protective floor: keep it, never place a second stop on top, surface it
+      // for a manual TWS clear. Trailing resumes automatically once the orphan is gone.
+      const stops = (snap.stopOrders || [])
+        .filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL')
+        .map(o => ({ permId: o.permId, orderId: +o.orderId || 0, price: +o.stopPrice || 0 }))
+        .filter(o => o.price > 0);
+      const cur = stops.reduce((m, o) => Math.max(m, o.price), 0);
+      const hasOrphan = stops.some(o => !(o.orderId > 0));
+
+      // ── DUP TRIM: enforce EXACTLY ONE protective stop = the TIGHTEST (highest for a long). ─────
+      // Cancel every OTHER cancellable stop (real orderId) by permId — auto-heals a cancellable
+      // duplicate the moment the snapshot shows it. The tightest is ALWAYS kept, so protection is
+      // never loosened. A non-tightest ORPHAN can't be cancelled here; it is flagged for a manual
+      // clear. (Mirrors the proven Ambush V7.6 trim — server/ambush/ambushCron.js ~L1552.)
+      if (stops.length > 1) {
+        const tightest = stops.reduce((best, o) => (o.price > best.price ? o : best), stops[0]);
+        for (const o of stops) {
+          if (o.permId === tightest.permId) continue;
+          if (!(o.orderId > 0)) { actions.push({ type: 'ORPHAN_STOP_UNCANCELLABLE', ticker: t, price: o.price }); continue; }
+          if (o.permId != null && pendingCancel.has(String(o.permId))) continue;
+          await enqueueAmbushOrder(db, 'CANCEL_ORDER', { ticker: t, permId: o.permId, reason: 'TREE_DUP_PROTECTIVE_STOP' });
+          actions.push({ type: 'CANCEL_DUP_STOP', ticker: t, permId: o.permId, price: o.price });
+        }
+      }
+
+      // ── TRAIL: raise the protective stop to the current target (2-week low or breakeven snap). ─
       const lowStop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : 0;
       // Breakeven snap: ≥ $100 open profit AND last completed hour green → raise stop to avg cost.
       const avgCost = +p.avgCost || +p.avgPrice || 0, px = +quotes[t]?.price || 0;
       const beStop = (avgCost > 0 && px > 0 && (px - avgCost) * sh >= BE_SNAP_PROFIT && greenHour[t] === true) ? +avgCost.toFixed(2) : 0;
-      const target = Math.max(lowStop, beStop); if (!target) continue;   // broker-resting stops are inherently forward-only
-      const cur = (snap.stopOrders || []).filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL').reduce((m, o) => Math.max(m, +o.stopPrice || 0), 0);
-      if (target > cur + 0.01) {
-        if ((pendingStop[t] || 0) >= target - 0.01) {   // an equal-or-higher raise is already in flight → don't stack
-          actions.push({ type: 'STOP_INFLIGHT_SKIP', ticker: t, queued: pendingStop[t], target });
-          continue;
-        }
-        const beSnap = beStop && target === beStop && beStop > lowStop;
-        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: target, shares: sh, reason: beSnap ? 'TREE_BE_SNAP' : 'TREE_TRAIL' });
-        actions.push({ type: beSnap ? 'LIVE_BE_SNAP' : 'LIVE_TRAIL', ticker: t, newStop: target, from: cur });
+      const target = Math.max(lowStop, beStop);
+      if (!target || target <= cur + 0.01) continue;   // broker stops are forward-only; nothing tighter to do
+      // ORPHAN GUARD: an uncancellable orphan already rests here. We can't cancel it, so placing
+      // our tighter stop would STACK a second full-size order → over-sell/flip risk. Hold the line:
+      // keep the single orphan as the floor and surface it. (Cleared in TWS, or by the bridge
+      // re-adopt fix, trailing then resumes on the next tick.)
+      if (hasOrphan) {
+        actions.push({ type: 'TRAIL_BLOCKED_BY_ORPHAN', ticker: t, orphanStop: cur, wanted: target });
+        continue;
       }
+      if ((pendingStop[t] || 0) >= target - 0.01) {   // an equal-or-higher raise is already in flight → don't stack
+        actions.push({ type: 'STOP_INFLIGHT_SKIP', ticker: t, queued: pendingStop[t], target });
+        continue;
+      }
+      const beSnap = beStop && target === beStop && beStop > lowStop;
+      await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: target, shares: sh, reason: beSnap ? 'TREE_BE_SNAP' : 'TREE_TRAIL' });
+      actions.push({ type: beSnap ? 'LIVE_BE_SNAP' : 'LIVE_TRAIL', ticker: t, newStop: target, from: cur });
     }
   }
   // Stop-out capture (exec-driven, reads your real SELL fills) — runs in BOTH paper and live

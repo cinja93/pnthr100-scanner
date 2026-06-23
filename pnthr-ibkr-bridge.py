@@ -53,7 +53,15 @@ PNTHR_TOKEN   = os.getenv('PNTHR_TOKEN')
 PNTHR_API_URL = os.getenv('PNTHR_API_URL', 'http://localhost:5000')
 TWS_HOST      = os.getenv('TWS_HOST', '127.0.0.1')
 TWS_PORT      = int(os.getenv('TWS_PORT', '7496'))
-TWS_CLIENT_ID = int(os.getenv('TWS_CLIENT_ID', '99'))
+# Client ID 0 is REQUIRED for self-healing, not cosmetic. Per the IBKR TWS API, only a
+# client connecting with ID 0 can "take over" orders that are not bound to it. After TWS's
+# nightly restart, the engine's own GTC protective stops come back UNBOUND (orderId 0, PNTHR
+# tag stripped) and become uncancellable by any client EXCEPT id 0. As id 0, reqOpenOrders()
+# BINDS those orphaned stops (assigns a real orderId) so the engine can cancel/retrail them
+# automatically — zero human intervention. A non-zero id cannot, which is exactly what
+# stranded 17 stops as uncancellable orphans and stacked the KLAC/LRCX duplicates on
+# 2026-06-23. The local .env.bridge must ALSO set TWS_CLIENT_ID=0 (it overrides this default).
+TWS_CLIENT_ID = int(os.getenv('TWS_CLIENT_ID', '0'))
 SYNC_INTERVAL = 60  # seconds between read-only pushes
 
 # ── Phase 4 write configuration ──────────────────────────────────────────────
@@ -1482,6 +1490,22 @@ def main():
     app.account_ready.wait(timeout=15)
     app.positions_ready.wait(timeout=15)
 
+    # ── ORPHAN SELF-HEAL (client 0 only) ───────────────────────────────────────────────────
+    # reqAutoOpenOrders(True) can ONLY be called by client 0; it auto-binds orders going
+    # forward, and combined with the per-cycle reqOpenOrders() (sync loop below) it BINDS any
+    # currently-open UNBOUND order too — including the engine's own stops that TWS handed back
+    # unbound after its nightly restart. Once bound they carry a real orderId, so the engine's
+    # dup-trim / re-trail can cancel + replace them on its own. THIS is what makes orphaned-stop
+    # recovery fully automatic. Without client 0 the bridge can SEE orphans but never clear them.
+    if TWS_CLIENT_ID == 0:
+        try:
+            app.reqAutoOpenOrders(True)
+            print("[BRIDGE] Client 0: reqAutoOpenOrders(True) — will bind + manage all resting orders (orphaned-stop self-heal ENABLED).")
+        except Exception as e:
+            print(f"[BRIDGE] ⚠ reqAutoOpenOrders failed: {e}")
+    else:
+        print(f"[BRIDGE] ⚠ Client ID {TWS_CLIENT_ID} (not 0): CANNOT take over orphaned stops after a TWS restart. Set TWS_CLIENT_ID=0 in .env.bridge to enable orphan self-heal.")
+
     # Phase 4 outbox poller (the MAIN 679/Carnivore execution path). DISABLED by default
     # (Scott 2026-06-05: ONLY Ambush trades on this account). The bridge does NOT run the
     # 679 execution poller unless MAIN_OUTBOX_ENABLED=true, so a non-Ambush order can never
@@ -1535,13 +1559,15 @@ def main():
         while True:
             if app.connected:
                 # Refresh open stop orders snapshot before building payload.
-                # ROOT-CAUSE FIX (2026-06-05): reqOpenOrders() FIRST re-BINDS this
-                # client's own prior-session orders — restoring their real orderId AND
-                # the 'PNTHR' orderRef. Without it, a bridge restart left our own GTC
-                # stops returned UNBOUND (orderId 0, no tag) by reqAllOpenOrders alone,
-                # so they (a) looked like manual stops the sweep won't touch and (b)
-                # were uncancellable by orderId 0 (TWS 10147) — the BABA/WRD orphans.
-                # Then reqAllOpenOrders() adds genuinely manual TWS stops. The openOrder
+                # ROOT-CAUSE FIX (2026-06-05, completed 2026-06-23): reqOpenOrders() FIRST
+                # BINDS open orders — restoring a real orderId AND (for our own) the 'PNTHR'
+                # ref. As CLIENT 0 (see TWS_CLIENT_ID note) this binds EVERY currently-open
+                # unbound order, including stops TWS handed back orphaned (orderId 0, no tag)
+                # after its nightly restart — NOT just this session's. Without it those stops
+                # (a) looked like manual stops the sweep won't touch and (b) were uncancellable
+                # by orderId 0 (TWS 10147) — the BABA/WRD + 2026-06-23 KLAC/LRCX orphans. Once
+                # bound they carry a real orderId, so the engine can cancel/retrail them itself.
+                # reqAllOpenOrders() then adds any remaining manual TWS stops. The openOrder
                 # downgrade-guard keeps the bound identity if the 2nd call re-reports 0.
                 app.open_orders = {}
                 app.orders_ready.clear()
@@ -1598,6 +1624,13 @@ def main():
                     app.reqPositions()
                     app.account_ready.wait(timeout=15)
                     app.positions_ready.wait(timeout=15)  # wait for the real position list before resuming pushes
+                    # Re-arm orphan self-heal after a reconnect (a reconnect/TWS restart is
+                    # exactly when stops come back unbound). Client 0 only; idempotent.
+                    if TWS_CLIENT_ID == 0:
+                        try:
+                            app.reqAutoOpenOrders(True)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 

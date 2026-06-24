@@ -372,16 +372,15 @@ export default function HistoryPage() {
     return () => { cancelled = true; };
   }, [isAi300, dataSource, nav, leverage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch Orders 2026 backtest data on demand
+  // Fetch Orders 2026 backtest on demand — fund-aware so the 679/AI-300 toggle switches the dataset.
+  // tier=wagyu (flagship $1M NAV reporting basis); fund picks 679 Carnivore vs AI-300 collection family.
   async function loadOrders() {
-    if (ordersData) return; // Already loaded
     try {
       setOrdersLoading(true);
-      // Explicit tier=wagyu — HistoryPage mirrors Wagyu-tier numbers (flagship NAV reporting basis).
-      const res = await fetch(`${API_BASE}/api/journal/backtest/2026?tier=wagyu`, { headers: authHeaders() });
+      const fundParam = isAi300 ? 'ai300' : '679';
+      const res = await fetch(`${API_BASE}/api/journal/backtest/2026?tier=wagyu&fund=${fundParam}`, { headers: authHeaders() });
       if (!res.ok) throw new Error('Failed to load Orders data');
-      const data = await res.json();
-      setOrdersData(data);
+      setOrdersData(await res.json());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -391,7 +390,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (dataSource === 'orders') loadOrders();
-  }, [dataSource]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dataSource, fund]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load analytics when section is opened or fund changes
   useEffect(() => {
@@ -880,7 +879,7 @@ export default function HistoryPage() {
           </div>
           <p style={{ fontSize: 12, color: '#666', margin: '2px 0 0', maxWidth: 640, lineHeight: 1.5 }}>
             {dataSource === 'orders'
-              ? 'Fund Intelligence Report — 2026 pyramid backtest (5-lot pyramid, net of costs).'
+              ? <>Fund Intelligence Report — {isAi300 ? 'AI 300' : '679 Carnivore'} 2026 pyramid backtest (5-lot pyramid, net of costs).{ordersData?.trades?.[0]?.entryDate && <span> Data through: {fmtD(ordersData.trades[0].entryDate)}</span>}</>
               : <>Hypothetical backtest from weekly candles ({isAi300 ? 'current AI-300 members' : 'Carnivore 679, recorded history from 2026'} — survivorship-flattered; not a forward live record). Top 10 by Kill score each week, 5-lot pyramid (compound winners), exit at the signal — one compounding {fmtNav(nav)} account at {leverage}× gross.
                   {portfolio?.asOf && <span> Data through: {fmtD(portfolio.asOf)}</span>}</>
             }

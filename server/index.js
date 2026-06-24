@@ -6175,6 +6175,14 @@ function resolveTierCollection(rawTier) {
   const t = String(rawTier || 'wagyu').toLowerCase();
   return TIER_COLLECTIONS[t] || TIER_COLLECTIONS.wagyu;
 }
+// Fund-aware: AI-300 (pnthr_ai_bt_*) vs 679 Carnivore (pnthr_bt_*) backtest family, per NAV tier.
+// Lets the Orders view's 679/AI-300 toggle actually switch the dataset.
+const TIER_NAV_KEY = { filet: '100k', porterhouse: '500k', wagyu: '1m' };
+function resolveBacktestCollection(rawTier, fund) {
+  const navKey = TIER_NAV_KEY[String(rawTier || 'wagyu').toLowerCase()] || '1m';
+  const isAi = ['ai300', 'ai'].includes(String(fund || '').toLowerCase());
+  return `${isAi ? 'pnthr_ai_bt_pyramid_nav_' : 'pnthr_bt_pyramid_nav_'}${navKey}_trade_log`;
+}
 
 // GET /api/journal/backtest/years — available years with trade counts (must be before /:year)
 app.get('/api/journal/backtest/years', authenticateJWT, async (req, res) => {
@@ -6293,7 +6301,7 @@ app.get('/api/journal/backtest/:year', authenticateJWT, async (req, res) => {
   try {
     const { connectToDatabase } = await import('./database.js');
     const db = await connectToDatabase();
-    const collection = resolveTierCollection(req.query.tier);
+    const collection = resolveBacktestCollection(req.query.tier, req.query.fund);
     const year = req.params.year;
     const trades = await db.collection(collection)
       .find({ entryDate: { $regex: `^${year}-` } })

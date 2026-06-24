@@ -36,6 +36,15 @@ export function authHeaders(extra = {}) {
   };
 }
 
+// ── PNTHR Accounting (self-administration document package) ──
+// Returns { docTypes, periods } — the 24 monthly buckets (2026-2027) and which of the
+// 5 documents each currently holds. Admin-only on the server.
+export async function fetchPnthrAccountingPeriods() {
+  const res = await apiFetch(`${API_BASE}/api/pnthr-accounting/periods`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to load accounting periods');
+  return res.json();
+}
+
 // ── 3-fund comparison dashboard ──
 export async function fetchFundComparison() {
   const response = await apiFetch(`${API_BASE}/api/fund-compare`, { headers: authHeaders() });

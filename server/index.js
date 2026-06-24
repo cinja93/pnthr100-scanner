@@ -103,6 +103,7 @@ import {
 import newsletterRouter from './routes/newsletter.js';
 import dataroomRouter from './routes/dataroom.js';
 import complianceRouter from './routes/compliance.js';
+import pnthrAccountingRouter from './routes/pnthrAccounting.js';
 import { investorAuthRouter, vipAuthRouter, investorAdminRouter, investorSelfRouter } from './routes/investor.js';
 import { ensureInvestorIndexes, logEvent, getPortalAnalytics, findInvestorById } from './investorService.js';
 import {
@@ -6375,6 +6376,7 @@ app.use('/api/newsletter', newsletterRouter);
 app.use('/api/ambush', createAmbushRouter(authenticateJWT, requireAdmin));
 app.use('/api/dataroom', authenticateJWT, dataroomRouter);
 app.use('/api/compliance', authenticateJWT, complianceRouter);
+app.use('/api/pnthr-accounting', authenticateJWT, pnthrAccountingRouter);
 
 // Investor portal routes
 app.use('/auth/investor', investorAuthRouter);                          // unauthenticated login

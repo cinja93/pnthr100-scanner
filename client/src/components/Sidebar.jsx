@@ -332,6 +332,7 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
         groupLabel: 'Internal', info: 'internal', adminOnly: true, pinProtected: true,
         items: [
           { key: 'investor-mgmt',     label: 'Investor Portal' },
+          { key: 'pnthr-accounting',  label: 'PNTHR Accounting', badge: 'NEW' },
           { key: 'journal',           label: 'Journal' },
           { key: 'ir-live',           label: 'Intel Report (AI/Carn)', badge: 'AI | Carnivore', badgeType: 'split' },
           { key: 'ambush-ir-live',    label: 'Ambush IR', badge: 'AMBUSH', badgeType: 'live', accessKey: 'ir-live' },

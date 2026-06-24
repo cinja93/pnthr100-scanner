@@ -70,6 +70,7 @@ import LoginPage from './components/LoginPage';
 import DataRoomPage from './components/DataRoomPage';
 import CompliancePage from './components/CompliancePage';
 import InvestorManagementPage from './components/InvestorManagementPage';
+import PnthrAccountingPage from './components/PnthrAccountingPage';
 import { fetchTopStocks, fetchShortStocks, fetchAiTopStocks, fetchAiShortStocks, fetchAiRankHistory, fetchAvailableDates, fetchRankingByDate, fetchSignals, fetchLaserSignals, fetchEarnings, fetchUserProfile, fetchInvestorProfile, fetchIbkrDiscrepancies, fetchHourlyEma, setAuthToken, clearAuthToken, setOnUnauthorized, authHeaders, API_BASE } from './services/api';
 import { LOT_NAMES, LOT_OFFSETS } from './utils/sizingUtils';
 import { computeWeeksAgo } from './utils/dateUtils';
@@ -1845,6 +1846,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* PNTHR Investor Management (admin only) */}
           {renderPage === 'investor-mgmt' && isAdmin && <InvestorManagementPage />}
+
+          {/* PNTHR Accounting (admin only) — self-administration document package */}
+          {renderPage === 'pnthr-accounting' && isAdmin && <PnthrAccountingPage />}
         </main>
 
         <footer className="footer">

@@ -2413,6 +2413,22 @@ app.post('/api/admin/run-split-maintenance', authenticateJWT, requireAdmin, asyn
   }
 });
 
+// Force an immediate refresh of the live index constituent lists from FMP (bypasses the
+// weekly cache). For index reshuffles like the Dow 30 change (e.g. GOOGL replacing VZ on
+// 2026-06-29) so the app reflects it the same day. Returns the fresh Dow 30 for verification.
+app.post('/api/admin/refresh-constituents', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const { forceRefreshConstituents } = await import('./constituents.js');
+    const r = await forceRefreshConstituents();
+    const dow = r.dow30 || [];
+    console.log(`[refresh-constituents] Dow 30 (${dow.length}): GOOGL=${dow.includes('GOOGL')} VZ=${dow.includes('VZ')}`);
+    res.json({ ok: true, ...r.counts && { counts: r.counts }, dow30Count: dow.length, hasGOOGL: dow.includes('GOOGL'), hasVZ: dow.includes('VZ'), dow30: dow });
+  } catch (err) {
+    console.error('[refresh-constituents] Error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/admin/rebalance-ai300-weights', authenticateJWT, requireAdmin, async (req, res) => {
   try {
     const result = await rebalanceWeightsNow();

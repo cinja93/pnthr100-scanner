@@ -163,6 +163,23 @@ export async function getDow30Tickers() {
   return constituentCache.dow30;
 }
 
+// Force a constituent-cache refresh — re-fetches the live index lists from FMP immediately
+// (bypasses the weekly cache). Use after an index reshuffle (e.g. a Dow 30 change) so the
+// app reflects it the same day instead of waiting for the weekly Friday refresh.
+export async function forceRefreshConstituents() {
+  constituentCache.weekKey = null;
+  await refreshConstituentCache();
+  return {
+    dow30: constituentCache.dow30 || [],
+    counts: {
+      dow30: (constituentCache.dow30 || []).length,
+      sp500: (constituentCache.sp500 || []).length,
+      nasdaq100: (constituentCache.nasdaq100 || []).length,
+      all: (constituentCache.allTickers || []).length,
+    },
+  };
+}
+
 // Get S&P 500 tickers (for tagging in Jungle universe)
 export async function getSp500Tickers() {
   if (!isCacheValid()) await refreshConstituentCache();

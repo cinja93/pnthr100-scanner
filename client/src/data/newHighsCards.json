@@ -40,8 +40,12 @@
         "1,333"
       ],
       [
-        "vs SPY",
-        "SPY +94%"
+        "S&P 500 (same window)",
+        "+94%"
+      ],
+      [
+        "Outperformance vs S&P",
+        "+680%"
       ]
     ],
     "asOf": "2026-06-11",
@@ -86,8 +90,12 @@
         "1,902"
       ],
       [
-        "vs SPY",
-        "SPY +173%"
+        "S&P 500 (same window)",
+        "+173%"
+      ],
+      [
+        "Outperformance vs S&P",
+        "+510%"
       ]
     ],
     "asOf": "2026-06-11",

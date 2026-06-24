@@ -56,7 +56,8 @@ const a = tb.metrics;
 const aiRows = [
   ['Net return', `+${Math.round(a.netReturnPct)}%`], ['CAGR', `${a.cagrPct}%`], ['Sharpe', a.sharpe.toFixed(2)], ['Sortino', a.sortino.toFixed(2)],
   ['Profit factor', `${a.profitFactor.toFixed(2)}x`], ['Calmar', a.calmar.toFixed(2)], ['Max drawdown', `${a.maxDDPct.toFixed(1)}%`],
-  ['Win rate', `${a.winRatePct}% (${a.payoff.toFixed(2)}x payoff)`], ['Trades', a.totalClosed.toLocaleString()], ['vs SPY', `SPY +${Math.round(a.spyReturnPct)}%`],
+  ['Win rate', `${a.winRatePct}% (${a.payoff.toFixed(2)}x payoff)`], ['Trades', a.totalClosed.toLocaleString()],
+  ['S&P 500 (same window)', `+${Math.round(a.spyReturnPct)}%`], ['Outperformance vs S&P', `+${Math.round(a.alphaPct)}%`],
 ];
 
 // ── Carnivore card — run the 679 4-week-high breakout via the shared engine ──────
@@ -67,7 +68,8 @@ const carnFp = await fingerprintCarn(db, CARN_END, CARN_LOOKBACK + 5);
 const carnRows = [
   ['Net return', `+${Math.round(c.netReturnPct)}%`], ['CAGR', `${c.cagrPct}%`], ['Sharpe', c.sharpe.toFixed(2)], ['Sortino', c.sortino.toFixed(2)],
   ['Profit factor', `${c.profitFactor.toFixed(2)}x`], ['Calmar', c.calmar.toFixed(2)], ['Max drawdown', `${c.maxDDPct.toFixed(1)}%`],
-  ['Win rate', `${c.winRatePct}%`], ['Trades', c.totalClosed.toLocaleString()], ['vs SPY', `SPY +${Math.round(c.spyReturnPct)}%`],
+  ['Win rate', `${c.winRatePct}%`], ['Trades', c.totalClosed.toLocaleString()],
+  ['S&P 500 (same window)', `+${Math.round(c.spyReturnPct)}%`], ['Outperformance vs S&P', `+${Math.round(c.netReturnPct) - c.spyReturnPct}%`],
 ];
 
 const out = {

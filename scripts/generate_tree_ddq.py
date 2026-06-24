@@ -31,8 +31,8 @@ from pnthr_design import (
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
-VERSION    = "v2.1"
-DATE_DISP  = "May 2026"
+VERSION    = "v2.2"
+DATE_DISP  = "June 2026"
 
 OUT_PATH = os.path.expanduser(
     f"~/Downloads/PNTHR_Tree_Fund_DDQ_{VERSION}_2026.pdf")
@@ -237,7 +237,7 @@ def build():
              "26 trading days; no fixed time-based or stale-position exit)"],
             ["Long/Short Allocation",
              "Long/short authorized; current systematic implementation is LONG-ONLY (100% long). No "
-             "short positions were taken in the backtest (1,351 long trades). A short component is "
+             "short positions were taken in the backtest (1,333 long trades). A short component is "
              "reserved at the Manager's discretion and would be disclosed if activated"],
             ["Use of Leverage",
              "The Fund may employ leverage of up to 2:1 gross exposure (a hard 2.0x NAV gross cap)."],
@@ -382,25 +382,25 @@ def build():
              "highs in the PNTHR AI 300 Universe. The Fund has not yet traded non-affiliated Limited "
              "Partner capital."],
             ["Total Trades (by tier)",
-             "Filet (100K): 1,351; Porterhouse (500K): 1,684; Wagyu (1M+): 1,815 - all long. Counts "
+             "Filet (100K): 1,333; Porterhouse (500K): 1,698; Wagyu (1M+): 1,807 - all long. Counts "
              "rise at larger tiers as the average-daily-volume participation cap admits more, smaller "
              "positions"],
             ["Gross CAGR (post-costs, pre-fund-fees)",
-             "Filet (100K): +102.5%; Porterhouse (500K): +75.1%; Wagyu (1M+): +60.6%. CAGR declines "
+             "Filet (100K): +87.9%; Porterhouse (500K): +75.5%; Wagyu (1M+): +56.1%. CAGR declines "
              "with size as the ADV participation cap binds (capacity)"],
             ["Gross Sharpe / Sortino",
-             "Filet: 1.43 / 2.25; Porterhouse: 1.20 / 1.90; Wagyu: 1.04 / 1.63 (daily resolution, "
+             "Filet: 1.34 / 2.14; Porterhouse: 1.21 / 1.90; Wagyu: 0.99 / 1.57 (daily resolution, "
              "excess over US 3-month Treasury)"],
             ["Profit Factor (trade-level, net of trading costs)",
-             "Filet: 1.93x; Porterhouse: 1.67x; Wagyu: 1.52x"],
+             "Filet: 1.77x; Porterhouse: 1.69x; Wagyu: 1.48x"],
             ["Gross Max Drawdown (daily NAV, MTM)",
-             "Filet: -50.7%; Porterhouse: -47.9%; Wagyu: -50.0%"],
+             "Filet: -47.6%; Porterhouse: -48.3%; Wagyu: -48.3%"],
             ["Net CAGR (after all fund fees)",
-             "Filet (100K): +70.7%; Porterhouse (500K): +55.8%; Wagyu (1M+): +48.3%"],
+             "Filet (100K): +60.4%; Porterhouse (500K): +56.4%; Wagyu (1M+): +44.7%"],
             ["Net Sharpe / Sortino",
-             "Filet: 1.14 / 1.74; Porterhouse: 0.99 / 1.56; Wagyu: 0.90 / 1.40"],
+             "Filet: 1.05 / 1.66; Porterhouse: 1.00 / 1.57; Wagyu: 0.86 / 1.35"],
             ["Net Max Drawdown (daily NAV, MTM)",
-             "Filet: -58.4%; Porterhouse: -51.6%; Wagyu: -53.0% (net drawdowns are deepened by "
+             "Filet: -52.4%; Porterhouse: -52.2%; Wagyu: -51.9% (net drawdowns are deepened by "
              "quarterly performance-fee crystallization timing)"],
             ["Benchmark (S&amp;P 500)",
              "CAGR: +21.2%; Sharpe: 1.04; Max Drawdown: -19.0% (measured from the first trade date). "

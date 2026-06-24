@@ -3,7 +3,7 @@
 generateInvestorExplanation.py - PNTHR Tree Fund Investor Explanation PDF
 
 Black-background PDF with yellow headings matching IR styling.
-Output: ~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.1_2026.pdf
+Output: ~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.2_2026.pdf
 v2.1: SPY benchmark corrected to measure from first trade date (Jun 13, 2022).
 """
 
@@ -159,7 +159,7 @@ def on_page(canvas, doc):
 
 # -- Build document -----------------------------------------------------------
 def build():
-    out_path = os.path.expanduser('~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.1_2026.pdf')
+    out_path = os.path.expanduser('~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.2_2026.pdf')
     doc = SimpleDocTemplate(out_path, pagesize=letter,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=0.6*inch)
@@ -198,14 +198,14 @@ def build():
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
         ['', 'PNTHR Filet\n($100K)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
-        ['Total Return', '+528%', '+94%', '~40%', '~80%'],
-        ['Gross CAGR', '+102.5%', '+21.2%', '~10%', '~18%'],
-        ['Net CAGR', '+70.7%', '+21.2%', '~8%', '~15%'],
-        ['Sharpe Ratio', '1.14', '1.04', '~0.55', '~1.00'],
-        ['Sortino Ratio', '1.74', '2.01', '~0.80', '~1.30'],
-        ['Max Drawdown', '-58.4%', '-19.0%', '-15%', '-12%'],
-        ['Recovery Factor', '2x', '3.1x', '~3x', '~7x'],
-        ['Calmar Ratio', '1.21', '1.12', '~0.53', '~1.25'],
+        ['Total Return', '+407%', '+94%', '~40%', '~80%'],
+        ['Gross CAGR', '+87.9%', '+21.2%', '~10%', '~18%'],
+        ['Net CAGR', '+60.4%', '+21.2%', '~8%', '~15%'],
+        ['Sharpe Ratio', '1.05', '1.04', '~0.55', '~1.00'],
+        ['Sortino Ratio', '1.66', '2.01', '~0.80', '~1.30'],
+        ['Max Drawdown', '-52.4%', '-19.0%', '-15%', '-12%'],
+        ['Recovery Factor', '2.1x', '3.1x', '~3x', '~7x'],
+        ['Calmar Ratio', '1.15', '1.12', '~0.53', '~1.25'],
     ]
     n_cols = 5
     col_w = CONTENT_W / n_cols
@@ -242,9 +242,9 @@ def build():
     # Summary paragraph accentuating dominance
     s.append(Paragraph(
         'PNTHR Tree is built for return, not for smoothness. At the Filet tier the backtested net CAGR of '
-        '<b>+70.7%</b> is more than <b>3x</b> the S&amp;P 500\'s +21.2% over the same period, and the strategy\'s '
-        'Sharpe (1.14) and Calmar (1.21) modestly exceed the market\'s. That return comes with materially higher '
-        'volatility and much deeper drawdowns: the net maximum drawdown was approximately <b>-58%</b>, versus '
+        '<b>+60.4%</b> is nearly <b>3x</b> the S&amp;P 500\'s +21.2% over the same period, and the strategy\'s '
+        'Sharpe (1.05) and Calmar (1.15) modestly exceed the market\'s. That return comes with materially higher '
+        'volatility and much deeper drawdowns: the net maximum drawdown was approximately <b>-52%</b>, versus '
         '-19% for the S&amp;P 500, and the Sortino ratio and recovery factor are in line with or below the market\'s. '
         'This is a high-conviction, high-volatility momentum strategy for investors who can tolerate large drawdowns '
         'in pursuit of high long-run compounding. It is not a low-volatility or absolute-return product.',
@@ -253,7 +253,7 @@ def build():
     s.append(Spacer(1, 4))
     s.append(Paragraph('<i>Backtest period: January 3, 2023 through June 11, 2026 (~3.45 years), frozen at go-live. S&amp;P 500 benchmark measured from the first trade date. '
         'Net returns include IBKR commissions, 5 bps slippage, and fund fees. '
-        '1,351 long trades (Filet tier; survivorship-flattered). "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
+        '1,333 long trades (Filet tier; survivorship-flattered). "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
         'HFR, and Preqin industry composites.</i>', note_style()))
 
     # Growth chart at bottom of page 1
@@ -375,22 +375,22 @@ def build():
     s.append(make_table(
         ["Metric", "Filet Net\n($100K)", "Wagyu Net\n($1M)", "S&P 500"],
         [
-            ["Net CAGR", "+70.7%", "+48.3%", "+21.2%"],
-            ["Total Return", "+528%", "+287%", "+94%"],
-            ["Sharpe Ratio", "1.14", "0.90", "1.04"],
-            ["Sortino Ratio", "1.74", "1.40", "2.01"],
-            ["Max Drawdown", "-58.4%", "-53.0%", "-19.0%"],
-            ["Calmar Ratio", "1.21", "0.91", "1.12"],
-            ["Recovery Factor", "2x", "2x", "3.1x"],
+            ["Net CAGR", "+60.4%", "+44.7%", "+21.2%"],
+            ["Total Return", "+407%", "+256%", "+94%"],
+            ["Sharpe Ratio", "1.05", "0.86", "1.04"],
+            ["Sortino Ratio", "1.66", "1.35", "2.01"],
+            ["Max Drawdown", "-52.4%", "-51.9%", "-19.0%"],
+            ["Calmar Ratio", "1.15", "0.86", "1.12"],
+            ["Recovery Factor", "2.1x", "1.9x", "3.1x"],
         ],
         col_widths=[1.5*inch, 1.4*inch, 1.4*inch, CONTENT_W - 4.3*inch]
     ))
     s.append(Spacer(1, 10))
     s.append(Paragraph(
-        "1,351 long trades at the Filet tier over about 3.45 years. The win rate is low, around 28%, with a "
-        "profit factor near 1.9 net of trading costs: the strategy cuts losers quickly and lets a minority of large "
+        "1,333 long trades at the Filet tier over about 3.45 years. The win rate is low, around 28%, with a "
+        "profit factor near 1.8 net of trading costs: the strategy cuts losers quickly and lets a minority of large "
         "winners carry the return. That return profile comes with large drawdowns. The net maximum drawdown was "
-        "roughly -53% to -58%, far deeper than the S&amp;P 500 at -19%, and the strategy's Sortino ratio and recovery "
+        "roughly -52%, far deeper than the S&amp;P 500 at -19%, and the strategy's Sortino ratio and recovery "
         "factor are in line with or below the market. The Tree trades higher long-run return for materially higher "
         "volatility and drawdown.",
         body_style()))
@@ -399,7 +399,7 @@ def build():
         ["", "Filet ($100K)", "Wagyu ($1M)"],
         [
             ["Starting Investment", "$100,000", "$1,000,000"],
-            ["Ending Value (Net)", "$627,769", "$3,870,103"],
+            ["Ending Value (Net)", "$507,386", "$3,562,770"],
             ["S&P 500 Would Have Returned", "$193,729", "$1,937,293"],
         ],
         col_widths=[2.4*inch, 1.8*inch, CONTENT_W - 4.2*inch]
@@ -419,8 +419,8 @@ def build():
         body_style()))
     s.append(Paragraph(
         "It is built for return, not for smoothness. In the hypothetical backtest the Filet class compounded at a "
-        "<b>+70.7% net CAGR</b>, roughly 3x the S&amp;P 500, and the Wagyu class at +48.3% net. Those returns exist "
-        "only in the backtest, and they are accompanied by large drawdowns, on the order of -50% to -58% net, that "
+        "<b>+60.4% net CAGR</b>, nearly 3x the S&amp;P 500, and the Wagyu class at +44.7% net. Those returns exist "
+        "only in the backtest, and they are accompanied by large drawdowns, on the order of -52% net, that "
         "recovered within the backtest window but may not recover in the future.",
         body_style()))
     s.append(Paragraph(
@@ -431,8 +431,8 @@ def build():
         body_style()))
     s.append(Spacer(1, 8))
     s.append(Paragraph(
-        "<b>$100,000 invested at inception grew to $627,769 net of all fees and costs in the backtest; $1,000,000 "
-        "grew to $3,870,103. The S&amp;P 500 returned $193,729 and $1,937,293 respectively over the same window.</b>",
+        "<b>$100,000 invested at inception grew to $507,386 net of all fees and costs in the backtest; $1,000,000 "
+        "grew to $3,562,770. The S&amp;P 500 returned $193,729 and $1,937,293 respectively over the same window.</b>",
         S("finalnum", fontSize=10, fontName="Helvetica-Bold", textColor=GREEN,
           alignment=TA_CENTER, leading=14, spaceAfter=8)))
     s.append(Spacer(1, 16))

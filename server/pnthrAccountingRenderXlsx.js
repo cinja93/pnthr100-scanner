@@ -45,7 +45,11 @@ export async function renderGridWorkbook(spec) {
       if (c.formula) {
         cell.value = { formula: String(c.value).replace(/^=/, '') };
       } else if (c.isDate) {
-        cell.value = new Date(c.value);
+        // Treat naive dates as UTC midnight so exceljs doesn't shift them by the local
+        // TZ offset (an MST machine was writing 00:00 dates as 07:00). Tax-lot/trade
+        // dates must land on the exact calendar day NAV reports.
+        const s = String(c.value);
+        cell.value = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z');
       } else {
         cell.value = c.value;
       }

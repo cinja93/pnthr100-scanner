@@ -6741,6 +6741,13 @@ cron.schedule('15 16 * * 1-5', async () => {
       const { checkTreeBaselineDrift } = await import('./treeBaselineGuard.js');
       await checkTreeBaselineDrift(await cdb());
     } catch (e) { console.error('[CRON] Tree baseline drift check failed:', e.message); }
+    // Same guard for the two New Highs backtest cards (AI 300 42wk + Carnivore 679 4wk) — alarms
+    // the same day if their candle inputs drift, so the cards never silently go stale.
+    try {
+      const { connectToDatabase: cdb } = await import('./database.js');
+      const { checkNewHighsCardsDrift } = await import('./newHighsCardsGuard.js');
+      await checkNewHighsCardsDrift(await cdb());
+    } catch (e) { console.error('[CRON] New Highs cards drift check failed:', e.message); }
     // Chain the PNTHR AI 300 index rebuild — constituent bars are now fresh
     // so this is the right moment. Idempotent + monthly rebalance handled
     // automatically by the build script (first trading day of month).

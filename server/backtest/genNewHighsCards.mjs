@@ -11,9 +11,9 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import fs from 'fs';
-import crypto from 'crypto';
 import { connectToDatabase } from '../database.js';
 import { loadTreeData, simulateTree } from './treeSim.js';
+import { fingerprintCarn } from '../newHighsCardsGuard.js';   // shared fingerprint ⇒ guard & generator never diverge
 
 const CARN_END = '2026-06-11', CARN_START = '2019-02-01', CARN_LOOKBACK = 20, NAV0 = 100000;
 
@@ -48,18 +48,6 @@ function metricsOf(sim, spyAt, lastDate) {
   };
 }
 
-// SHA1 fingerprint of the exact candle inputs a backtest consumes (drift guard).
-function fingerprint(docs, end, minBars) {
-  const parts = [];
-  for (const d of docs) {
-    const bars = (d.daily || []).filter(b => +b.low > 0 && +b.close > 0 && b.date <= end).sort((a, b) => a.date.localeCompare(b.date));
-    if (bars.length < minBars) continue;
-    parts.push((d.ticker || '') + '|' + bars.map(b => `${b.date}:${(+b.open).toFixed(4)},${(+b.high).toFixed(4)},${(+b.low).toFixed(4)},${(+b.close).toFixed(4)}`).join(';'));
-  }
-  parts.sort();
-  return { hash: crypto.createHash('sha1').update(parts.join('\n')).digest('hex'), names: parts.length };
-}
-
 const db = await connectToDatabase();
 
 // ── AI 300 card — read the already-guarded Tree baseline (NET of costs) ──────────
@@ -75,8 +63,7 @@ const aiRows = [
 const carnData = await loadTreeData(db, { end: CARN_END, universe: 'carn', lookback: CARN_LOOKBACK });
 const carnSim = simulateTree(carnData, { nav0: NAV0, start: CARN_START, beSnap: 0 });
 const c = metricsOf(carnSim, carnData.spyAt, carnData.lastDate);
-const carnCandles = await db.collection('pnthr_bt_candles').find({}).toArray();
-const carnFp = fingerprint(carnCandles, CARN_END, CARN_LOOKBACK + 5);
+const carnFp = await fingerprintCarn(db, CARN_END, CARN_LOOKBACK + 5);
 const carnRows = [
   ['Net return', `+${Math.round(c.netReturnPct)}%`], ['CAGR', `${c.cagrPct}%`], ['Sharpe', c.sharpe.toFixed(2)], ['Sortino', c.sortino.toFixed(2)],
   ['Profit factor', `${c.profitFactor.toFixed(2)}x`], ['Calmar', c.calmar.toFixed(2)], ['Max drawdown', `${c.maxDDPct.toFixed(1)}%`],

@@ -228,7 +228,11 @@ function detectAllSignals(bars, period, isETF = false, dPctOverride = null, gate
 }
 
 // ── Lot sizing helpers (mirror killTestSettings.js) ─────────────────────────────
-function serverSizePosition({ nav, entryPrice, stopPrice, riskPct = 1 }) {
+// Exported so the canonical Kill 10 portfolio sim (ai300Kill10Portfolio.js) reuses the
+// EXACT same scoring inputs, lot config, sizing, and ratchet logic — no divergent copies.
+export const KILL10_STRIKE_PCT = STRIKE_PCT;
+export const KILL10_LOT_OFFSETS = LOT_OFFSETS;
+export function serverSizePosition({ nav, entryPrice, stopPrice, riskPct = 1 }) {
   if (!entryPrice || !stopPrice || !nav || nav <= 0) return null;
   const tickerCap = nav * 0.10;
   const vitality  = nav * (riskPct / 100);
@@ -238,7 +242,7 @@ function serverSizePosition({ nav, entryPrice, stopPrice, riskPct = 1 }) {
   if (totalShares <= 0) return null;
   return { totalShares, maxRiskDollar: +(totalShares * rps).toFixed(2) };
 }
-function buildServerLotConfig(totalShares, entryPrice, signal) {
+export function buildServerLotConfig(totalShares, entryPrice, signal) {
   const isShort = signal === 'SS';
   return STRIKE_PCT.map((pct, i) => ({
     lotNum:       i + 1,
@@ -250,7 +254,7 @@ function buildServerLotConfig(totalShares, entryPrice, signal) {
     offsetPct:    LOT_OFFSETS[i] * 100,
   }));
 }
-function computeRatchetedStop(lotFills, initialStop, signal) {
+export function computeRatchetedStop(lotFills, initialStop, signal) {
   if (!lotFills) return initialStop;
   const isShort = signal === 'SS';
   let cumCost = 0, cumShr = 0, filledCount = 0;
@@ -270,7 +274,7 @@ function computeRatchetedStop(lotFills, initialStop, signal) {
 }
 
 // ── Inputs: load candles, regime, sector ranks; precompute per-Friday scores ────
-async function loadInputs(db) {
+export async function loadInputs(db) {
   const { SECTORS } = await import('./scripts/aiUniverse/aiUniverseData.js');
   const { SECTOR_EMA_PERIODS } = await import('./data/pnthrAiSectorsConfig.js');
 

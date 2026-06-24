@@ -82,6 +82,7 @@ import {
   updateAi300KillAppearances,
 } from './ai300KillHistory.js';
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
+import { getKill10Portfolio } from './ai300Kill10Portfolio.js';
 import { rebuildAi300Kill } from './ai300KillBackfill.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
@@ -3163,6 +3164,18 @@ app.get('/api/ai300-kill-history',              authenticateJWT, ai300KillHistor
 app.get('/api/ai300-kill-history/active',       authenticateJWT, ai300KillHistoryGetActive);
 app.get('/api/ai300-kill-history/track-record', authenticateJWT, ai300KillHistoryGetTrackRecord);
 app.get('/api/ai300-kill-history/simulation',   authenticateJWT, ai300KillSimulationHandler);
+// Canonical compounding Kill 10 portfolio (top-10 weekly · pyramid · exit at signal). Single source of
+// truth for the page's equity curve / metrics / monthly table / trades. nav scales $; gross = 1|1.5|2.
+app.get('/api/ai300-kill-history/portfolio', authenticateJWT, async (req, res) => {
+  try {
+    const nav = Math.max(1000, Number(req.query.nav) || 100000);
+    const gross = [1, 1.5, 2].includes(Number(req.query.gross)) ? Number(req.query.gross) : 2;
+    res.json(await getKill10Portfolio(nav, gross));
+  } catch (err) {
+    console.error('[AI300 Kill10 Portfolio] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── AI Elite Fund — Live Intelligence Report ─────────────────────────────────
 async function requireIrLiveAccess(req, res, next) {

@@ -311,8 +311,13 @@ export default function HistoryPage() {
   const [analyticsLoading,  setAnalyticsLoading]  = useState(false);
   const [analyticsGenerating, setAnalyticsGenerating] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  // AI-300 Kill 10 canonical compounding portfolio (single source of truth) + leverage toggle
+  const [leverage,  setLeverage]  = useState(2);     // 1 = cash, 2 = margin (matches TREE)
+  const [portfolio, setPortfolio] = useState(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
 
   const isAi300 = fund === 'ai300';
+  const useCanon = isAi300 && dataSource === 'kill10' && !!portfolio;   // canonical data is driving this view
   const historyBase = isAi300 ? 'ai300-kill-history' : 'kill-history';
   const analyticsMonthlyUrl = isAi300 ? 'ai300-kill-test/monthly' : 'kill-test/monthly';
   const analyticsMetricsUrl = isAi300 ? 'ai300-kill-test/metrics' : 'kill-test/metrics';
@@ -351,6 +356,21 @@ export default function HistoryPage() {
 
   useEffect(() => { load(); }, [fund]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Canonical compounding Kill 10 portfolio (AI-300 only) — drives charts, metrics, monthly table, trades.
+  useEffect(() => {
+    if (!(isAi300 && dataSource === 'kill10')) { setPortfolio(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        setPortfolioLoading(true);
+        const res = await fetch(`${API_BASE}/api/ai300-kill-history/portfolio?nav=${nav}&gross=${leverage}`, { headers: authHeaders() });
+        if (res.ok) { const data = await res.json(); if (!cancelled) { setPortfolio(data); setAnalyticsMonthly(data.monthly || []); } }
+      } catch { /* non-fatal */ }
+      finally { if (!cancelled) setPortfolioLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [isAi300, dataSource, nav, leverage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch Orders 2026 backtest data on demand
   async function loadOrders() {
     if (ordersData) return; // Already loaded
@@ -375,6 +395,7 @@ export default function HistoryPage() {
   // Lazy-load analytics when section is opened or fund changes
   useEffect(() => {
     if (!showAnalytics) return;
+    if (isAi300 && dataSource === 'kill10') return;   // AI-300 Kill 10 uses the canonical portfolio (see effect above)
     setAnalyticsMonthly([]);
     setAnalyticsMetrics(null);
     async function fetchAnalytics() {
@@ -390,7 +411,7 @@ export default function HistoryPage() {
       finally { setAnalyticsLoading(false); }
     }
     fetchAnalytics();
-  }, [showAnalytics, fund]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showAnalytics, fund, dataSource]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleGenerateAnalytics() {
     setAnalyticsGenerating(true);
@@ -415,6 +436,7 @@ export default function HistoryPage() {
   // Sim results are NAV-independent (lot fills, exit prices).
   // We scale shares/dollars here based on selected NAV.
   const pyramidTrades = useMemo(() => {
+    if (useCanon && portfolio?.tradesAll) return portfolio.tradesAll;   // canonical compounding trades (AI-300 Kill 10)
     if (!simData?.trades) return [];
     return simData.trades.map(t => {
       const totalShares = sizeForNav(nav, t.entryPrice, t.initStop);
@@ -468,13 +490,14 @@ export default function HistoryPage() {
         lotsFilledCount: lotDetails.length,
       };
     });
-  }, [simData, nav]);
+  }, [simData, nav, useCanon, portfolio]);
 
   const pyramidClosed = useMemo(() => pyramidTrades.filter(t => t.status === 'CLOSED'), [pyramidTrades]);
   const pyramidActive = useMemo(() => pyramidTrades.filter(t => t.status === 'ACTIVE'), [pyramidTrades]);
 
   // Pyramid aggregate stats
   const pyramidStats = useMemo(() => {
+    if (useCanon && portfolio?.stats) return portfolio.stats;   // canonical compounding stats (AI-300 Kill 10)
     const cl = pyramidClosed;
     if (cl.length === 0) return null;
     const winners = cl.filter(t => t.pnlDollar > 0);
@@ -501,7 +524,7 @@ export default function HistoryPage() {
       expectancy,
       avgLotsPerTrade: cl.length > 0 ? +(cl.reduce((s, t) => s + t.lotsFilledCount, 0) / cl.length).toFixed(1) : 0,
     };
-  }, [pyramidClosed, pyramidActive, pyramidTrades]);
+  }, [pyramidClosed, pyramidActive, pyramidTrades, useCanon, portfolio]);
 
   // Pyramid breakdown tables (by tier, direction, sector) + monthly returns
   const pyramidBreakdown = useMemo(() => {
@@ -554,6 +577,7 @@ export default function HistoryPage() {
 
   // ── Pyramid-based analytics (replaces Kill Test monthly for Kill 10) ─────
   const pyramidAnalytics = useMemo(() => {
+    if (useCanon && portfolio?.analytics) return portfolio.analytics;   // canonical compounding analytics (AI-300 Kill 10)
     const cl = pyramidClosed;
     if (cl.length < 2) return null;
 
@@ -691,7 +715,7 @@ export default function HistoryPage() {
         tickersOpen: [],
       } : null,
     };
-  }, [pyramidClosed, nav]);
+  }, [pyramidClosed, nav, useCanon, portfolio]);
 
   // ── Orders 2026 mapped trades (backtest data, fixed $10K sizing) ─────────
   const ordersTrades = useMemo(() => {
@@ -856,8 +880,11 @@ export default function HistoryPage() {
           <p style={{ fontSize: 12, color: '#666', margin: '2px 0 0', maxWidth: 640, lineHeight: 1.5 }}>
             {dataSource === 'orders'
               ? 'Fund Intelligence Report — 2026 pyramid backtest (5-lot pyramid, net of costs).'
-              : <>Forward-tested track record — full 5-lot {isAi300 ? 'AI 300' : 'PNTHR Command'} pyramid strategy.
-                  {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}</>
+              : isAi300
+                ? <>Hypothetical backtest (backfilled from weekly candles, current AI-300 members — survivorship-flattered; not a forward live record). Top 10 by Kill score each week, 5-lot pyramid (compound winners), exit at the signal — one compounding {fmtNav(nav)} account at {leverage}× gross.
+                    {portfolio?.asOf && <span> Data through: {fmtD(portfolio.asOf)}</span>}</>
+                : <>Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
+                    {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}</>
             }
           </p>
         </div>
@@ -908,6 +935,19 @@ export default function HistoryPage() {
               ))}
             </select>
           )}
+          {isAi300 && dataSource === 'kill10' && (
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #444' }}
+              title="1× = cash account (skips lowest-rank names when capital is tapped) · 2× = margin, funds all top 10 (matches TREE)">
+              {[{ k: 1, label: '1× cash' }, { k: 2, label: '2× margin' }].map(o => (
+                <button key={o.k} onClick={() => setLeverage(o.k)}
+                  style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none', letterSpacing: '0.03em',
+                    background: leverage === o.k ? '#0096ff' : '#111', color: leverage === o.k ? '#000' : '#888' }}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {portfolioLoading && <span style={{ fontSize: 11, color: '#666' }}>↻</span>}
           <button
             onClick={() => { if (dataSource === 'orders') { setOrdersData(null); loadOrders(); } else load(true); }}
             disabled={refreshing || ordersLoading}

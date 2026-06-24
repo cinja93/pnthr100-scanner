@@ -722,6 +722,11 @@ export default function HistoryPage() {
     if (!ordersData?.trades) return [];
     return ordersData.trades.map(t => {
       const lotsCount = t.lots?.length || 1;
+      // A trade is genuinely CLOSED only if it had a real signal exit. The backtest force-closes
+      // positions still open at the final data bar (exitReason 'STILL_OPEN') — those are OPEN
+      // positions with UNREALIZED P&L, not 0-day "closed" trades. Reclassify them as ACTIVE and
+      // blank the fake exit, exactly as the IR services already treat them.
+      const isOpen = t.exitReason === 'STILL_OPEN' || t.closed === false;
       return {
         id: `orders-${t.ticker}-${t.entryDate}`,
         ticker: t.ticker,
@@ -729,17 +734,17 @@ export default function HistoryPage() {
         sector: t.sector || '—',
         entryDate: t.entryDate,
         entryPrice: t.avgCost || t.entryPrice,
-        exitDate: t.exitDate,
-        exitPrice: t.exitPrice,
+        exitDate: isOpen ? null : t.exitDate,
+        exitPrice: isOpen ? null : t.exitPrice,
         entryRank: t.killRank || null,
         entryTier: t.apexScore >= 130 ? 'ALPHA PNTHR KILL' : t.apexScore >= 100 ? 'STRIKING' : t.apexScore >= 80 ? 'HUNTING' : t.apexScore >= 65 ? 'POUNCING' : t.apexScore >= 50 ? 'COILING' : 'STALKING',
         entryScore: t.apexScore,
-        exitReason: t.exitReason || '—',
+        exitReason: isOpen ? 'OPEN' : (t.exitReason || '—'),
         lotsFilledCount: lotsCount,
         pnlPct: t.netProfitPct ?? t.grossProfitPct ?? 0,
         pnlDollar: t.netDollarPnl ?? t.grossDollarPnl ?? 0,
         holdingDays: t.tradingDays ?? 0,
-        status: t.closed === false ? 'ACTIVE' : 'CLOSED',
+        status: isOpen ? 'ACTIVE' : 'CLOSED',
       };
     });
   }, [ordersData]);
@@ -1099,6 +1104,7 @@ export default function HistoryPage() {
                     <AllSortTh col="entryRank">Entry Rank</AllSortTh>
                     {usePyramid && <AllSortTh col="lotsFilledCount">Lots</AllSortTh>}
                     <AllSortTh col="exitDate">Exit</AllSortTh>
+                    {usePyramid && <AllSortTh col="exitPrice">Exit $</AllSortTh>}
                     <AllSortTh col="pnlPct">P&L %</AllSortTh>
                     {usePyramid && <AllSortTh col="pnlDollar">P&L $</AllSortTh>}
                     <AllSortTh col="holdingDays">{usePyramid ? 'Days' : 'Weeks'}</AllSortTh>
@@ -1137,6 +1143,11 @@ export default function HistoryPage() {
                         <td style={{ textAlign: 'center', padding: '7px 10px', color: '#aaa', fontSize: 11 }}>
                           {isOpen ? '—' : fmtD(s.exitDate)}
                         </td>
+                        {usePyramid && (
+                          <td style={{ textAlign: 'center', padding: '7px 10px', color: '#ccc', fontSize: 11 }}>
+                            {isOpen || s.exitPrice == null ? '—' : `$${s.exitPrice.toFixed(2)}`}
+                          </td>
+                        )}
                         <td style={{ textAlign: 'center', padding: '7px 10px', fontWeight: 700,
                           color: pnlPct === 0 ? '#555' : isPos ? GREEN : RED }}>
                           {fmt(pnlPct)}

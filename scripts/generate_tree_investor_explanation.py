@@ -25,6 +25,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime as _dt
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tree_perf_data import T, SPY  # numbers from the locked engine (no hardcoding)
+
 # -- Colors -------------------------------------------------------------------
 BG       = HexColor('#000000')
 YELLOW   = HexColor('#fcf000')
@@ -198,14 +202,14 @@ def build():
     #   Elite HF (top decile): ~15% CAGR, 1.0 Sharpe, 1.30 Sortino, -12% MaxDD
     headline_data = [
         ['', 'PNTHR Filet\n($100K)', 'S&P 500', 'Avg L/S\nHedge Fund', 'Top Rated\nHedge Fund'],
-        ['Total Return', '+407%', '+94%', '~40%', '~80%'],
-        ['Gross CAGR', '+87.9%', '+21.2%', '~10%', '~18%'],
-        ['Net CAGR', '+60.4%', '+21.2%', '~8%', '~15%'],
-        ['Sharpe Ratio', '1.05', '1.04', '~0.55', '~1.00'],
-        ['Sortino Ratio', '1.66', '2.01', '~0.80', '~1.30'],
-        ['Max Drawdown', '-52.4%', '-19.0%', '-15%', '-12%'],
-        ['Recovery Factor', '2.1x', '3.1x', '~3x', '~7x'],
-        ['Calmar Ratio', '1.15', '1.12', '~0.53', '~1.25'],
+        ['Total Return', T['filet']['net']['totalInt'], SPY['totalReturn'], '~40%', '~80%'],
+        ['Gross CAGR', T['filet']['gross']['cagr'], SPY['cagr'], '~10%', '~18%'],
+        ['Net CAGR', T['filet']['net']['cagr'], SPY['cagr'], '~8%', '~15%'],
+        ['Sharpe Ratio', T['filet']['net']['sharpe'], SPY['sharpe'], '~0.55', '~1.00'],
+        ['Sortino Ratio', T['filet']['net']['sortino'], SPY['sortino'], '~0.80', '~1.30'],
+        ['Max Drawdown', T['filet']['net']['maxDD'], SPY['maxDD'], '-15%', '-12%'],
+        ['Recovery Factor', T['filet']['net']['recovery'], SPY['recovery'], '~3x', '~7x'],
+        ['Calmar Ratio', T['filet']['net']['calmar'], SPY['calmar'], '~0.53', '~1.25'],
     ]
     n_cols = 5
     col_w = CONTENT_W / n_cols
@@ -375,13 +379,13 @@ def build():
     s.append(make_table(
         ["Metric", "Filet Net\n($100K)", "Wagyu Net\n($1M)", "S&P 500"],
         [
-            ["Net CAGR", "+60.4%", "+44.7%", "+21.2%"],
-            ["Total Return", "+407%", "+256%", "+94%"],
-            ["Sharpe Ratio", "1.05", "0.86", "1.04"],
-            ["Sortino Ratio", "1.66", "1.35", "2.01"],
-            ["Max Drawdown", "-52.4%", "-51.9%", "-19.0%"],
-            ["Calmar Ratio", "1.15", "0.86", "1.12"],
-            ["Recovery Factor", "2.1x", "1.9x", "3.1x"],
+            ["Net CAGR", T['filet']['net']['cagr'], T['wagyu']['net']['cagr'], SPY['cagr']],
+            ["Total Return", T['filet']['net']['totalInt'], T['wagyu']['net']['totalInt'], SPY['totalReturn']],
+            ["Sharpe Ratio", T['filet']['net']['sharpe'], T['wagyu']['net']['sharpe'], SPY['sharpe']],
+            ["Sortino Ratio", T['filet']['net']['sortino'], T['wagyu']['net']['sortino'], SPY['sortino']],
+            ["Max Drawdown", T['filet']['net']['maxDD'], T['wagyu']['net']['maxDD'], SPY['maxDD']],
+            ["Calmar Ratio", T['filet']['net']['calmar'], T['wagyu']['net']['calmar'], SPY['calmar']],
+            ["Recovery Factor", T['filet']['net']['recovery'], T['wagyu']['net']['recovery'], SPY['recovery']],
         ],
         col_widths=[1.5*inch, 1.4*inch, 1.4*inch, CONTENT_W - 4.3*inch]
     ))
@@ -399,7 +403,7 @@ def build():
         ["", "Filet ($100K)", "Wagyu ($1M)"],
         [
             ["Starting Investment", "$100,000", "$1,000,000"],
-            ["Ending Value (Net)", "$507,386", "$3,562,770"],
+            ["Ending Value (Net)", T['filet']['net']['endFull'], T['wagyu']['net']['endFull']],
             ["S&P 500 Would Have Returned", "$193,729", "$1,937,293"],
         ],
         col_widths=[2.4*inch, 1.8*inch, CONTENT_W - 4.2*inch]
@@ -431,8 +435,8 @@ def build():
         body_style()))
     s.append(Spacer(1, 8))
     s.append(Paragraph(
-        "<b>$100,000 invested at inception grew to $507,386 net of all fees and costs in the backtest; $1,000,000 "
-        "grew to $3,562,770. The S&amp;P 500 returned $193,729 and $1,937,293 respectively over the same window.</b>",
+        f"<b>$100,000 invested at inception grew to {T['filet']['net']['endFull']} net of all fees and costs in the backtest; $1,000,000 "
+        f"grew to {T['wagyu']['net']['endFull']}. The S&amp;P 500 returned $193,729 and $1,937,293 respectively over the same window.</b>",
         S("finalnum", fontSize=10, fontName="Helvetica-Bold", textColor=GREEN,
           alignment=TA_CENTER, leading=14, spaceAfter=8)))
     s.append(Spacer(1, 16))

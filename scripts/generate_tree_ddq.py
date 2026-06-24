@@ -28,6 +28,7 @@ from pnthr_design import (
     H1, H2, BODY, BODY_LEFT,
     make_doc_template, make_page_handlers, build_cover_header,
 )
+from tree_perf_data import T  # numbers from the locked engine (no hardcoding)
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
@@ -237,7 +238,7 @@ def build():
              "26 trading days; no fixed time-based or stale-position exit)"],
             ["Long/Short Allocation",
              "Long/short authorized; current systematic implementation is LONG-ONLY (100% long). No "
-             "short positions were taken in the backtest (1,333 long trades). A short component is "
+             f"short positions were taken in the backtest ({T['filet']['trades']['count']} long trades). A short component is "
              "reserved at the Manager's discretion and would be disclosed if activated"],
             ["Use of Leverage",
              "The Fund may employ leverage of up to 2:1 gross exposure (a hard 2.0x NAV gross cap)."],
@@ -382,25 +383,25 @@ def build():
              "highs in the PNTHR AI 300 Universe. The Fund has not yet traded non-affiliated Limited "
              "Partner capital."],
             ["Total Trades (by tier)",
-             "Filet (100K): 1,333; Porterhouse (500K): 1,698; Wagyu (1M+): 1,807 - all long. Counts "
+             f"Filet (100K): {T['filet']['trades']['count']}; Porterhouse (500K): {T['porterhouse']['trades']['count']}; Wagyu (1M+): {T['wagyu']['trades']['count']} - all long. Counts "
              "rise at larger tiers as the average-daily-volume participation cap admits more, smaller "
              "positions"],
             ["Gross CAGR (post-costs, pre-fund-fees)",
-             "Filet (100K): +87.9%; Porterhouse (500K): +75.5%; Wagyu (1M+): +56.1%. CAGR declines "
+             f"Filet (100K): {T['filet']['gross']['cagr']}; Porterhouse (500K): {T['porterhouse']['gross']['cagr']}; Wagyu (1M+): {T['wagyu']['gross']['cagr']}. CAGR declines "
              "with size as the ADV participation cap binds (capacity)"],
             ["Gross Sharpe / Sortino",
-             "Filet: 1.34 / 2.14; Porterhouse: 1.21 / 1.90; Wagyu: 0.99 / 1.57 (daily resolution, "
+             f"Filet: {T['filet']['gross']['sharpe']} / {T['filet']['gross']['sortino']}; Porterhouse: {T['porterhouse']['gross']['sharpe']} / {T['porterhouse']['gross']['sortino']}; Wagyu: {T['wagyu']['gross']['sharpe']} / {T['wagyu']['gross']['sortino']} (daily resolution, "
              "excess over US 3-month Treasury)"],
             ["Profit Factor (trade-level, net of trading costs)",
-             "Filet: 1.77x; Porterhouse: 1.69x; Wagyu: 1.48x"],
+             f"Filet: {T['filet']['trades']['pf']}; Porterhouse: {T['porterhouse']['trades']['pf']}; Wagyu: {T['wagyu']['trades']['pf']}"],
             ["Gross Max Drawdown (daily NAV, MTM)",
-             "Filet: -47.6%; Porterhouse: -48.3%; Wagyu: -48.3%"],
+             f"Filet: {T['filet']['gross']['maxDD']}; Porterhouse: {T['porterhouse']['gross']['maxDD']}; Wagyu: {T['wagyu']['gross']['maxDD']}"],
             ["Net CAGR (after all fund fees)",
-             "Filet (100K): +60.4%; Porterhouse (500K): +56.4%; Wagyu (1M+): +44.7%"],
+             f"Filet (100K): {T['filet']['net']['cagr']}; Porterhouse (500K): {T['porterhouse']['net']['cagr']}; Wagyu (1M+): {T['wagyu']['net']['cagr']}"],
             ["Net Sharpe / Sortino",
-             "Filet: 1.05 / 1.66; Porterhouse: 1.00 / 1.57; Wagyu: 0.86 / 1.35"],
+             f"Filet: {T['filet']['net']['sharpe']} / {T['filet']['net']['sortino']}; Porterhouse: {T['porterhouse']['net']['sharpe']} / {T['porterhouse']['net']['sortino']}; Wagyu: {T['wagyu']['net']['sharpe']} / {T['wagyu']['net']['sortino']}"],
             ["Net Max Drawdown (daily NAV, MTM)",
-             "Filet: -52.4%; Porterhouse: -52.2%; Wagyu: -51.9% (net drawdowns are deepened by "
+             f"Filet: {T['filet']['net']['maxDD']}; Porterhouse: {T['porterhouse']['net']['maxDD']}; Wagyu: {T['wagyu']['net']['maxDD']} (net drawdowns are deepened by "
              "quarterly performance-fee crystallization timing)"],
             ["Benchmark (S&amp;P 500)",
              "CAGR: +21.2%; Sharpe: 1.04; Max Drawdown: -19.0% (measured from the first trade date). "

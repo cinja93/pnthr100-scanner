@@ -44,6 +44,117 @@ function pct(v) {
   return neg ? `(${s}%)` : `${s}%`;
 }
 
+// Account Statement formatting: blanks render EMPTY (not a dash), negative dollars in
+// parentheses, and NET ROR negatives use a MINUS sign (NAV formats the percent
+// differently here than on the Individual statement — preserved exactly).
+function acctMoney(v) {
+  if (v == null) return '';
+  const neg = v < 0;
+  const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return neg ? `(${s})` : s;
+}
+function acctPct(v) {
+  if (v == null) return '';
+  const neg = v < 0;
+  const s = (Math.abs(v) * 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return neg ? `-${s}%` : `${s}%`;
+}
+
+// ── Account Statement (fund-level income + change in NAV) ────────────────────────
+export function renderAccountStatement(data) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'letter', margin: 0, bufferPages: true,
+      info: { Title: 'Account Statement', Author: data.signatory?.[0] || 'PNTHR Funds, LLC' } });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const ML = 22, MR = 22, CR = PW - MR;
+    doc.rect(0, 0, PW, PH).fill('#ffffff');
+
+    // ── Header band ──
+    const h = data.header;
+    doc.rect(0, 0, PW, 72).fill(NAVY);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(15).text(h.fundName, ML, 11);
+    doc.font('Helvetica').fontSize(9.5).text(h.statementTitle || 'Account Statement (Unaudited)', ML, 32);
+    doc.fontSize(8.5);
+    doc.text(`For the Period Ended ${h.periodEnded}`, ML, 48);
+    doc.text(`Reporting Currency : ${h.currency || 'USD'}`, ML, 60);
+    doc.text(`Start Of Period : ${h.startOfPeriod}`, 340, 48);
+    doc.text(`End Of Period  : ${h.endOfPeriod}`, 340, 60);
+
+    // ── Column geometry ──
+    const labelX = ML + 2;
+    const cR = [330, 416, 502, CR];   // right edges of the 4 value columns
+    const colW = 84;
+    const rowH = 15;
+    let y = 86;
+
+    const drawValues = (values, { bold } = {}) => {
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(INK);
+      for (let i = 0; i < 4; i++) {
+        const fmt = values.isPercent ? acctPct : acctMoney;
+        doc.text(fmt(values[i]), cR[i] - colW, y, { width: colW, align: 'right' });
+      }
+    };
+    const topBorderOverValues = () => {
+      doc.moveTo(cR[0] - colW, y - 2).lineTo(cR[3], y - 2).lineWidth(0.5).strokeColor('#999999').stroke();
+    };
+
+    // ── Header row: "Statement of Income" + column titles ──
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(10).text('Statement of Income', labelX, y);
+    doc.fontSize(8.5);
+    ['Period to Date', 'Month to Date', 'Quarter to Date', 'Year to Date'].forEach((t, i) => {
+      doc.text(t, cR[i] - colW, y + 1, { width: colW, align: 'right' });
+    });
+    y += rowH;
+    doc.moveTo(ML, y - 2).lineTo(CR, y - 2).lineWidth(0.6).strokeColor(NAVY).stroke();
+
+    // ── Income rows ──
+    for (const row of data.income) {
+      if (row.type === 'subheader') {
+        doc.fillColor('#5a4a3a').font('Helvetica-Oblique').fontSize(9).text(row.label, labelX, y);
+      } else {
+        const bold = row.type === 'total' || row.type === 'net';
+        if (row.type === 'subtotal' || row.type === 'total' || row.type === 'net') topBorderOverValues();
+        if (row.label) { doc.fillColor(INK).font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).text(row.label, labelX + (row.indent ? 6 : 0), y); }
+        if (row.values) { const v = row.values; v.isPercent = row.isPercent; drawValues(v, { bold }); }
+      }
+      y += rowH;
+    }
+
+    // ── Statement of Changes in NAV ──
+    y += 4;
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(10).text('Statement of Changes in Net Asset Value', labelX, y);
+    y += rowH + 2;
+    for (const row of data.navChanges) {
+      const bold = row.type === 'total';
+      if (row.type === 'total') topBorderOverValues();
+      doc.fillColor(INK).font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).text(row.label, labelX, y);
+      if (row.values) { const v = row.values; v.isPercent = row.isPercent; drawValues(v, { bold }); }
+      y += rowH;
+    }
+
+    // ── Certification + signatory ──
+    y += 12;
+    doc.fillColor(INK).font('Helvetica-Bold').fontSize(8.5)
+      .text(data.certification, ML, y, { width: CR - ML, align: 'center' });
+    y += 24;
+    doc.moveTo(ML, y).lineTo(CR, y).lineWidth(0.5).strokeColor('#cccccc').stroke();
+    y += 8;
+    for (const line of (data.signatory || [])) {
+      doc.fillColor(INK).font('Helvetica-Bold').fontSize(8.5).text(line, ML, y, { width: CR - ML, align: 'center' });
+      y += 13;
+    }
+
+    // ── Generated-on stamp ──
+    doc.fillColor(LINK).font('Helvetica-Bold').fontSize(8.5).text(data.generatedOn, ML, PH - 60);
+
+    doc.end();
+  });
+}
+
 // ── Individual Account Statement ────────────────────────────────────────────────
 export function renderIndividualAccountStatement(data) {
   return new Promise((resolve, reject) => {

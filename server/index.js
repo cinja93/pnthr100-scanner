@@ -83,6 +83,7 @@ import {
 } from './ai300KillHistory.js';
 import { ai300KillSimulationHandler } from './ai300KillSimulation.js';
 import { getKill10Portfolio } from './ai300Kill10Portfolio.js';
+import { getKill679Portfolio } from './kill679Portfolio.js';
 import { rebuildAi300Kill } from './ai300KillBackfill.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
 import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
@@ -2994,6 +2995,18 @@ app.get('/api/kill-history',              authenticateJWT, killHistoryGetAll);
 app.get('/api/kill-history/active',       authenticateJWT, killHistoryGetActive);
 app.get('/api/kill-history/track-record', authenticateJWT, killHistoryGetTrackRecord);
 app.get('/api/kill-history/simulation',  authenticateJWT, killSimulationHandler);
+// Canonical compounding 679 Kill 10 portfolio (top-10 weekly · pyramid · exit at signal). Same single
+// source of truth as the AI-300 one, for the 679 universe (case studies ~2026-01 onward — no backfill).
+app.get('/api/kill-history/portfolio', authenticateJWT, async (req, res) => {
+  try {
+    const nav = Math.max(1000, Number(req.query.nav) || 100000);
+    const gross = [1, 1.5, 2].includes(Number(req.query.gross)) ? Number(req.query.gross) : 2;
+    res.json(await getKill679Portfolio(nav, gross));
+  } catch (err) {
+    console.error('[Kill679 Portfolio] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── PNTHR Kill Test — Appearance Tracking ──────────────────────────────────────
 app.get('/api/kill-appearances', authenticateJWT, requireAdmin, async (req, res) => {

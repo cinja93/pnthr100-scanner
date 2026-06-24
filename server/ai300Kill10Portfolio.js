@@ -148,7 +148,7 @@ export async function buildKill10Portfolio({ nav0 = 100000, grossCapX = 2.0 } = 
 }
 
 // ── metrics + monthly equity table from the simulated series ──────────────────────
-function buildResult({ nav0, grossCapX, equitySeries, closed, active, lot1Skips, addSkips, lastDate }) {
+export function buildResult({ nav0, grossCapX, equitySeries, closed, active, lot1Skips, addSkips, lastDate, universeLabel = 'AI-300' }) {
   const endEq = equitySeries.length ? equitySeries[equitySeries.length - 1].eq : nav0;
   const firstDate = equitySeries[0]?.date, lastD = equitySeries[equitySeries.length - 1]?.date;
   const years = firstDate ? (Date.parse(lastD) - Date.parse(firstDate)) / (365.25 * 86400000) : 0;
@@ -222,7 +222,7 @@ function buildResult({ nav0, grossCapX, equitySeries, closed, active, lot1Skips,
   return {
     nav0, grossCapX, asOf: lastDate,
     label: `Top 10 by Kill score each week · 5-lot pyramid (compound winners) · exit at the signal · one compounding $${nav0.toLocaleString()} account · ${grossCapX}× gross`,
-    disclaimer: 'Hypothetical backtest, backfilled from weekly candles (current AI-300 members → survivorship-flattered). Not a forward live track record.',
+    disclaimer: `Hypothetical backtest from weekly candles (current ${universeLabel} members → survivorship-flattered). Not a forward live track record.`,
     stats, analytics, monthly, tradesAll,
     metrics: {
       startNav: nav0, endingEquity: Math.round(endEq), totalReturnPct: +totalReturnPct.toFixed(1), annualizedReturn: +annualizedReturn.toFixed(2),

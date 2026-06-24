@@ -317,7 +317,7 @@ export default function HistoryPage() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
 
   const isAi300 = fund === 'ai300';
-  const useCanon = isAi300 && dataSource === 'kill10' && !!portfolio;   // canonical data is driving this view
+  const useCanon = dataSource === 'kill10' && !!portfolio;   // canonical compounding data drives this view (AI-300 + 679)
   const historyBase = isAi300 ? 'ai300-kill-history' : 'kill-history';
   const analyticsMonthlyUrl = isAi300 ? 'ai300-kill-test/monthly' : 'kill-test/monthly';
   const analyticsMetricsUrl = isAi300 ? 'ai300-kill-test/metrics' : 'kill-test/metrics';
@@ -356,14 +356,15 @@ export default function HistoryPage() {
 
   useEffect(() => { load(); }, [fund]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Canonical compounding Kill 10 portfolio (AI-300 only) — drives charts, metrics, monthly table, trades.
+  // Canonical compounding Kill 10 portfolio (AI-300 + 679) — drives charts, metrics, monthly table, trades.
   useEffect(() => {
-    if (!(isAi300 && dataSource === 'kill10')) { setPortfolio(null); return; }
+    if (dataSource !== 'kill10') { setPortfolio(null); return; }
     let cancelled = false;
     (async () => {
       try {
         setPortfolioLoading(true);
-        const res = await fetch(`${API_BASE}/api/ai300-kill-history/portfolio?nav=${nav}&gross=${leverage}`, { headers: authHeaders() });
+        const base = isAi300 ? 'ai300-kill-history' : 'kill-history';
+        const res = await fetch(`${API_BASE}/api/${base}/portfolio?nav=${nav}&gross=${leverage}`, { headers: authHeaders() });
         if (res.ok) { const data = await res.json(); if (!cancelled) { setPortfolio(data); setAnalyticsMonthly(data.monthly || []); } }
       } catch { /* non-fatal */ }
       finally { if (!cancelled) setPortfolioLoading(false); }
@@ -395,7 +396,7 @@ export default function HistoryPage() {
   // Lazy-load analytics when section is opened or fund changes
   useEffect(() => {
     if (!showAnalytics) return;
-    if (isAi300 && dataSource === 'kill10') return;   // AI-300 Kill 10 uses the canonical portfolio (see effect above)
+    if (dataSource === 'kill10') return;   // Kill 10 (AI-300 + 679) uses the canonical portfolio (see effect above)
     setAnalyticsMonthly([]);
     setAnalyticsMetrics(null);
     async function fetchAnalytics() {
@@ -880,11 +881,8 @@ export default function HistoryPage() {
           <p style={{ fontSize: 12, color: '#666', margin: '2px 0 0', maxWidth: 640, lineHeight: 1.5 }}>
             {dataSource === 'orders'
               ? 'Fund Intelligence Report — 2026 pyramid backtest (5-lot pyramid, net of costs).'
-              : isAi300
-                ? <>Hypothetical backtest (backfilled from weekly candles, current AI-300 members — survivorship-flattered; not a forward live record). Top 10 by Kill score each week, 5-lot pyramid (compound winners), exit at the signal — one compounding {fmtNav(nav)} account at {leverage}× gross.
-                    {portfolio?.asOf && <span> Data through: {fmtD(portfolio.asOf)}</span>}</>
-                : <>Forward-tested track record — full 5-lot PNTHR Command pyramid strategy.
-                    {tr.asOf && <span> Last updated: {fmtD(tr.asOf)}</span>}</>
+              : <>Hypothetical backtest from weekly candles ({isAi300 ? 'current AI-300 members' : 'Carnivore 679, recorded history from 2026'} — survivorship-flattered; not a forward live record). Top 10 by Kill score each week, 5-lot pyramid (compound winners), exit at the signal — one compounding {fmtNav(nav)} account at {leverage}× gross.
+                  {portfolio?.asOf && <span> Data through: {fmtD(portfolio.asOf)}</span>}</>
             }
           </p>
         </div>
@@ -935,7 +933,7 @@ export default function HistoryPage() {
               ))}
             </select>
           )}
-          {isAi300 && dataSource === 'kill10' && (
+          {dataSource === 'kill10' && (
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #444' }}
               title="1× = cash account (skips lowest-rank names when capital is tapped) · 2× = margin, funds all top 10 (matches TREE)">
               {[{ k: 1, label: '1× cash' }, { k: 2, label: '2× margin' }].map(o => (

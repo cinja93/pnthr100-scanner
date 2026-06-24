@@ -15,10 +15,14 @@ const CARN_METRICS = {
   dates: '2019-02-01 → 2026-06-11',
   window: '~7.3 yrs · full history — COVID crash, the 2022 bear, and the AI bull',
   scan: 'LIVE: current S&P 500 + S&P 400 (MidCap) members whose intraday high today has reached a NEW 4-week high (≥ the highest high of the prior 20 trading days, today excluded).',
+  // Reconciled 2026-06-24: re-ran the 679 4-week-high backtest (treeSim universe=carn,
+  // lookback=20, no breakeven snap) on current clean candle data. Numbers dropped from the
+  // stale +1,115% — same drift class as the Tree fix: 7 years of removed/delisted current
+  // members + split re-syncs. Data verified clean (no un-adjusted splits). Net of costs.
   rows: [
-    ['Net return', '+1,115%'], ['CAGR', '40.4%'], ['Sharpe', '1.00'], ['Sortino', '1.42'],
-    ['Profit factor', '1.51x'], ['Calmar', '0.77'], ['Max drawdown', '52.5%'],
-    ['Win rate', '41%'], ['Trades', '2,081'], ['vs SPY', 'SPY +173%'],
+    ['Net return', '+683%'], ['CAGR', '32.3%'], ['Sharpe', '0.89'], ['Sortino', '1.25'],
+    ['Profit factor', '1.40x'], ['Calmar', '0.60'], ['Max drawdown', '53.8%'],
+    ['Win rate', '39%'], ['Trades', '1,902'], ['vs SPY', 'SPY +173%'],
   ],
   specs: [
     'Entry — buy the breakout: resting buy-stop at the prior 4-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',

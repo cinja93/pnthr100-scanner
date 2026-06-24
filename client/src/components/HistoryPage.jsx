@@ -1478,17 +1478,18 @@ export default function HistoryPage() {
                   const W = 700, H = 160, PAD = { t: 12, r: 12, b: 28, l: 52 };
                   const iW = W - PAD.l - PAD.r, iH = H - PAD.t - PAD.b;
                   const vals = ec.map(p => p.value);
-                  const dds  = ec.map(p => p.drawdown);
                   const minV = Math.min(...vals), maxV = Math.max(...vals);
                   const range = maxV - minV || 1;
                   const px = (i) => PAD.l + (i / (vals.length - 1 || 1)) * iW;
                   const py = (v) => PAD.t + (1 - (v - minV) / range) * iH;
                   const linePath = vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
                   const peakY = py(maxV);
-                  const ddPath = vals.map((v, i) => {
-                    const isDD = dds[i] < 0;
-                    return `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${isDD ? py(v).toFixed(1) : peakY.toFixed(1)}`;
-                  }).join(' ') + ` L${px(vals.length - 1).toFixed(1)},${peakY.toFixed(1)} Z`;
+                  // underwater shading: fill the band between the RUNNING-peak envelope and the line
+                  // (= true drawdown depth at each point). Earlier this filled up to the all-time-high
+                  // line, so any dip flooded the whole chart red on a real (jagged) curve.
+                  const runPk = []; { let mx = -Infinity; for (const v of vals) { mx = v > mx ? v : mx; runPk.push(mx); } }
+                  const ddPath = vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${py(runPk[i]).toFixed(1)}`).join(' ')
+                    + vals.map((v, i) => ` L${px(vals.length - 1 - i).toFixed(1)},${py(vals[vals.length - 1 - i]).toFixed(1)}`).join('') + ' Z';
                   const yTicks = [minV, (minV + maxV) / 2, maxV].map(v => ({
                     y: py(v), label: v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1000).toFixed(0)}k`,
                   }));

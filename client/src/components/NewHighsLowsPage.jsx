@@ -32,10 +32,12 @@ const AI_METRICS = {
   dates: '2023-01-03 → 2026-06-11',
   window: '~3.45 yrs · the live PNTHR Tree window (AI-300 data begins 2022, so this is a shorter, mostly-bull window — not directly comparable to Carnivore’s full cycle)',
   scan: 'LIVE: current PNTHR AI-300 index members whose intraday high today has reached a NEW 42-week high (≥ the highest high of the prior 210 trading days, today excluded). This is the live PNTHR Tree entry signal.',
+  // Reconciled 2026-06-24 to the corrected Tree baseline (treeProjectionBaseline.json metrics,
+  // NET of costs) after the drift fix: PSTG/PRO/BITF delisting + split re-syncs.
   rows: [
-    ['Net return', '+1,030%'], ['CAGR', '102.5%'], ['Sharpe', '1.51'], ['Sortino', '2.25'],
-    ['Profit factor', '2.23x'], ['Calmar', '2.02'], ['Max drawdown', '50.7%'],
-    ['Win rate', '28% (5.69x payoff)'], ['Trades', '1,351'], ['vs SPY', 'SPY +94%'],
+    ['Net return', '+774%'], ['CAGR', '87.9%'], ['Sharpe', '1.42'], ['Sortino', '2.14'],
+    ['Profit factor', '2.13x'], ['Calmar', '1.85'], ['Max drawdown', '47.6%'],
+    ['Win rate', '29% (5.15x payoff)'], ['Trades', '1,333'], ['vs SPY', 'SPY +94%'],
   ],
   specs: [
     'Entry — buy the breakout: resting buy-stop at the prior 42-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',

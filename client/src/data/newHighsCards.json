@@ -1,0 +1,97 @@
+{
+  "generatedFrom": "genNewHighsCards.mjs",
+  "note": "Engine-computed; do not hand-edit. Re-run after any candle/universe/baseline change.",
+  "ai": {
+    "rows": [
+      [
+        "Net return",
+        "+774%"
+      ],
+      [
+        "CAGR",
+        "87.9%"
+      ],
+      [
+        "Sharpe",
+        "1.42"
+      ],
+      [
+        "Sortino",
+        "2.14"
+      ],
+      [
+        "Profit factor",
+        "2.13x"
+      ],
+      [
+        "Calmar",
+        "1.85"
+      ],
+      [
+        "Max drawdown",
+        "47.6%"
+      ],
+      [
+        "Win rate",
+        "29% (5.15x payoff)"
+      ],
+      [
+        "Trades",
+        "1,333"
+      ],
+      [
+        "vs SPY",
+        "SPY +94%"
+      ]
+    ],
+    "asOf": "2026-06-11",
+    "inputHash": "dc63a0ed734c6680f8dc5800e42ae3b2073b2c84"
+  },
+  "carn": {
+    "rows": [
+      [
+        "Net return",
+        "+683%"
+      ],
+      [
+        "CAGR",
+        "32.3%"
+      ],
+      [
+        "Sharpe",
+        "0.89"
+      ],
+      [
+        "Sortino",
+        "1.25"
+      ],
+      [
+        "Profit factor",
+        "1.40x"
+      ],
+      [
+        "Calmar",
+        "0.60"
+      ],
+      [
+        "Max drawdown",
+        "53.8%"
+      ],
+      [
+        "Win rate",
+        "39%"
+      ],
+      [
+        "Trades",
+        "1,902"
+      ],
+      [
+        "vs SPY",
+        "SPY +173%"
+      ]
+    ],
+    "asOf": "2026-06-11",
+    "inputHash": "4d2a7f36a7e973f33c6ed983449c554aa3f3667f",
+    "inputNames": 541
+  }
+}

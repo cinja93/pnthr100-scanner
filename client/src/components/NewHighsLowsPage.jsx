@@ -7,6 +7,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchNewHighsLows } from '../services/api';
 import PageHeader from './PageHeader';
 import AiTickerChartModal from './AiTickerChartModal';
+// Backtest card numbers are ENGINE-GENERATED (server/backtest/genNewHighsCards.mjs), never
+// hand-typed — so they can't silently drift from the real backtest. Re-run that script after
+// any candle/universe/baseline change to refresh this file.
+import NEW_HIGHS_CARDS from '../data/newHighsCards.json';
 
 const GREEN = { bg: 'rgba(34,197,94,0.14)', border: 'rgba(34,197,94,0.55)', text: '#86efac' };
 
@@ -15,15 +19,8 @@ const CARN_METRICS = {
   dates: '2019-02-01 → 2026-06-11',
   window: '~7.3 yrs · full history — COVID crash, the 2022 bear, and the AI bull',
   scan: 'LIVE: current S&P 500 + S&P 400 (MidCap) members whose intraday high today has reached a NEW 4-week high (≥ the highest high of the prior 20 trading days, today excluded).',
-  // Reconciled 2026-06-24: re-ran the 679 4-week-high backtest (treeSim universe=carn,
-  // lookback=20, no breakeven snap) on current clean candle data. Numbers dropped from the
-  // stale +1,115% — same drift class as the Tree fix: 7 years of removed/delisted current
-  // members + split re-syncs. Data verified clean (no un-adjusted splits). Net of costs.
-  rows: [
-    ['Net return', '+683%'], ['CAGR', '32.3%'], ['Sharpe', '0.89'], ['Sortino', '1.25'],
-    ['Profit factor', '1.40x'], ['Calmar', '0.60'], ['Max drawdown', '53.8%'],
-    ['Win rate', '39%'], ['Trades', '1,902'], ['vs SPY', 'SPY +173%'],
-  ],
+  rows: NEW_HIGHS_CARDS.carn.rows,   // engine-generated; net of costs
+  asOf: NEW_HIGHS_CARDS.carn.asOf,
   specs: [
     'Entry — buy the breakout: resting buy-stop at the prior 4-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',
     'Exit — trailing stop at the lowest low of the prior 10 trading days (2 weeks) − $0.01, ratcheted up; exit when the day breaks it',
@@ -36,13 +33,8 @@ const AI_METRICS = {
   dates: '2023-01-03 → 2026-06-11',
   window: '~3.45 yrs · the live PNTHR Tree window (AI-300 data begins 2022, so this is a shorter, mostly-bull window — not directly comparable to Carnivore’s full cycle)',
   scan: 'LIVE: current PNTHR AI-300 index members whose intraday high today has reached a NEW 42-week high (≥ the highest high of the prior 210 trading days, today excluded). This is the live PNTHR Tree entry signal.',
-  // Reconciled 2026-06-24 to the corrected Tree baseline (treeProjectionBaseline.json metrics,
-  // NET of costs) after the drift fix: PSTG/PRO/BITF delisting + split re-syncs.
-  rows: [
-    ['Net return', '+774%'], ['CAGR', '87.9%'], ['Sharpe', '1.42'], ['Sortino', '2.14'],
-    ['Profit factor', '2.13x'], ['Calmar', '1.85'], ['Max drawdown', '47.6%'],
-    ['Win rate', '29% (5.15x payoff)'], ['Trades', '1,333'], ['vs SPY', 'SPY +94%'],
-  ],
+  rows: NEW_HIGHS_CARDS.ai.rows,   // engine-generated from the Tree baseline; net of costs
+  asOf: NEW_HIGHS_CARDS.ai.asOf,
   specs: [
     'Entry — buy the breakout: resting buy-stop at the prior 42-week high + $0.01 (fills at the level, or the open on a gap-through; no look-ahead)',
     'Exit — trailing stop at the lowest low of the prior 10 trading days (2 weeks) − $0.01, ratcheted up; exit when the day breaks it',
@@ -91,6 +83,11 @@ function MetricsBlock({ metrics }) {
           </div>
         ))}
       </div>
+      {metrics.asOf && (
+        <div style={{ color: '#555', fontSize: 9, marginTop: 6, fontStyle: 'italic' }}>
+          Figures generated from the engine (not hand-entered) · data through {metrics.asOf}
+        </div>
+      )}
       {/* The exact rules that produced those metrics */}
       <div style={{ color: '#86efac', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', marginTop: 10, marginBottom: 4 }}>SPECS</div>
       <ul style={{ margin: 0, paddingLeft: 16, color: '#888', fontSize: 10, lineHeight: 1.5 }}>

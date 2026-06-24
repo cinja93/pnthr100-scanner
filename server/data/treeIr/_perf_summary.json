@@ -1,0 +1,241 @@
+{
+  "generatedFrom": "_tree_perfsummary_numbers.mjs",
+  "backtestPeriod": "January 2023 through June 2026 (~3.45 years)",
+  "tiers": {
+    "filet": {
+      "label": "FILET",
+      "seed": 100000,
+      "seedDisp": "$100K",
+      "gross": {
+        "total": "+774.1%",
+        "totalInt": "+774%",
+        "cagr": "+87.9%",
+        "sharpe": "1.34",
+        "sortino": "2.14",
+        "calmar": "1.85",
+        "maxDD": "-47.6%",
+        "recovery": "2.7x",
+        "end": "$874K",
+        "endFull": "$873,958",
+        "_raw": {
+          "totalReturn": 774.07,
+          "cagr": 87.94,
+          "sharpe": 1.34,
+          "sortino": 2.14,
+          "calmar": 1.85,
+          "maxDD": -47.59,
+          "recovery": 2.6939872115729346,
+          "end": 873958.28
+        }
+      },
+      "net": {
+        "total": "+407.4%",
+        "totalInt": "+407%",
+        "cagr": "+60.4%",
+        "sharpe": "1.05",
+        "sortino": "1.66",
+        "calmar": "1.15",
+        "maxDD": "-52.4%",
+        "recovery": "2.1x",
+        "end": "$507K",
+        "endFull": "$507,386",
+        "_raw": {
+          "totalReturn": 407.39,
+          "cagr": 60.43,
+          "sharpe": 1.05,
+          "sortino": 1.66,
+          "calmar": 1.15,
+          "maxDD": -52.38,
+          "recovery": 2.0666863128849147,
+          "end": 507385.64
+        }
+      },
+      "drag": {
+        "total": "-366.7 pts",
+        "cagr": "-27.5 pts",
+        "sharpe": "-0.29",
+        "sortino": "-0.48",
+        "calmar": "-0.70",
+        "maxDD": "-4.8 pts",
+        "recovery": "-0.6",
+        "end": "-$367K"
+      },
+      "trades": {
+        "pf": "1.77x",
+        "winRate": "28.4%",
+        "count": "1,333"
+      }
+    },
+    "porterhouse": {
+      "label": "PORTERHOUSE",
+      "seed": 500000,
+      "seedDisp": "$500K",
+      "gross": {
+        "total": "+591.2%",
+        "totalInt": "+591%",
+        "cagr": "+75.5%",
+        "sharpe": "1.21",
+        "sortino": "1.90",
+        "calmar": "1.57",
+        "maxDD": "-48.3%",
+        "recovery": "2.6x",
+        "end": "$3.46M",
+        "endFull": "$3,455,361",
+        "_raw": {
+          "totalReturn": 591.16,
+          "cagr": 75.53,
+          "sharpe": 1.21,
+          "sortino": 1.9,
+          "calmar": 1.57,
+          "maxDD": -48.25,
+          "recovery": 2.6057023393116787,
+          "end": 3455360.52
+        }
+      },
+      "net": {
+        "total": "+365.3%",
+        "totalInt": "+365%",
+        "cagr": "+56.4%",
+        "sharpe": "1.00",
+        "sortino": "1.57",
+        "calmar": "1.08",
+        "maxDD": "-52.2%",
+        "recovery": "2.1x",
+        "end": "$2.33M",
+        "endFull": "$2,326,474",
+        "_raw": {
+          "totalReturn": 365.29,
+          "cagr": 56.43,
+          "sharpe": 1,
+          "sortino": 1.57,
+          "calmar": 1.08,
+          "maxDD": -52.19,
+          "recovery": 2.104434395911571,
+          "end": 2326473.63
+        }
+      },
+      "drag": {
+        "total": "-225.9 pts",
+        "cagr": "-19.1 pts",
+        "sharpe": "-0.21",
+        "sortino": "-0.33",
+        "calmar": "-0.49",
+        "maxDD": "-3.9 pts",
+        "recovery": "-0.5",
+        "end": "-$1.13M"
+      },
+      "trades": {
+        "pf": "1.69x",
+        "winRate": "20.5%",
+        "count": "1,698"
+      }
+    },
+    "wagyu": {
+      "label": "WAGYU",
+      "seed": 1000000,
+      "seedDisp": "$1M",
+      "gross": {
+        "total": "+361.5%",
+        "totalInt": "+362%",
+        "cagr": "+56.1%",
+        "sharpe": "0.99",
+        "sortino": "1.57",
+        "calmar": "1.16",
+        "maxDD": "-48.3%",
+        "recovery": "2.2x",
+        "end": "$4.61M",
+        "endFull": "$4,614,862",
+        "_raw": {
+          "totalReturn": 361.54,
+          "cagr": 56.07,
+          "sharpe": 0.99,
+          "sortino": 1.57,
+          "calmar": 1.16,
+          "maxDD": -48.32,
+          "recovery": 2.2290038755814767,
+          "end": 4614861.58
+        }
+      },
+      "net": {
+        "total": "+256.3%",
+        "totalInt": "+256%",
+        "cagr": "+44.7%",
+        "sharpe": "0.86",
+        "sortino": "1.35",
+        "calmar": "0.86",
+        "maxDD": "-51.9%",
+        "recovery": "1.9x",
+        "end": "$3.56M",
+        "endFull": "$3,562,770",
+        "_raw": {
+          "totalReturn": 256.28,
+          "cagr": 44.74,
+          "sharpe": 0.86,
+          "sortino": 1.35,
+          "calmar": 0.86,
+          "maxDD": -51.9,
+          "recovery": 1.868698975072646,
+          "end": 3562769.56
+        }
+      },
+      "drag": {
+        "total": "-105.2 pts",
+        "cagr": "-11.4 pts",
+        "sharpe": "-0.13",
+        "sortino": "-0.22",
+        "calmar": "-0.30",
+        "maxDD": "-3.6 pts",
+        "recovery": "-0.3",
+        "end": "-$1.05M"
+      },
+      "trades": {
+        "pf": "1.48x",
+        "winRate": "19.2%",
+        "count": "1,807"
+      }
+    }
+  },
+  "spy": {
+    "totalReturn": "+94%",
+    "cagr": "+21.2%",
+    "maxDD": "-19.0%",
+    "sharpe": "1.04",
+    "sortino": "2.01",
+    "calmar": "1.12",
+    "recovery": "3.1x"
+  },
+  "annual": [
+    {
+      "year": "2023",
+      "start": "$1.00M",
+      "end": "$934K",
+      "spy": "+24.81%",
+      "tree": "-6.62%",
+      "alpha": "-31.43%"
+    },
+    {
+      "year": "2024",
+      "start": "$934K",
+      "end": "$1.62M",
+      "spy": "+24.00%",
+      "tree": "+72.96%",
+      "alpha": "+48.96%"
+    },
+    {
+      "year": "2025",
+      "start": "$1.62M",
+      "end": "$1.43M",
+      "spy": "+16.64%",
+      "tree": "-11.48%",
+      "alpha": "-28.12%"
+    },
+    {
+      "year": "2026 (to Jun)",
+      "start": "$1.43M",
+      "end": "$3.56M",
+      "spy": "+7.99%",
+      "tree": "+149.21%",
+      "alpha": "+141.22%"
+    }
+  ]
+}

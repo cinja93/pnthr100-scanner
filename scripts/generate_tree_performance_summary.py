@@ -32,6 +32,7 @@ from pnthr_design import (
     H1, H2, BODY, BODY_LEFT,
     make_doc_template, make_page_handlers, build_cover_header,
 )
+from tree_perf_data import T, SPY, ANNUAL  # numbers from the locked engine (no hardcoding)
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
@@ -104,6 +105,21 @@ def metrics_table(rows):
     return tbl
 
 
+def class_rows(tier):
+    """4-col Metric / Gross / Net / Fee Drag rows for one fee class (from the engine JSON)."""
+    g, n, d = tier["gross"], tier["net"], tier["drag"]
+    return [
+        ["Total Return",                              g["total"],    n["total"],    d["total"]],
+        ["CAGR",                                      g["cagr"],     n["cagr"],     d["cagr"]],
+        ["Sharpe Ratio",                              g["sharpe"],   n["sharpe"],   d["sharpe"]],
+        ["Sortino Ratio",                             g["sortino"],  n["sortino"],  d["sortino"]],
+        ["Calmar Ratio",                              g["calmar"],   n["calmar"],   d["calmar"]],
+        ["Max Drawdown (daily NAV)",                  g["maxDD"],    n["maxDD"],    d["maxDD"]],
+        ["Recovery Factor",                           g["recovery"], n["recovery"], d["recovery"]],
+        [f"Ending Equity ({tier['seedDisp']} start)", g["end"],      n["end"],      d["end"]],
+    ]
+
+
 def direction_table():
     """Per-tier long-only trade activity (from PNTHR Tree IR treeIr/{tier}.json)."""
     hdr_style = ParagraphStyle(
@@ -113,15 +129,16 @@ def direction_table():
         name="td2", fontName="Helvetica", fontSize=10, leading=13,
         alignment=TA_LEFT)
 
+    tr = (T["filet"]["trades"], T["porterhouse"]["trades"], T["wagyu"]["trades"])
     data = [
         [Paragraph(c, hdr_style) for c in
          ["Metric (Long-Only)", "Filet $100K", "Porterhouse $500K", "Wagyu $1M"]],
         [Paragraph(c, cell_style) for c in
-         ["Profit Factor", "1.77x", "1.69x", "1.48x"]],
+         ["Profit Factor", tr[0]["pf"], tr[1]["pf"], tr[2]["pf"]]],
         [Paragraph(c, cell_style) for c in
-         ["Win Rate", "28.4%", "20.5%", "19.2%"]],
+         ["Win Rate", tr[0]["winRate"], tr[1]["winRate"], tr[2]["winRate"]]],
         [Paragraph(c, cell_style) for c in
-         ["Total Trades", "1,333", "1,698", "1,807"]],
+         ["Total Trades", tr[0]["count"], tr[1]["count"], tr[2]["count"]]],
     ]
 
     tbl = Table(data, colWidths=[2.2 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch])
@@ -153,14 +170,10 @@ def annual_table():
         [Paragraph(c, hdr_style) for c in
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
           "PNTHR Tree Net", "Alpha"]],
+    ] + [
         [Paragraph(c, cell_style) for c in
-         ["2023", "$1.00M", "$934K", "+24.81%", "-6.62%", "-31.43%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2024", "$934K", "$1.62M", "+24.00%", "+72.96%", "+48.96%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2025", "$1.62M", "$1.43M", "+16.64%", "-11.48%", "-28.12%"]],
-        [Paragraph(c, cell_style) for c in
-         ["2026 (to Jun)", "$1.43M", "$3.56M", "+7.99%", "+149.21%", "+141.22%"]],
+         [a["year"], a["start"], a["end"], a["spy"], a["tree"], a["alpha"]]]
+        for a in ANNUAL
     ]
 
     tbl = Table(data, colWidths=[0.6 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch, 1.0 * inch])
@@ -248,16 +261,7 @@ def build():
     story.append(Paragraph(
         "<b>FILET CLASS ($100,000 - $499,999 : 30% / 25% after 36 months)</b>",
         CLASS_HDR))
-    story.append(metrics_table([
-        ["Total Return",              "+774.1%",  "+407.4%",  "-366.7 pts"],
-        ["CAGR",                      "+87.9%",   "+60.4%",   "-27.5 pts"],
-        ["Sharpe Ratio",              "1.34",     "1.05",     "-0.29"],
-        ["Sortino Ratio",             "2.14",     "1.66",     "-0.48"],
-        ["Calmar Ratio",              "1.85",     "1.15",     "-0.70"],
-        ["Max Drawdown (daily NAV)",  "-47.6%",   "-52.4%",   "-4.8 pts"],
-        ["Recovery Factor",           "2.7x",     "2.1x",     "-0.6"],
-        ["Ending Equity ($100K start)", "$874K",  "$507K",    "-$367K"],
-    ]))
+    story.append(metrics_table(class_rows(T["filet"])))
     story.append(spacer(6))
 
     # ── PORTERHOUSE ───────────────────────────────────────────────────────
@@ -265,16 +269,7 @@ def build():
     story.append(Paragraph(
         "<b>PORTERHOUSE CLASS ($500,000 - $999,999 : 25% / 20% after 36 months)</b>",
         CLASS_HDR))
-    story.append(metrics_table([
-        ["Total Return",              "+591.2%",  "+365.3%",  "-225.9 pts"],
-        ["CAGR",                      "+75.5%",   "+56.4%",   "-19.1 pts"],
-        ["Sharpe Ratio",              "1.21",     "1.00",     "-0.21"],
-        ["Sortino Ratio",             "1.90",     "1.57",     "-0.33"],
-        ["Calmar Ratio",              "1.57",     "1.08",     "-0.49"],
-        ["Max Drawdown (daily NAV)",  "-48.3%",   "-52.2%",   "-3.9 pts"],
-        ["Recovery Factor",           "2.6x",     "2.1x",     "-0.5"],
-        ["Ending Equity ($500K start)", "$3.46M", "$2.33M",   "-$1.13M"],
-    ]))
+    story.append(metrics_table(class_rows(T["porterhouse"])))
     story.append(spacer(6))
 
     # ── WAGYU ─────────────────────────────────────────────────────────────
@@ -282,16 +277,7 @@ def build():
     story.append(Paragraph(
         "<b>WAGYU CLASS ($1,000,000+ : 20% / 15% after 36 months)</b>",
         CLASS_HDR))
-    story.append(metrics_table([
-        ["Total Return",              "+361.5%",  "+256.3%",  "-105.3 pts"],
-        ["CAGR",                      "+56.1%",   "+44.7%",   "-11.3 pts"],
-        ["Sharpe Ratio",              "0.99",     "0.86",     "-0.13"],
-        ["Sortino Ratio",             "1.57",     "1.35",     "-0.22"],
-        ["Calmar Ratio",              "1.16",     "0.86",     "-0.30"],
-        ["Max Drawdown (daily NAV)",  "-48.3%",   "-51.9%",   "-3.6 pts"],
-        ["Recovery Factor",           "2.2x",     "1.9x",     "-0.3"],
-        ["Ending Equity ($1M start)", "$4.61M",   "$3.56M",   "-$1.05M"],
-    ]))
+    story.append(metrics_table(class_rows(T["wagyu"])))
 
     # ── Strategy Activity by Direction ────────────────────────────────────
     story.append(PageBreak())
@@ -325,12 +311,12 @@ def build():
     story.append(Paragraph("Key Takeaway", H1))
     story.append(spacer(4))
     story.append(P(
-        "Over the ~3.45-year backtest the Tree Fund's long-only 42-week-high momentum "
-        "approach delivered a +44.7% net CAGR at the Wagyu tier (transforming $1,000,000 "
-        "into $3.56M) and a +60.4% net CAGR at the Filet tier, while the S&amp;P 500 "
-        "returned +21.2% CAGR over the same period. These returns are accompanied by large "
-        "drawdowns: the net maximum drawdown was roughly -52% on a "
-        "daily mark-to-market basis, materially deeper than the S&amp;P 500's -19.0%. This "
+        f"Over the ~3.45-year backtest the Tree Fund's long-only 42-week-high momentum "
+        f"approach delivered a {T['wagyu']['net']['cagr']} net CAGR at the Wagyu tier (transforming $1,000,000 "
+        f"into {T['wagyu']['net']['end']}) and a {T['filet']['net']['cagr']} net CAGR at the Filet tier, while the S&amp;P 500 "
+        f"returned {SPY['cagr']} CAGR over the same period. These returns are accompanied by large "
+        f"drawdowns: the net maximum drawdown was roughly -52% on a "
+        f"daily mark-to-market basis, materially deeper than the S&amp;P 500's {SPY['maxDD']}. This "
         "is a high-volatility momentum strategy; per-trade risk is capped at 2% of NAV and "
         "single-name exposure at 10%, but the Fund's overall drawdown is not capped and can "
         "be substantial."

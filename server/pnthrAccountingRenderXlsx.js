@@ -26,6 +26,39 @@ function setCell(ws, ref, value, { numFmt, bold } = {}) {
 
 const COL_LETTERS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
 
+// ── Generic grid workbook writer ────────────────────────────────────────────────
+// Emits any multi-tab workbook from a grid spec: { sheets: [{ name, colWidths{col:w},
+// merges[], cells:[{ ref, value, numFmt, bold, formula, isDate }] }] }. This is the
+// reusable bottom layer ALL Excel documents use; the per-tab SEMANTIC mappers (engine
+// data -> grid spec) sit on top and are built with the accounting engine. Preserves
+// exact values, number formats, bold, merges, and formulas (e.g. NAV's SUBTOTAL total
+// rows) so the output is byte-faithful to NAV's working papers.
+export async function renderGridWorkbook(spec) {
+  const wb = new ExcelJS.Workbook();
+  for (const sheet of spec.sheets) {
+    const ws = wb.addWorksheet(sheet.name);
+    for (const [col, width] of Object.entries(sheet.colWidths || {})) {
+      ws.getColumn(col).width = width;
+    }
+    for (const c of sheet.cells) {
+      const cell = ws.getCell(c.ref);
+      if (c.formula) {
+        cell.value = { formula: String(c.value).replace(/^=/, '') };
+      } else if (c.isDate) {
+        cell.value = new Date(c.value);
+      } else {
+        cell.value = c.value;
+      }
+      if (c.numFmt) cell.numFmt = c.numFmt;
+      if (c.bold) cell.font = { bold: true };
+    }
+    for (const m of sheet.merges || []) {
+      try { ws.mergeCells(m); } catch { /* overlapping/duplicate merge — skip */ }
+    }
+  }
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 // ── Investor Capital Roll History (single tab) ──────────────────────────────────
 export async function renderCapitalRollHistory(data) {
   const wb = new ExcelJS.Workbook();

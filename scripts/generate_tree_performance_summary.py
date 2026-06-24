@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-PNTHR Tree Fund, LP — Performance Summary v2.1
-All metrics reconciled to the PNTHR Tree Fund Intelligence Report v1.0 (Filet $100K,
-Porterhouse $500K, Wagyu $1M; long-only 42wk-high momentum). Per-tier tables, the
-long-trade stats, the annual table (Wagyu net, chained year-end), and the drawdown
-table (Wagyu gross vs SPY) all extracted from the Tree backtest. SPY from Jan 2023.
+PNTHR Tree Fund, LP — Performance Summary v2.2
+All metrics reconciled to the PNTHR Tree Fund Intelligence Report (genTreeIrData.js ->
+server/data/treeIr/{100k,500k,1m}.json; long-only 42wk-high momentum), built on the
+same locked treeSim engine as the live dashboard baseline (frozen 2026-06-11). Per-tier
+GROSS/NET via irLiveService.computeSide; long-trade stats, annual table (Wagyu net,
+chained year-end) and SPY from the same source. Reproduce the numbers with
+server/_tree_perfsummary_numbers.mjs. v2.2 (2026-06-23): regenerated after the baseline
+drift fix (PSTG/PRO/BITF delisting + split re-syncs) corrected the Tree return.
 
-Output: ~/Downloads/PNTHR_Tree_Fund_Performance_Summary_v2.1_2026.pdf
+Output: ~/Downloads/PNTHR_Tree_Fund_Performance_Summary_v2.2_2026.pdf
 """
 
 import os
@@ -32,8 +35,8 @@ from pnthr_design import (
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
-VERSION    = "v2.1"
-DATE_DISP  = "May 2026"
+VERSION    = "v2.2"
+DATE_DISP  = "June 2026"
 
 OUT_PATH = os.path.expanduser(
     f"~/Downloads/PNTHR_Tree_Fund_Performance_Summary_{VERSION}_2026.pdf")
@@ -102,7 +105,7 @@ def metrics_table(rows):
 
 
 def direction_table():
-    """BL / SS / Combined trade activity table (from Wagyu $1M IR v10.2)."""
+    """Per-tier long-only trade activity (from PNTHR Tree IR treeIr/{tier}.json)."""
     hdr_style = ParagraphStyle(
         name="th2", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT, textColor=PALETTE_WHITE)
@@ -114,11 +117,11 @@ def direction_table():
         [Paragraph(c, hdr_style) for c in
          ["Metric (Long-Only)", "Filet $100K", "Porterhouse $500K", "Wagyu $1M"]],
         [Paragraph(c, cell_style) for c in
-         ["Profit Factor", "1.93x", "1.67x", "1.52x"]],
+         ["Profit Factor", "1.77x", "1.69x", "1.48x"]],
         [Paragraph(c, cell_style) for c in
-         ["Win Rate", "27.5%", "20.8%", "19.1%"]],
+         ["Win Rate", "28.4%", "20.5%", "19.2%"]],
         [Paragraph(c, cell_style) for c in
-         ["Total Trades", "1,351", "1,684", "1,815"]],
+         ["Total Trades", "1,333", "1,698", "1,807"]],
     ]
 
     tbl = Table(data, colWidths=[2.2 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch])
@@ -138,7 +141,7 @@ def direction_table():
 
 
 def annual_table():
-    """Annual performance from Wagyu IR v10.2 (Wagyu Net basis)."""
+    """Annual performance, Wagyu Net basis, chained year-end (from PNTHR Tree IR)."""
     hdr_style = ParagraphStyle(
         name="th4", fontName="Helvetica-Bold", fontSize=10, leading=13,
         alignment=TA_LEFT, textColor=PALETTE_WHITE)
@@ -151,13 +154,13 @@ def annual_table():
          ["Year", "Start Equity", "End Equity", "S&amp;P 500",
           "PNTHR Tree Net", "Alpha"]],
         [Paragraph(c, cell_style) for c in
-         ["2023", "$1.00M", "$930K", "+24.81%", "-7.01%", "-31.83%"]],
+         ["2023", "$1.00M", "$934K", "+24.81%", "-6.62%", "-31.43%"]],
         [Paragraph(c, cell_style) for c in
-         ["2024", "$930K", "$1.74M", "+23.30%", "+87.22%", "+63.92%"]],
+         ["2024", "$934K", "$1.62M", "+24.00%", "+72.96%", "+48.96%"]],
         [Paragraph(c, cell_style) for c in
-         ["2025", "$1.74M", "$1.52M", "+16.35%", "-12.46%", "-28.81%"]],
+         ["2025", "$1.62M", "$1.43M", "+16.64%", "-11.48%", "-28.12%"]],
         [Paragraph(c, cell_style) for c in
-         ["2026 (to Jun)", "$1.52M", "$3.87M", "+8.19%", "+153.95%", "+145.76%"]],
+         ["2026 (to Jun)", "$1.43M", "$3.56M", "+7.99%", "+149.21%", "+141.22%"]],
     ]
 
     tbl = Table(data, colWidths=[0.6 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch, 1.0 * inch])
@@ -240,53 +243,54 @@ def build():
     ))
 
     # ── FILET ─────────────────────────────────────────────────────────────
-    # From IR Filet $100K v10.2 (Multi-strategy + MCE)
+    # From PNTHR Tree IR (genTreeIrData.js -> treeIr/100k.json, 42wk baseline frozen
+    # 2026-06-11); metrics via irLiveService.computeSide (see _tree_perfsummary_numbers.mjs).
     story.append(Paragraph(
         "<b>FILET CLASS ($100,000 - $499,999 : 30% / 25% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+1,030.1%", "+527.8%",  "-502.3 pts"],
-        ["CAGR",                      "+102.5%",  "+70.7%",   "-31.8 pts"],
-        ["Sharpe Ratio",              "1.43",     "1.14",     "-0.29"],
-        ["Sortino Ratio",             "2.25",     "1.74",     "-0.51"],
-        ["Calmar Ratio",              "2.02",     "1.21",     "-0.81"],
-        ["Max Drawdown (daily NAV)",  "-50.7%",   "-58.4%",   "-7.7 pts"],
-        ["Recovery Factor",           "3x",       "2x",       "-1"],
-        ["Ending Equity ($100K start)", "$1.13M", "$628K",    "-$502K"],
+        ["Total Return",              "+774.1%",  "+407.4%",  "-366.7 pts"],
+        ["CAGR",                      "+87.9%",   "+60.4%",   "-27.5 pts"],
+        ["Sharpe Ratio",              "1.34",     "1.05",     "-0.29"],
+        ["Sortino Ratio",             "2.14",     "1.66",     "-0.48"],
+        ["Calmar Ratio",              "1.85",     "1.15",     "-0.70"],
+        ["Max Drawdown (daily NAV)",  "-47.6%",   "-52.4%",   "-4.8 pts"],
+        ["Recovery Factor",           "2.7x",     "2.1x",     "-0.6"],
+        ["Ending Equity ($100K start)", "$874K",  "$507K",    "-$367K"],
     ]))
     story.append(spacer(6))
 
     # ── PORTERHOUSE ───────────────────────────────────────────────────────
-    # From IR Porterhouse $500K v10.2 (Multi-strategy + MCE)
+    # From PNTHR Tree IR (treeIr/500k.json, 42wk baseline)
     story.append(Paragraph(
         "<b>PORTERHOUSE CLASS ($500,000 - $999,999 : 25% / 20% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+585.8%",  "+359.2%",  "-226.6 pts"],
-        ["CAGR",                      "+75.1%",   "+55.8%",   "-19.3 pts"],
-        ["Sharpe Ratio",              "1.20",     "0.99",     "-0.21"],
-        ["Sortino Ratio",             "1.90",     "1.56",     "-0.34"],
+        ["Total Return",              "+591.2%",  "+365.3%",  "-225.9 pts"],
+        ["CAGR",                      "+75.5%",   "+56.4%",   "-19.1 pts"],
+        ["Sharpe Ratio",              "1.21",     "1.00",     "-0.21"],
+        ["Sortino Ratio",             "1.90",     "1.57",     "-0.33"],
         ["Calmar Ratio",              "1.57",     "1.08",     "-0.49"],
-        ["Max Drawdown (daily NAV)",  "-47.9%",   "-51.6%",   "-3.7 pts"],
-        ["Recovery Factor",           "2x",       "2x",       "0"],
-        ["Ending Equity ($500K start)", "$3.43M", "$2.30M",   "-$1.13M"],
+        ["Max Drawdown (daily NAV)",  "-48.3%",   "-52.2%",   "-3.9 pts"],
+        ["Recovery Factor",           "2.6x",     "2.1x",     "-0.5"],
+        ["Ending Equity ($500K start)", "$3.46M", "$2.33M",   "-$1.13M"],
     ]))
     story.append(spacer(6))
 
     # ── WAGYU ─────────────────────────────────────────────────────────────
-    # From IR Wagyu $1M v10.2 (Multi-strategy + MCE)
+    # From PNTHR Tree IR (treeIr/1m.json, 42wk baseline)
     story.append(Paragraph(
         "<b>WAGYU CLASS ($1,000,000+ : 20% / 15% after 36 months)</b>",
         CLASS_HDR))
     story.append(metrics_table([
-        ["Total Return",              "+409.1%",  "+287.0%",  "-122.1 pts"],
-        ["CAGR",                      "+60.6%",   "+48.3%",   "-12.3 pts"],
-        ["Sharpe Ratio",              "1.04",     "0.90",     "-0.14"],
-        ["Sortino Ratio",             "1.63",     "1.40",     "-0.23"],
-        ["Calmar Ratio",              "1.21",     "0.91",     "-0.30"],
-        ["Max Drawdown (daily NAV)",  "-50.0%",   "-53.0%",   "-3.0 pts"],
-        ["Recovery Factor",           "2x",       "2x",       "0"],
-        ["Ending Equity ($1M start)", "$5.09M",   "$3.87M",   "-$1.22M"],
+        ["Total Return",              "+361.5%",  "+256.3%",  "-105.3 pts"],
+        ["CAGR",                      "+56.1%",   "+44.7%",   "-11.3 pts"],
+        ["Sharpe Ratio",              "0.99",     "0.86",     "-0.13"],
+        ["Sortino Ratio",             "1.57",     "1.35",     "-0.22"],
+        ["Calmar Ratio",              "1.16",     "0.86",     "-0.30"],
+        ["Max Drawdown (daily NAV)",  "-48.3%",   "-51.9%",   "-3.6 pts"],
+        ["Recovery Factor",           "2.2x",     "1.9x",     "-0.3"],
+        ["Ending Equity ($1M start)", "$4.61M",   "$3.56M",   "-$1.05M"],
     ]))
 
     # ── Strategy Activity by Direction ────────────────────────────────────
@@ -304,7 +308,7 @@ def build():
     story.append(spacer(4))
     story.append(P(
         "Backtest period: January 2023 through June 2026 (frozen at go-live; ~3.45 years). "
-        "1,351 to 1,815 long trades by tier across the PNTHR AI 300 Universe (~300 names).",
+        "1,333 to 1,807 long trades by tier across the PNTHR AI 300 Universe (~300 names).",
         SMALL))
 
     # ── Annual Performance ────────────────────────────────────────────────
@@ -322,10 +326,10 @@ def build():
     story.append(spacer(4))
     story.append(P(
         "Over the ~3.45-year backtest the Tree Fund's long-only 42-week-high momentum "
-        "approach delivered a +48.3% net CAGR at the Wagyu tier (transforming $1,000,000 "
-        "into $3.87M) and a +70.7% net CAGR at the Filet tier, while the S&amp;P 500 "
+        "approach delivered a +44.7% net CAGR at the Wagyu tier (transforming $1,000,000 "
+        "into $3.56M) and a +60.4% net CAGR at the Filet tier, while the S&amp;P 500 "
         "returned +21.2% CAGR over the same period. These returns are accompanied by large "
-        "drawdowns: the net maximum drawdown was roughly -53% (Wagyu) to -58% (Filet) on a "
+        "drawdowns: the net maximum drawdown was roughly -52% on a "
         "daily mark-to-market basis, materially deeper than the S&amp;P 500's -19.0%. This "
         "is a high-volatility momentum strategy; per-trade risk is capped at 2% of NAV and "
         "single-name exposure at 10%, but the Fund's overall drawdown is not capped and can "

@@ -54,15 +54,21 @@ def rebrand(infile, outfile, kind):
                     if 'NAV' in c.value: c.value=fix_text(c.value)
                 try:
                     f=c.fill
-                    if isinstance(f, GradientFill):
-                        # NAV uses navy GRADIENT fills for table/group/subtotal headers (openpyxl does
-                        # NOT report these via fill_type=='gradient' — must use isinstance) -> black + yellow
+                    # NAV's navy table/group/subtotal headers are GRADIENT fills. c.fill is a proxy so
+                    # isinstance(GradientFill) is False; the reliable signal is fill_type 'linear'/'path'.
+                    if f and f.fill_type in ('linear','path'):
                         c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
                     elif f and f.fill_type=='solid' and f.fgColor and f.fgColor.rgb==NAVY:
                         c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
                     elif c.font and c.font.color and c.font.color.rgb==NAVY:
                         set_font(c, BLACK)
                 except Exception: pass
+                # Give right-aligned numbers a little breathing room so the rightmost digit doesn't
+                # touch/overflow the column edge.
+                if isinstance(c.value,(int,float)) and not isinstance(c.value,bool):
+                    a=c.alignment
+                    if a.horizontal!='right' or (a.indent or 0)<1:
+                        c.alignment=Alignment(horizontal='right', vertical=a.vertical, indent=1, wrap_text=a.wrap_text)
         # Notebook/CapRoll lost their image band -> build a black band (rows 1-2) w/ yellow fund name
         if kind in ('notebook','caproll'):
             maxc=min(max(ws.max_column,1),40)

@@ -43,7 +43,7 @@ import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrde
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
 import { getFundComparison, getFundComparisonForMember } from './fundCompareService.js';
-import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog } from './pnthrTreeEngine.js';
+import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog, setTreeNoBuyback } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks, listPaperBooks } from './treePaperBook.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
@@ -2744,6 +2744,11 @@ app.post('/api/admin/pnthr-tree/mode', authenticateJWT, requireAdmin, async (req
 });
 app.post('/api/admin/pnthr-tree/reset', authenticateJWT, requireAdmin, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await resetPnthrTreePaper(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Per-ticker "no buyback" toggle — block/allow the engine re-entering a name you sold.
+app.post('/api/admin/pnthr-tree/no-buyback', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); const { ticker, blocked } = req.body || {}; res.json(await setTreeNoBuyback(db, ticker, blocked)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/tick', authenticateJWT, requireAdmin, async (req, res) => {

@@ -58,6 +58,24 @@ export async function engineExclusions(db) {
   return out;
 }
 
+// ── No-buyback list (user-toggled per-ticker "do not re-enter") ───────────────
+// Toggled per card on the Tree page. While a ticker is on this list the engine will
+// NOT re-enter it (no buyback) — so when you manually sell a name it stays sold. UNLIKE
+// ENGINE_EXCLUDE, this is ENTRY-ONLY: any position you still hold is trailed/managed
+// normally until you sell it. Toggle off to let the engine buy it again.
+const NO_BUYBACK = 'pnthr_tree_no_buyback';
+export async function getNoBuybackSet(db) {
+  try { return new Set((await db.collection(NO_BUYBACK).find({}).toArray()).map(d => d.ticker)); }
+  catch { return new Set(); }
+}
+export async function setTreeNoBuyback(db, ticker, blocked) {
+  const t = String(ticker || '').toUpperCase().trim();
+  if (!t) throw new Error('ticker required');
+  if (blocked) await db.collection(NO_BUYBACK).updateOne({ ticker: t }, { $set: { ticker: t, blockedAt: new Date() } }, { upsert: true });
+  else await db.collection(NO_BUYBACK).deleteOne({ ticker: t });
+  return { ticker: t, noBuyback: !!blocked };
+}
+
 // Live-vs-stored price sanity net: if the live quote is wildly off the stored
 // candle scale (a split the calendar missed, or bad data), DROP the ticker's
 // bands so the engine can't enter or trail a stop off bogus levels, and flag
@@ -183,6 +201,7 @@ export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
   const nav = await getNav(db);
   const excl = await engineExclusions(db);
+  const noBuyback = await getNoBuybackSet(db);
   await ensureMirrorMigration(db, cfg, excl);
   const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
   for (const f of applyPriceSanity(quotes, bands)) {   // un-tracked split / bad data → manual until re-synced
@@ -232,6 +251,7 @@ export async function getPnthrTreeState(db) {
         ticker: t, sector: AI_META[t]?.sector, price, priorHigh: null, pctToHigh: null,
         changePct: +q.changesPercentage || 0, state: 'stalking', held: held.has(t),
         manual: true, note: excl.get(t) || null, stop: null, shares: 0, risk: 0, posValue: 0,
+        noBuyback: noBuyback.has(t),
       });
       continue;
     }
@@ -246,6 +266,7 @@ export async function getPnthrTreeState(db) {
       changePct: +q.changesPercentage || 0, state, held: held.has(t),
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
       attackAt: state === 'attack' ? (attackSeen[t] || null) : null,   // when this new-high signal first fired
+      noBuyback: noBuyback.has(t),
     });
   }
   funnel.sort((a, b) => (a.pctToHigh ?? Infinity) - (b.pctToHigh ?? Infinity));   // closest to a new high first; manual (no high) last
@@ -264,6 +285,7 @@ export async function getPnthrTreeState(db) {
   // EXACTLY — its own mark (marketPrice) and unrealized P&L — so the page matches your
   // account to the dollar. SIM would-buys are hypothetical, so they use the live FMP price.
   const enrich = (p) => {
+    p.noBuyback = noBuyback.has(p.ticker);
     const q = quotes[p.ticker]; const basis = p.avgCost || p.entryPrice || 0;
     const fmpLast = q ? +q.price : 0;
     const last = p.real ? (p.ibkrLast || fmpLast || basis) : (fmpLast || basis);
@@ -536,6 +558,7 @@ export async function runPnthrTreeTick(db) {
   if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
   const nav = await getNav(db);
   const excl = await engineExclusions(db);
+  const noBuyback = await getNoBuybackSet(db);
   await ensureMirrorMigration(db, cfg, excl);   // one-time: switch to the live-mirror model
   const [quotes, bands] = await Promise.all([fetchQuotes(AI_TICKERS), priorBands(db, AI_TICKERS, excl)]);
   const actions = [];
@@ -626,6 +649,7 @@ export async function runPnthrTreeTick(db) {
     const priorHigh = highs[t];   // real prior 42wk high (excl today) = the breakout / trigger price
     if (!(price > 0) || !(priorHigh > 0) || dayHigh < priorHigh + 0.01) continue;   // not a new 42wk high
     attackFired.push(t);
+    if (noBuyback.has(t)) { actions.push({ type: 'SKIP_NO_BUYBACK', ticker: t }); continue; }   // user blocked re-entry on this card
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const { shares: fullShares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
     if (!stop || fullShares < 1) continue;   // unchanged: no valid stop / sub-1-share full size → not a candidate

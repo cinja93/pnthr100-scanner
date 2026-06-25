@@ -151,7 +151,30 @@ function ModeButton({ label, active, color, onClick }) {
   );
 }
 
-function Badge({ f, onClick }) {
+// Per-card buyback toggle. When buybacks are ALLOWED it reads "NO BUYBACK" (click to
+// block); when BLOCKED it reads "BUY BACK" (red — click to allow again). The engine
+// skips re-entering a blocked name, so a position you manually sell stays sold.
+function NoBuybackBadge({ ticker, blocked, onToggle, busy }) {
+  if (!onToggle) return null;
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); if (!busy) onToggle(ticker, blocked); }}
+      title={blocked
+        ? `Buybacks are BLOCKED for ${ticker} — the engine will NOT re-buy it, so it stays sold. Click to allow buybacks again.`
+        : `The engine may re-buy ${ticker} on a new 42-week high. Click to block buybacks so it stays sold after you sell it.`}
+      style={{
+        cursor: busy ? 'wait' : 'pointer', fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
+        letterSpacing: '0.04em', userSelect: 'none', whiteSpace: 'nowrap',
+        ...(blocked
+          ? { background: '#7f1d1d', color: '#fecaca', border: '1px solid #ef4444' }
+          : { background: 'transparent', color: '#9aa0aa', border: '1px solid #3a3a3a' }),
+      }}>
+      {blocked ? '🔒 BUY BACK' : '🚫 NO BUYBACK'}
+    </span>
+  );
+}
+
+function Badge({ f, onClick, onToggleBuyback }) {
   // stalking = outline; approaching = flashing outline; attack = filled
   const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, margin: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' };
   let style;
@@ -171,11 +194,12 @@ function Badge({ f, onClick }) {
         </>
       )}
       {f.attackAt && <span style={{ opacity: 0.85, fontSize: 10 }} title="When this 42-week-high signal first fired (ET)">⚡{clockET(f.attackAt)}</span>}
+      {!f.manual && (f.state !== 'stalking' || f.noBuyback) && <NoBuybackBadge ticker={f.ticker} blocked={f.noBuyback} onToggle={onToggleBuyback} />}
     </span>
   );
 }
 
-function DevourCard({ p, onClick, offStrategy }) {
+function DevourCard({ p, onClick, offStrategy, onToggleBuyback }) {
   const sim = !!p.sim;                                                     // PAPER simulated would-buy — NOT a real IBKR position
   const pnlColor = p.pnl >= 0 ? '#22c55e' : '#ef4444';
   const shares = p.shares || p.totalShares;
@@ -230,6 +254,11 @@ function DevourCard({ p, onClick, offStrategy }) {
         <span>Total risk <b style={{ color: '#facc15' }}>{totalRisk != null ? fmt(totalRisk) : '--'}</b>{p.riskPct != null && totalRisk != null ? <span style={{ color: '#a16207' }}> · {p.riskPct}% NAV</span> : null}</span>
       </div>
       {p.boughtAt && <div style={{ marginTop: 6, fontSize: 10, color: '#7a7a7a', fontFamily: 'monospace' }} title="When this position was purchased (ET)">Bought {clockET(p.boughtAt)}</div>}
+      {!offStrategy && onToggleBuyback && (
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+          <NoBuybackBadge ticker={p.ticker} blocked={p.noBuyback} onToggle={onToggleBuyback} />
+        </div>
+      )}
     </div>
   );
 }
@@ -334,6 +363,16 @@ export default function PnthrTreePage() {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  // Toggle the per-ticker "no buyback" lock — block (or re-allow) the engine re-entering
+  // a name. Optimistically reflect it, then reload from the server.
+  const toggleBuyback = async (ticker, currentlyBlocked) => {
+    try {
+      const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/no-buyback`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker, blocked: !currentlyBlocked }) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await load();
+    } catch (e) { setErr(e.message); }
+  };
+
   // Manual trigger for split tracking: refreshes FMP's split calendar + re-syncs
   // any pending split's candles (same job that runs nightly at 4:15pm ET).
   const runSplitCheck = async () => {
@@ -390,14 +429,14 @@ export default function PnthrTreePage() {
     const sim = list.filter(p => p.sim);
     return (
       <>
-        {real.length > 0 && <div style={cardRow}>{real.map((p, i) => <DevourCard key={'r' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} />)}</div>}
+        {real.length > 0 && <div style={cardRow}>{real.map((p, i) => <DevourCard key={'r' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
         {sim.length > 0 && (
           <div style={{ marginTop: real.length ? 14 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7, color: '#93c5fd', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               <span style={{ background: '#1e3a8a', color: '#bfdbfe', border: '1px solid #3b82f6', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>PAPER</span>
               simulated would-buys — hypothetical, not in IBKR ({sim.length})
             </div>
-            <div style={cardRow}>{sim.map((p, i) => <DevourCard key={'s' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} />)}</div>
+            <div style={cardRow}>{sim.map((p, i) => <DevourCard key={'s' + i} p={p} onClick={() => openChart(navTickers, p.ticker)} onToggleBuyback={toggleBuyback} />)}</div>
           </div>
         )}
       </>
@@ -565,7 +604,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS · READY FOR PURCHASE ({attack.length})</h3>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
-          <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} />)}</div>}
+          <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* MANUAL TRADES — positions you hold that Tree never trades (SPCX, non-AI-300) */}
@@ -581,13 +620,13 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#facc15', fontSize: 13, letterSpacing: '0.08em' }}>APPROACHING — within 1% of a new high ({approaching.length})</h3>
         {approaching.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None close yet.</div> :
-          <div>{approaching.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} />)}</div>}
+          <div>{approaching.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* STALKING — the universe */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#7fcf9f', fontSize: 13, letterSpacing: '0.08em' }}>STALKING — AI-300 universe, A→Z ({stalking.length})</h3>
-        <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(stalking.map(x => x.ticker), f.ticker)} />)}</div>
+        <div style={{ maxHeight: 320, overflowY: 'auto' }}>{stalking.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(stalking.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>
       </div>
 
       {/* RISK SCORECARD — forward-only: did your active management beat the strategy on return-per-drawdown? */}

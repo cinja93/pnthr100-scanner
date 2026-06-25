@@ -6576,7 +6576,7 @@ let dailyOrdersRunning = false;
 // Timezone-pinned to America/New_York (matches the sibling crons) so '9-16' is correct regardless of
 // the host TZ; the engine ALSO gates entries to 9:30-16:00 ET + a fresh confirmed snapshot internally.
 let pnthrTreeTickRunning = false;
-cron.schedule('*/2 9-16 * * 1-5', async () => {
+cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — faster ATTACK→buy; the pnthrTreeTickRunning guard skips overlapping runs and the in-flight BUY/STOP dedup prevents double-action within the snapshot lag, so 1-min is safe.
   // WRITER GATE (2026-06-22): only the always-on Render writer ticks the LIVE engine.
   // This cron was previously UN-gated, so any second process running the same code — the
   // local `npm run dev` server, which registers every cron — co-ticked every 2 min and

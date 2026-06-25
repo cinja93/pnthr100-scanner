@@ -3,7 +3,7 @@
 // Replaces NAV Fund Services as administrator: we self-produce the identical
 // monthly fund-accounting package (2 investor PDFs + 3 Excel working papers)
 // from our own data. This service owns the STORAGE + monthly PLACEHOLDER layer:
-//   - pnthr_acct_periods    : one bucket per calendar month (24 seeded: 2026 + 2027)
+//   - pnthr_acct_periods    : one bucket per calendar month (fund inception June 2025 → 2027)
 //   - pnthr_acct_documents  : the generated PDF/Excel files (Buffer in Mongo), keyed
 //                             by period + docType (per-investor docs also keyed by investorNo)
 //
@@ -17,8 +17,10 @@ import { ObjectId } from 'mongodb';
 const PERIODS = 'pnthr_acct_periods';
 const DOCS = 'pnthr_acct_documents';
 
-// The years we pre-create monthly placeholders for, so generated docs always have a home.
-export const PLACEHOLDER_YEARS = [2026, 2027];
+// Monthly placeholders span fund inception (the first monthly statement) through the
+// horizon, so every month's documents have a home — historical (backfilled) and future.
+export const INCEPTION = { year: 2025, month: 6 };   // June 2025 — first monthly statement
+export const HORIZON_END = { year: 2027, month: 12 };
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -45,8 +47,8 @@ export function periodLabel(year, month) {
   return `${MONTH_NAMES[month - 1]} ${year}`; // e.g. "April 2026"
 }
 
-// Idempotent, self-healing: ensure a placeholder exists for every month of every
-// PLACEHOLDER_YEARS. Only inserts the ones that are missing — never touches existing
+// Idempotent, self-healing: ensure a placeholder exists for every month from fund
+// inception to the horizon. Only inserts the ones that are missing — never touches existing
 // buckets (so generated docs + reconciliation status are preserved across calls).
 export async function ensurePeriods() {
   const db = await connectToDatabase();
@@ -59,10 +61,10 @@ export async function ensurePeriods() {
   } catch { /* index already exists */ }
 
   const wanted = [];
-  for (const year of PLACEHOLDER_YEARS) {
-    for (let month = 1; month <= 12; month++) {
-      wanted.push({ year, month, period: periodId(year, month) });
-    }
+  let y = INCEPTION.year, mo = INCEPTION.month;
+  while (y < HORIZON_END.year || (y === HORIZON_END.year && mo <= HORIZON_END.month)) {
+    wanted.push({ year: y, month: mo, period: periodId(y, mo) });
+    mo++; if (mo > 12) { mo = 1; y++; }
   }
 
   const existing = new Set(

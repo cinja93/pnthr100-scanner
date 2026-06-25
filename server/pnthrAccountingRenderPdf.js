@@ -24,7 +24,7 @@ const CONTENT_R = PW - RM;        // right content edge
 
 // PNTHR palette: black bands/headers, PNTHR yellow lettering on black, black ink on white.
 const NAVY = '#000000';      // band/brand fill (was NAV navy) — now PNTHR black
-const YELLOW = '#FFD700';    // PNTHR gold — lettering on black backgrounds
+const YELLOW = '#FCF000';    // PNTHR yellow (sampled from the logo) — lettering on black
 const INK = '#222222';
 const GREY = '#777777';
 const SHADE = '#eef0f2';

@@ -90,13 +90,19 @@ export function parseFlexStatement(flexQueryResponse) {
   for (const [key, val] of Object.entries(stmt)) {
     if (key === 'accountId' || key === 'fromDate' || key === 'toDate' || key === 'period' || key === 'whenGenerated') continue;
     if (val && typeof val === 'object') {
-      // val is like { OpenPosition: [...] } — grab the first array/object child as rows
-      const childKey = Object.keys(val).find(k => k !== 'count');
-      if (childKey) {
-        const rows = val[childKey];
-        sections[key] = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+      // Leaf element whose data IS its own attributes (e.g. ChangeInNAV) — the element is the row.
+      const vals = Object.values(val);
+      if (vals.length && vals.every(v => v == null || typeof v !== 'object')) {
+        sections[key] = [val];
       } else {
-        sections[key] = [];
+        // Wrapper like { OpenPosition: [...] } — grab the first object/array child as the rows.
+        const childKey = Object.keys(val).find(k => k !== 'count' && typeof val[k] === 'object');
+        if (childKey) {
+          const rows = val[childKey];
+          sections[key] = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+        } else {
+          sections[key] = [];
+        }
       }
     }
   }

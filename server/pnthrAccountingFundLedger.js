@@ -43,6 +43,9 @@ export function bucketBNet(b) {
 // the income-statement expense lines this layer contributes (negatives = expense), and Bucket-B net.
 export function postMonth(prior, { bankBalance = null, schedule = LEDGER_SCHEDULE } = {}) {
   const s = schedule;
+  // Bank charges = the drop in the bank balance not otherwise explained (an operating expense
+  // paid directly from the bank). Derived from the entered balance, or the schedule fallback.
+  const bankCharge = bankBalance != null ? r2(prior.bank - bankBalance) : s.bankCharges;
   const balances = {
     bank: r2(bankBalance != null ? bankBalance : prior.bank - s.bankCharges),
     orgPrepaid: r2(prior.orgPrepaid - s.orgAmortization),
@@ -55,7 +58,7 @@ export function postMonth(prior, { bankBalance = null, schedule = LEDGER_SCHEDUL
   const expenseLines = {
     admin: r2(-s.adminAccrual),
     professional: r2(-s.professionalAccrual),
-    operating: r2(-(s.operatingAccrual + s.bankCharges)),   // compliance + insurance + bank charges
+    operating: r2(-(s.operatingAccrual + bankCharge)),      // compliance + insurance + bank charges
     orgCost: r2(-s.orgAmortization),
     reimbursement: r2(s.gpReimbursement),                   // positive: GP reimbursement reduces net expense
   };

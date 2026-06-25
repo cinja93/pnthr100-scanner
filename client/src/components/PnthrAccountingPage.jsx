@@ -43,6 +43,7 @@ export default function PnthrAccountingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [auditBusy, setAuditBusy] = useState(false);
+  const [k1Busy, setK1Busy] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -68,6 +69,9 @@ export default function PnthrAccountingPage() {
   const monthsForYear = periods
     .filter(p => p.year === year)
     .sort((a, b) => a.month - b.month);
+  // Distinct investors for the selected year (from the per-investor individual statements).
+  const investorsForYear = [...new Set(monthsForYear.flatMap(p =>
+    (p.documents || []).filter(d => d.docType === 'individual_account_statement' && d.investorNo).map(d => d.investorNo)))].sort();
 
   async function handleDoc(docId, filename, download) {
     try {
@@ -107,6 +111,26 @@ export default function PnthrAccountingPage() {
       setError(err.message);
     } finally {
       setAuditBusy(false);
+    }
+  }
+
+  // One-button K-1 tax-data package for a single investor + year (PDF for the tax preparer).
+  async function downloadK1(investorNo) {
+    setK1Busy(investorNo);
+    try {
+      const res = await fetch(`${API_BASE}/api/pnthr-accounting/k1-package/${year}/${investorNo}`, { headers: authHeaders() });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'K-1 package failed'); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PNTHR_K1_${year}_Investor${investorNo}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setK1Busy(null);
     }
   }
 
@@ -199,6 +223,20 @@ export default function PnthrAccountingPage() {
           fontSize: 12, fontFamily: 'monospace', cursor: 'pointer',
         }}>{loading ? 'Loading…' : '↻ Refresh'}</button>
       </div>
+
+      {/* K-1 tax-data packages — one button per investor for the selected year */}
+      {investorsForYear.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14, padding: '8px 12px', border: '1px solid #3a2a14', borderRadius: 6, background: '#0d0d0d' }}>
+          <span style={{ color: '#aaa', fontSize: 11, fontWeight: 700, fontFamily: 'monospace', letterSpacing: 0.5 }}>K-1 DATA PACKAGES ({year}):</span>
+          {investorsForYear.map(no => (
+            <button key={no} onClick={() => downloadK1(no)} disabled={k1Busy === no} style={{
+              padding: '5px 12px', borderRadius: 6, border: '1px solid #6b4a2f', background: '#140f0c', color: '#f5b97f',
+              fontSize: 12, fontWeight: 700, fontFamily: 'monospace', cursor: k1Busy === no ? 'wait' : 'pointer',
+            }}>{k1Busy === no ? 'Compiling…' : `📄 Investor #${no}`}</button>
+          ))}
+          <span style={{ color: '#666', fontSize: 10 }}>one-click tax-preparer data package, per investor</span>
+        </div>
+      )}
 
       {error && (
         <div style={{ padding: 16, border: `1px solid ${RED}`, borderRadius: 6, color: RED, marginBottom: 14 }}>

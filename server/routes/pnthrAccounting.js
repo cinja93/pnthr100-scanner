@@ -10,7 +10,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { resolveRole } from '../auth.js';
 import { listPeriods, getDocument, ensurePeriods, listReferenceDocuments } from '../pnthrAccountingService.js';
-import { buildAuditPackageZip } from '../pnthrAccountingPackages.js';
+import { buildAuditPackageZip, buildK1DataPackage } from '../pnthrAccountingPackages.js';
 
 const router = express.Router();
 
@@ -90,6 +90,20 @@ router.get('/audit-package/:year', async (req, res) => {
     res.set('Content-Type', 'application/zip');
     res.set('Content-Disposition', `attachment; filename="PNTHR_Audit_Package_${year}.zip"`);
     res.send(zipBuf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pnthr-accounting/k1-package/:year/:investorNo — per-investor K-1 tax data package (PDF).
+router.get('/k1-package/:year/:investorNo', async (req, res) => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    if (!(year >= 2025 && year <= 2100)) return res.status(400).json({ error: 'bad year' });
+    const pdf = await buildK1DataPackage(year, req.params.investorNo);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="PNTHR_K1_DataPackage_${year}_Investor${req.params.investorNo}.pdf"`);
+    res.send(pdf);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

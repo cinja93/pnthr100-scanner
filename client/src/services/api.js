@@ -45,6 +45,13 @@ export async function fetchPnthrAccountingPeriods() {
   return res.json();
 }
 
+// Fund-level reference documents (disclosure statement, statements guide) — not period-bound.
+export async function fetchPnthrAccountingReference() {
+  const res = await apiFetch(`${API_BASE}/api/pnthr-accounting/reference`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to load reference documents');
+  return res.json();
+}
+
 // ── 3-fund comparison dashboard ──
 export async function fetchFundComparison() {
   const response = await apiFetch(`${API_BASE}/api/fund-compare`, { headers: authHeaders() });

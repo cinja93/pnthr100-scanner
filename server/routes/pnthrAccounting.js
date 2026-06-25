@@ -9,7 +9,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { resolveRole } from '../auth.js';
-import { listPeriods, getDocument, ensurePeriods } from '../pnthrAccountingService.js';
+import { listPeriods, getDocument, ensurePeriods, listReferenceDocuments } from '../pnthrAccountingService.js';
 
 const router = express.Router();
 
@@ -40,6 +40,15 @@ router.post('/ensure-periods', async (req, res) => {
   try {
     const created = await ensurePeriods();
     res.json({ created });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pnthr-accounting/reference — fund-level reference documents (not period-bound).
+router.get('/reference', async (req, res) => {
+  try {
+    res.json(await listReferenceDocuments());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

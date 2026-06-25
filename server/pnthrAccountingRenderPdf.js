@@ -257,3 +257,65 @@ export function renderIndividualAccountStatement(data) {
     doc.end();
   });
 }
+
+// ── Generic prose document (disclosure statement, guides, etc.) ─────────────────
+// Branded PNTHR prose PDF with auto-pagination, a header (logo + title) on page 1,
+// and a footer (producer + page numbers) on every page. docDef:
+//   { title, subtitle?, logoPath?, footer:{name,role,website,copyright},
+//     sections: [{ heading?, paragraphs?:[], bullets?:[], items?:[{label,desc}] }] }
+export function renderProseDocument(docDef) {
+  return new Promise((resolve, reject) => {
+    const M = 64;
+    const doc = new PDFDocument({ size: 'letter', margins: { top: M, bottom: 76, left: M, right: M },
+      bufferPages: true, info: { Title: docDef.title, Author: docDef.footer?.name || 'PNTHR Funds, LLC' } });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    const W = doc.page.width, CW = W - 2 * M;
+
+    // Header (page 1).
+    const logo = docDef.logoPath || DEFAULT_LOGO;
+    if (fs.existsSync(logo)) { try { doc.image(logo, M, 48, { width: 46, height: 46 }); } catch { /* ignore */ } }
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(18).text(docDef.title, M + 58, 52, { width: CW - 58 });
+    if (docDef.subtitle) doc.fillColor(GREY).font('Helvetica').fontSize(10).text(docDef.subtitle, M + 58, 76, { width: CW - 58 });
+    doc.moveTo(M, 104).lineTo(W - M, 104).lineWidth(1).strokeColor(NAVY).stroke();
+    doc.x = M; doc.y = 120;
+
+    for (const s of docDef.sections || []) {
+      if (s.heading) {
+        doc.moveDown(0.4);
+        doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(12).text(s.heading, M, doc.y, { width: CW });
+        doc.moveDown(0.3);
+      }
+      for (const p of (s.paragraphs || [])) {
+        doc.fillColor(INK).font('Helvetica').fontSize(10).text(p, M, doc.y, { width: CW, align: 'left', lineGap: 1.5 });
+        doc.moveDown(0.6);
+      }
+      for (const b of (s.bullets || [])) {
+        doc.fillColor(INK).font('Helvetica').fontSize(10).text('•  ' + b, M + 10, doc.y, { width: CW - 10, lineGap: 1 });
+        doc.moveDown(0.35);
+      }
+      for (const it of (s.items || [])) {
+        doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(10.5).text(it.label, M, doc.y, { width: CW });
+        doc.fillColor(INK).font('Helvetica').fontSize(10).text(it.desc, M + 10, doc.y, { width: CW - 10, lineGap: 1 });
+        doc.moveDown(0.55);
+      }
+    }
+
+    // Footer on every page.
+    const f = docDef.footer || {};
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.page.margins.bottom = 0; // draw in the footer band without triggering an extra page
+      const fy = doc.page.height - 56;
+      doc.moveTo(M, fy).lineTo(W - M, fy).lineWidth(0.5).strokeColor('#cccccc').stroke();
+      const left = `${f.name || 'PNTHR Funds, LLC'}  ·  ${f.role || 'General Partner'}${f.website ? '  ·  ' + f.website : ''}`;
+      doc.fillColor(GREY).font('Helvetica').fontSize(8).text(left, M, fy + 7, { width: CW, align: 'left', lineBreak: false });
+      doc.fillColor(GREY).font('Helvetica').fontSize(8).text(`Page ${i + 1 - range.start} of ${range.count}`, M, fy + 7, { width: CW, align: 'right', lineBreak: false });
+    }
+
+    doc.end();
+  });
+}

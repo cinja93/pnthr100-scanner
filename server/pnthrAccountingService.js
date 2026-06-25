@@ -39,6 +39,16 @@ export const DOC_TYPES = [
 
 const DOC_TYPE_KEYS = new Set(DOC_TYPES.map(d => d.key));
 
+// Fund-level REFERENCE documents — not tied to a month (disclosures, guides, etc.).
+// Stored in the same documents collection under a sentinel period so they live
+// separately from the monthly grid and surface in their own page section.
+export const REFERENCE_PERIOD = '__reference__';
+export const REFERENCE_DOC_TYPES = [
+  { key: 'disclosure_statement', label: 'Important Disclosure Statement',     ext: 'pdf', contentType: 'application/pdf' },
+  { key: 'statements_guide',     label: 'Guide to Your Monthly Statements',   ext: 'pdf', contentType: 'application/pdf' },
+];
+const REFERENCE_DOC_TYPE_KEYS = new Set(REFERENCE_DOC_TYPES.map(d => d.key));
+
 export function periodId(year, month) {
   return `${year}-${String(month).padStart(2, '0')}`; // e.g. "2026-04"
 }
@@ -181,4 +191,37 @@ export async function saveDocument({ period, docType, investorNo = null, label, 
   );
 
   return db.collection(DOCS).findOne(filter, { projection: { data: 0 } });
+}
+
+// Upsert a fund-level reference document (one per docType). Not period-bound.
+export async function saveReferenceDocument({ docType, label, filename, contentType, data, generatedBy = 'engine', fingerprint = null }) {
+  const db = await connectToDatabase();
+  if (!db) throw new Error('Database unavailable');
+  if (!REFERENCE_DOC_TYPE_KEYS.has(docType)) throw new Error(`Unknown reference docType: ${docType}`);
+  if (!Buffer.isBuffer(data)) throw new Error('Document data must be a Buffer');
+  const now = new Date();
+  await db.collection(DOCS).updateOne(
+    { period: REFERENCE_PERIOD, docType, investorNo: null },
+    { $set: { period: REFERENCE_PERIOD, docType, investorNo: null, label, filename, contentType, data, size: data.length, status: 'finalized', generatedBy, fingerprint, generatedAt: now } },
+    { upsert: true },
+  );
+  return db.collection(DOCS).findOne({ period: REFERENCE_PERIOD, docType, investorNo: null }, { projection: { data: 0 } });
+}
+
+// List fund-level reference documents (metadata only).
+export async function listReferenceDocuments() {
+  const db = await connectToDatabase();
+  if (!db) return { docTypes: REFERENCE_DOC_TYPES, documents: [] };
+  const docs = await db.collection(DOCS)
+    .find({ period: REFERENCE_PERIOD }, { projection: { data: 0 } })
+    .sort({ generatedAt: -1 })
+    .toArray();
+  return {
+    docTypes: REFERENCE_DOC_TYPES,
+    documents: docs.map(d => ({
+      id: d._id.toString(), docType: d.docType, label: d.label, filename: d.filename,
+      contentType: d.contentType, size: d.size, status: d.status, generatedAt: d.generatedAt,
+      generatedBy: d.generatedBy ?? null,
+    })),
+  };
 }

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import PageHeader from './PageHeader';
-import { API_BASE, authHeaders, fetchPnthrAccountingPeriods } from '../services/api';
+import { API_BASE, authHeaders, fetchPnthrAccountingPeriods, fetchPnthrAccountingReference } from '../services/api';
 
 // PNTHR Accounting — INTERNAL admin page.
 // Self-administration of the monthly fund-accounting package that replaces NAV.
-// This is the placeholder grid: every month of 2026 + 2027 has a bucket, and the
-// 5 documents (2 investor PDFs + 3 Excel working papers) auto-drop into their slot
-// as the engine generates them each month. Empty slots show "—" until produced.
+// The grid spans fund inception (June 2025) through 2027; each month holds the 5
+// documents (2 investor PDFs + 3 Excel working papers). Historical months carry the
+// NAV originals; future months fill as the engine produces them. A separate Reference
+// Documents section holds fund-level docs (disclosure statement, statements guide).
 
 const GOLD = '#FFD700';
 const GREEN = '#00c853';
@@ -38,6 +39,7 @@ export default function PnthrAccountingPage() {
   const [docTypes, setDocTypes] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [year, setYear] = useState(2026);
+  const [refDocs, setRefDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -45,9 +47,13 @@ export default function PnthrAccountingPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPnthrAccountingPeriods();
+      const [data, ref] = await Promise.all([
+        fetchPnthrAccountingPeriods(),
+        fetchPnthrAccountingReference().catch(() => ({ documents: [] })),
+      ]);
       setDocTypes(data.docTypes || []);
       setPeriods(data.periods || []);
+      setRefDocs(ref.documents || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -117,8 +123,27 @@ export default function PnthrAccountingPage() {
     <>
       <PageHeader
         title="PNTHR Accounting"
-        description="Self-administered monthly fund-accounting package (replaces NAV). Each month of 2026 and 2027 has a placeholder; generated documents drop into their slot automatically. Nothing finalizes until the books reconcile to IBKR and the bank to the penny."
+        description="Self-administered monthly fund-accounting package (replaces NAV). The grid spans fund inception (June 2025) through 2027; each month holds its document set. Nothing finalizes until the books reconcile to IBKR and the bank to the penny."
       />
+
+      {/* Reference Documents — fund-level, not period-bound */}
+      {refDocs.length > 0 && (
+        <div style={{ border: '1px solid #222', borderRadius: 8, padding: '12px 14px', marginBottom: 16, background: '#0d0d0d' }}>
+          <div style={{ color: '#aaa', fontSize: 11, fontWeight: 700, fontFamily: 'monospace', letterSpacing: 0.5, marginBottom: 8 }}>
+            REFERENCE DOCUMENTS
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {refDocs.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #1f2a3a', borderRadius: 6, padding: '8px 12px', background: '#111' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                <span style={{ color: '#eee', fontSize: 13, fontWeight: 600 }}>{d.label}</span>
+                <button onClick={() => handleDoc(d.id, d.filename, false)} style={linkBtn(GOLD)} title="View">View</button>
+                <button onClick={() => handleDoc(d.id, d.filename, true)} style={linkBtn(DIM)} title="Download">↓ PDF</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Year tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>

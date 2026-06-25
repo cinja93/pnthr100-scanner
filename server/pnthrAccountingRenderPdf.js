@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_LOGO = path.resolve(__dirname, '../client/src/assets/panther-head-sm.png');
+const LOGO_BLACK = path.resolve(__dirname, '../client/public/pnthr-logo-black-bg.png'); // head + wordmark, for black bands
 
 // Letter page geometry (points).
 const PW = 612, PH = 792;
@@ -74,23 +75,27 @@ export function renderAccountStatement(data) {
     const ML = 22, MR = 22, CR = PW - MR;
     doc.rect(0, 0, PW, PH).fill('#ffffff');
 
-    // ── Header band ──
+    // ── Header band (black, PNTHR-yellow outline, PNTHR logo) ──
     const h = data.header;
-    doc.rect(0, 0, PW, 72).fill(NAVY);
-    doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(15).text(h.fundName, ML, 11);
-    doc.font('Helvetica').fontSize(9.5).text(h.statementTitle || 'Account Statement (Unaudited)', ML, 32);
+    const bX = 14, bY = 12, bW = PW - 28, bH = 84;
+    doc.rect(bX, bY, bW, bH).fill(NAVY);                                   // black band, inset from edges
+    doc.lineWidth(1.5).strokeColor(YELLOW).rect(bX, bY, bW, bH).stroke();  // yellow outline (left/right/top/bottom)
+    if (fs.existsSync(LOGO_BLACK)) { try { doc.image(LOGO_BLACK, bX + 12, bY + 11, { height: 26 }); } catch { /* ignore */ } }
+    const tX = bX + 92;                                                    // text starts to the right of the logo
+    doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(15).text(h.fundName, tX, bY + 10);
+    doc.font('Helvetica').fontSize(9.5).text(h.statementTitle || 'Account Statement (Unaudited)', tX, bY + 32);
     doc.fontSize(8.5);
-    doc.text(`For the Period Ended ${h.periodEnded}`, ML, 48);
-    doc.text(`Reporting Currency : ${h.currency || 'USD'}`, ML, 60);
-    doc.text(`Start Of Period : ${h.startOfPeriod}`, 340, 48);
-    doc.text(`End Of Period  : ${h.endOfPeriod}`, 340, 60);
+    doc.text(`For the Period Ended ${h.periodEnded}`, bX + 12, bY + 54);
+    doc.text(`Reporting Currency : ${h.currency || 'USD'}`, bX + 12, bY + 66);
+    doc.text(`Start Of Period : ${h.startOfPeriod}`, bX + 320, bY + 54);
+    doc.text(`End Of Period  : ${h.endOfPeriod}`, bX + 320, bY + 66);
 
     // ── Column geometry ──
     const labelX = ML + 2;
     const cR = [330, 416, 502, CR];   // right edges of the 4 value columns
     const colW = 84;
     const rowH = 15;
-    let y = 86;
+    let y = 108;
 
     const drawValues = (values, { bold } = {}) => {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(INK);
@@ -189,6 +194,7 @@ export function renderIndividualAccountStatement(data) {
     // ── INVESTOR NO. box (top right) ──
     const boxW = 110, boxX = CONTENT_R - boxW, boxY = 100;
     doc.rect(boxX, boxY, boxW, 20).fill(NAVY);
+    doc.lineWidth(1).strokeColor(YELLOW).rect(boxX, boxY, boxW, 20).stroke();
     doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(9).text('INVESTOR NO.', boxX, boxY + 6, { width: boxW, align: 'center', characterSpacing: 0.5 });
     doc.rect(boxX, boxY + 20, boxW, 26).lineWidth(1).strokeColor(NAVY).stroke();
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(15).text(String(data.investor.no), boxX, boxY + 26, { width: boxW, align: 'center' });
@@ -211,6 +217,7 @@ export function renderIndividualAccountStatement(data) {
     // ── Section header bar ──
     const barY = 384;
     doc.rect(LM, barY, CONTENT_R - LM, 22).fill(NAVY);
+    doc.lineWidth(1.5).strokeColor(YELLOW).rect(LM, barY, CONTENT_R - LM, 22).stroke();
     doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(10.5)
       .text('CAPITAL ACCOUNT SUMMARY', LM + 8, barY + 6, { characterSpacing: 0.3 });
 

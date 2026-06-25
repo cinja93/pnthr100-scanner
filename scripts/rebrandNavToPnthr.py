@@ -45,9 +45,18 @@ def rebrand(infile, outfile, kind):
         ws._images=[]                                   # drop NAV logo/band images
         for row in ws.iter_rows():
             for c in row:
-                if isinstance(c.value,str) and 'NAV' in c.value: c.value=fix_text(c.value)
+                if isinstance(c.value,str):
+                    # openpyxl reads NAV's line breaks as the literal escape "_x000A_" — convert to
+                    # real newlines so multi-line headers wrap correctly (and survive the re-save).
+                    if '_x000A_' in c.value or '_x000D_' in c.value:
+                        c.value=c.value.replace('_x000D_','').replace('_x000A_','\n')
+                    if 'NAV' in c.value: c.value=fix_text(c.value)
                 try:
-                    if c.fill and c.fill.fill_type=='solid' and c.fill.fgColor and c.fill.fgColor.rgb==NAVY:
+                    f=c.fill
+                    if f and f.fill_type=='solid' and f.fgColor and f.fgColor.rgb==NAVY:
+                        c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
+                    elif f and f.fill_type=='gradient':
+                        # NAV uses navy GRADIENT fills for table/group/subtotal headers -> black + yellow text
                         c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
                     elif c.font and c.font.color and c.font.color.rgb==NAVY:
                         set_font(c, BLACK)
@@ -85,6 +94,19 @@ def rebrand(infile, outfile, kind):
             if isinstance(cell.value,str) and cell.value.strip():
                 a=cell.alignment
                 cell.alignment=Alignment(indent=13, horizontal=(a.horizontal or 'left'), vertical=a.vertical, wrap_text=a.wrap_text)
+        # Give multi-line column headers enough room (e.g. "Debit/(Credit) During the Period")
+        for row in ws.iter_rows():
+            ml=1
+            for c in row:
+                if isinstance(c.value,str) and '\n' in c.value:
+                    ml=max(ml, c.value.count('\n')+1)
+                    a=c.alignment
+                    c.alignment=Alignment(wrap_text=True, vertical='center', horizontal=(a.horizontal or 'general'), indent=(a.indent or 0))
+            if ml>1:
+                r=row[0].row
+                need=ml*14+8
+                h=ws.row_dimensions[r].height
+                if h is None or h<need: ws.row_dimensions[r].height=need
         if os.path.exists(LOGO):
             try:
                 im=XLImage(LOGO); im.height=36; im.width=int(36*800/325); ws.add_image(im,'A1')

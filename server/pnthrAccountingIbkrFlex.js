@@ -153,16 +153,38 @@ export async function getFlexStatement(token, referenceCode, baseUrl = GET_URL, 
   throw new Error(`IBKR Flex statement still not ready after ${retries} retries`);
 }
 
-// Full pull: send -> poll -> parse.
+// Full pull: send -> poll -> parse. Tries the primary Query ID, then any configured
+// fallback if the primary is unavailable (IBKR code 1014 — a freshly created/edited query
+// can take 15-60 min to activate on the Web Service even though it is valid in the UI).
+// This keeps the monthly close from ever failing on an IBKR propagation hiccup, and it
+// auto-upgrades to the primary the moment it serves. Real errors (expired token, etc.)
+// are NOT swallowed — only 1014 triggers the fallback.
 export async function pullFlexStatement({ token, queryId, retries, delayMs } = {}) {
   const t = token || process.env.IBKR_FLEX_TOKEN;
-  const q = queryId || process.env.IBKR_FLEX_QUERY_ID;
+  const primary = queryId || process.env.IBKR_FLEX_QUERY_ID;
+  const fallback = process.env.IBKR_FLEX_QUERY_ID_FALLBACK;
   if (!t) throw new Error('IBKR Flex token missing (pass token or set IBKR_FLEX_TOKEN)');
-  if (!q) throw new Error('IBKR Flex Query ID missing (pass queryId or set IBKR_FLEX_QUERY_ID)');
-  const { referenceCode, url } = await sendFlexRequest(t, q);
-  const { xml, statement } = await getFlexStatement(t, referenceCode, url, { retries, delayMs });
-  const parsed = parseFlexStatement(statement);
-  return { xml, parsed, summary: summarizeFlex(parsed) };
+  if (!primary) throw new Error('IBKR Flex Query ID missing (pass queryId or set IBKR_FLEX_QUERY_ID)');
+  const queue = [primary];
+  if (fallback && fallback !== primary) queue.push(fallback);
+  let lastErr;
+  for (let i = 0; i < queue.length; i++) {
+    const q = queue[i];
+    try {
+      const { referenceCode, url } = await sendFlexRequest(t, q);
+      const { xml, statement } = await getFlexStatement(t, referenceCode, url, { retries, delayMs });
+      const parsed = parseFlexStatement(statement);
+      return { xml, parsed, summary: summarizeFlex(parsed), queryIdUsed: q, usedFallback: i > 0 };
+    } catch (e) {
+      lastErr = e;
+      if (e.code === '1014' && i < queue.length - 1) {
+        console.warn(`[IBKR Flex] query ${q} unavailable (1014 — not yet active); falling back to ${queue[i + 1]}`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
 }
 
 // Pull + store the raw statement for a given accounting period (e.g. "2026-04").

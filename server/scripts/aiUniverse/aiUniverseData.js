@@ -1,7 +1,11 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 316 holdings across 16 sectors. Last updated: 2026-06-16.
+// 320 holdings across 17 sectors. Last updated: 2026-06-25.
 //
+// v4.1 (2026-06-25): NEW SECTOR S17 'Industrial AI'. +7 new (CAT, DE, SIEGY, SBGSY,
+//   PH, AME, DOV) + re-homed ROK/EMR (from S16), SYM/CGNX/ZBRA (S5), PTC/ROP (S7),
+//   HON/TRMB (S13), TER (S1). Reorg: PATH S5->S7, PINS S7->S9, DOCN S7->S4, VEEV S7->S12.
+//   S1 weight 29->24 to fund S17 at 5% (weights provisional). 313 -> 320, 16 -> 17 sectors.
 // v3.9 (2026-06-16): +1 to S4 — RXT (Rackspace, managed multi-cloud pivoting to AI hosting;
 //   high-beta deep-value turnaround that re-rated off a sub-dollar base in 2026). 315 → 316.
 // v3.8 (2026-06-15): +3 to S1 — RMBS (Rambus, memory-interface IP), ATEYY (Advantest ADR,
@@ -30,17 +34,17 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v4.0',
+  version: 'v4.1',
   date: 'June 2026',
-  totalHoldings: 313,
-  totalSectors: 16,
+  totalHoldings: 320,
+  totalSectors: 17,
 };
 
 export const SECTORS = [
   {
     id: 1,
     name: 'AI Compute & Semiconductors',
-    weight: 29,
+    weight: 24,
     thesis: 'The silicon foundation of every AI workload on Earth. From training the largest frontier models to running inference on edge devices, every AI dollar starts as a chip. PNTHR\'s largest sector concentration captures the GPUs, CPUs, custom ASICs, memory, equipment, and design tools that mint the entire AI revolution.',
     holdings: [
       { ticker: 'NVDA', name: 'NVIDIA Corporation', thesis: 'NVIDIA designs the GPUs that train and run virtually every large-scale AI model on Earth. The H100, B200, and forthcoming Rubin architectures, paired with CUDA\'s near-monopoly software moat, give NVDA pricing power no competitor has matched. Every hyperscaler, every sovereign AI program, every enterprise AI deployment funnels capital through NVIDIA. PNTHR considers NVDA the undisputed cornerstone holding of the AI Elite Universe, the picks-and-shovels of the entire AI revolution.' },
@@ -61,7 +65,6 @@ export const SECTORS = [
       { ticker: 'AMAT', name: 'Applied Materials', thesis: 'Applied Materials leads the AI semiconductor equipment cycle. Every advanced node, every gate-all-around transistor, every advanced packaging step, runs through AMAT deposition, etch, and process control tools. Long-cycle equipment orders compound as AI capex extends through the decade. PNTHR holds AMAT as one of the picks-and-shovels\' picks-and-shovels.' },
       { ticker: 'KLAC', name: 'KLA Corporation', thesis: 'KLA owns process control and metrology in advanced semiconductor manufacturing. As AI chips push to 2nm and 3D packaging gets more complex, every wafer needs more KLA inspection. Margin profile, oligopoly position, and long capex cycle make KLAC a quality-compounder AI play. PNTHR holds KLAC as the highest-margin pure semi-equipment exposure.' },
       { ticker: 'LRCX', name: 'Lam Research', thesis: 'Lam Research dominates etch and deposition for memory and advanced logic. HBM stacking, 3D NAND scaling, and gate-all-around transistors all flow through LRCX equipment. Memory cycle plus AI capex creates a dual tailwind. PNTHR holds LRCX as the etch/deposition pure play in our AI Elite semi-equipment basket.' },
-      { ticker: 'TER', name: 'Teradyne', thesis: 'Teradyne builds the test equipment that every AI chip must pass before shipment. As AI chip complexity explodes, test time per die rises, a structural revenue tailwind. Their robotics arm captures the autonomy/manufacturing-AI cross-trade. PNTHR holds TER for its dual exposure to AI semi test and warehouse robotics.' },
       { ticker: 'CAMT', name: 'Camtek Ltd', thesis: 'Camtek delivers metrology and inspection systems specifically for advanced packaging, the AI manufacturing bottleneck. As CoWoS, hybrid bonding, and chiplet integration become standard, CAMT\'s equipment becomes mandatory. Small-cap leverage to advanced packaging makes CAMT one of the highest-beta AI-equipment exposures. PNTHR holds CAMT as a focused advanced-packaging pure play.' },
       { ticker: 'ACLS', name: 'Axcelis Technologies', thesis: 'Axcelis builds ion implantation systems for memory and power semiconductor manufacturing. SiC power semis and HBM memory both need Axcelis. As AI data centers drive memory and power-silicon capex, ACLS captures the trade. PNTHR holds ACLS as a focused leveraged play on the SiC + memory tailwinds.' },
       { ticker: 'MKSI', name: 'MKS Instruments', thesis: 'MKS Instruments supplies the precision motion, vacuum, and measurement subsystems inside every wafer fab and AI manufacturing line. As advanced packaging and AI chip complexity scale, MKS\'s content per tool grows. PNTHR holds MKSI for its diversified, often-overlooked exposure to every leg of AI semi capex.' },
@@ -175,6 +178,7 @@ export const SECTORS = [
     weight: 7,
     thesis: 'AI compute lives somewhere, and that "somewhere" is increasingly purpose-built AI data centers, neoclouds, and edge nodes. PNTHR captures the REITs that own AI real estate, the neoclouds that rent GPU capacity, the Bitcoin miners pivoting to AI hosting, and the edge networks delivering AI to end users.',
     holdings: [
+      { ticker: 'DOCN', name: 'DigitalOcean Holdings', thesis: 'DigitalOcean serves SMB cloud infrastructure with growing AI compute exposure through Paperspace acquisition. PNTHR holds DOCN as an SMB-focused AI cloud play.' },
       { ticker: 'EQIX', name: 'Equinix Inc.', thesis: 'Equinix operates the largest network of carrier-neutral data centers, the interconnection hubs where AI workloads meet the internet. Foundational AI data center REIT. PNTHR holds EQIX as the cornerstone AI real estate Elite holding.' },
       { ticker: 'DLR', name: 'Digital Realty Trust', thesis: 'Digital Realty is the largest pure-play data center REIT with massive hyperscaler AI tenant exposure. AI capacity demand drives multi-year leasing tailwind. PNTHR holds DLR as a top-tier AI data center REIT.' },
       { ticker: 'IRM', name: 'Iron Mountain', thesis: 'Iron Mountain runs a fast-growing data center business alongside their data and records storage business. AI data growth lifts both. PNTHR holds IRM as a diversified AI-data-storage REIT play.' },
@@ -203,11 +207,8 @@ export const SECTORS = [
     holdings: [
       { ticker: 'TSLA', name: 'Tesla Inc.', thesis: 'Tesla is building the largest fleet of AI-enabled vehicles, the Optimus humanoid robot, and Dojo training infrastructure. Full Self-Driving plus humanoid robotics make TSLA the most diversified AI-physical-world bet. PNTHR holds TSLA as a top-tier AI Elite holding spanning autonomy and robotics.' },
       { ticker: 'ISRG', name: 'Intuitive Surgical', thesis: 'Intuitive Surgical owns the da Vinci surgical robot platform, AI-augmented robotic surgery is exploding. Massive installed base, recurring revenue, AI imaging upgrades. PNTHR holds ISRG as a top-tier AI medical robotics Elite name.' },
-      { ticker: 'SYM', name: 'Symbotic Inc.', thesis: 'Symbotic builds AI-driven warehouse automation systems for Walmart and others. Pure-play warehouse AI robotics. PNTHR holds SYM as a focused AI warehouse robotics pure play.' },
       { ticker: 'SERV', name: 'Serve Robotics', thesis: 'Serve Robotics operates autonomous sidewalk delivery robots backed by NVIDIA and Uber. Pure-play autonomous last-mile robotics. PNTHR holds SERV as a small-cap robotics lottery ticket with NVIDIA partnership.' },
-      { ticker: 'PATH', name: 'UiPath Inc.', thesis: 'UiPath is the leader in robotic process automation, AI-augmented enterprise workflow automation. PNTHR holds PATH as the software-RPA AI play.' },
       { ticker: 'ARBE', name: 'Arbe Robotics', thesis: 'Arbe Robotics designs 4D imaging radar for autonomous vehicles, the perception sensor enabling Level 4+ autonomy. PNTHR holds ARBE as a small-cap autonomous-perception pure play.' },
-      { ticker: 'CGNX', name: 'Cognex Corporation', thesis: 'Cognex is the leader in machine vision, AI-augmented industrial inspection used by every major manufacturer and warehouse robotics deployment. PNTHR holds CGNX as a top-tier AI machine vision Elite holding.' },
       { ticker: 'AUR', name: 'Aurora Innovation', thesis: 'Aurora Innovation is the leading autonomous trucking pure-play, with NVIDIA partnership and commercial Texas freight launches. PNTHR holds AUR as the cornerstone autonomous trucking holding.' },
       { ticker: 'MBLY', name: 'Mobileye Global', thesis: 'Mobileye designs the AI vision systems and ADAS chips for major OEMs globally. Spun off from Intel, beaten down, AI-vehicle inflection ahead. PNTHR holds MBLY as a focused autonomous driving pure play.' },
       { ticker: 'OUST', name: 'Ouster Inc.', thesis: 'Ouster is the largest US LIDAR pure-play after the Velodyne merger, AI-driven 3D perception across robotics, autonomous vehicles, and security. PNTHR holds OUST as the leading LIDAR pure-play.' },
@@ -221,7 +222,6 @@ export const SECTORS = [
       { ticker: 'INVZ', name: 'Innoviz Technologies', thesis: 'Innoviz designs solid-state LIDAR for autonomous vehicles with major OEM design wins. PNTHR holds INVZ as a small-cap LIDAR pure play.' },
       { ticker: 'LIDR', name: 'AEye Inc.', thesis: 'AEye builds adaptive LIDAR for autonomous vehicles and intelligent transportation systems. PNTHR holds LIDR as a micro-cap LIDAR optionality bet.' },
       { ticker: 'HSAI', name: 'Hesai Group', thesis: 'Hesai is the largest LIDAR producer globally, with dominant share in Chinese autonomous vehicles. PNTHR holds HSAI as a leading LIDAR pure-play with Chinese AV exposure.' },
-      { ticker: 'ZBRA', name: 'Zebra Technologies', thesis: 'Zebra Technologies leads enterprise mobility, RFID, and machine-vision for AI-augmented warehouses, retail, and healthcare. PNTHR holds ZBRA as a top-tier industrial AI/IoT Elite holding.' },
       { ticker: 'PONY', name: 'Pony AI', thesis: 'Pony AI is a leading Chinese autonomous driving company recently US-listed, robotaxi and trucking deployments. PNTHR holds PONY as a Chinese autonomous-driving pure play.' },
       { ticker: 'WRD', name: 'WeRide Inc.', thesis: 'WeRide is a Chinese autonomous driving company recently US-listed with robobus, robotaxi, and Level 4 deployments. PNTHR holds WRD as the second leg of our Chinese autonomous-driving exposure.' },
       { ticker: 'NIO', name: 'NIO Inc.', thesis: 'NIO is a leading Chinese premium EV maker with NIO Pilot ADAS and battery-swap network. PNTHR holds NIO as a premium Chinese EV-AI play.' },
@@ -252,6 +252,7 @@ export const SECTORS = [
     weight: 5,
     thesis: 'Where AI meets enterprise revenue. From Palantir\'s government AI dominance to Salesforce\'s Agentforce platform to ServiceNow\'s AI-native workflows, this sector captures the application-layer AI software companies monetizing the model layer. PNTHR holds the durable software franchises with the cleanest AI inflections.',
     holdings: [
+      { ticker: 'PATH', name: 'UiPath Inc.', thesis: 'UiPath is the leader in robotic process automation, AI-augmented enterprise workflow automation. PNTHR holds PATH as the software-RPA AI play.' },
       { ticker: 'PLTR', name: 'Palantir Technologies', thesis: 'Palantir runs the AIP (AI Platform) for government, defense, and enterprise, the leading commercial AI deployment platform with massive Department of Defense exposure. PNTHR holds PLTR as a top-tier AI Elite software holding.' },
       { ticker: 'SNOW', name: 'Snowflake Inc.', thesis: 'Snowflake is the AI data cloud, the storage and compute layer where enterprise AI training data lives. PNTHR holds SNOW as a foundational AI data infrastructure play.' },
       { ticker: 'MDB', name: 'MongoDB Inc.', thesis: 'MongoDB is the leading document database for AI applications, with Atlas Vector Search powering RAG (retrieval-augmented generation) workloads. PNTHR holds MDB as a focused AI database pure play.' },
@@ -268,20 +269,15 @@ export const SECTORS = [
       { ticker: 'INTU', name: 'Intuit Inc.', thesis: 'Intuit embeds AI in TurboTax, QuickBooks, and Credit Karma, consumer AI fintech at massive scale. PNTHR holds INTU as a quality consumer-AI compounder.' },
       { ticker: 'WDAY', name: 'Workday Inc.', thesis: 'Workday integrates AI across HR and finance enterprise SaaS. PNTHR holds WDAY as the enterprise HR/finance AI play.' },
       { ticker: 'DT', name: 'Dynatrace Inc.', thesis: 'Dynatrace delivers AIOps observability, automatic AI-driven application monitoring at enterprise scale. PNTHR holds DT as a focused AIOps pure play.' },
-      { ticker: 'DOCN', name: 'DigitalOcean Holdings', thesis: 'DigitalOcean serves SMB cloud infrastructure with growing AI compute exposure through Paperspace acquisition. PNTHR holds DOCN as an SMB-focused AI cloud play.' },
       { ticker: 'HUBS', name: 'HubSpot Inc.', thesis: 'HubSpot integrates AI across marketing, sales, and service software for SMB. PNTHR holds HUBS as a focused SMB AI software play.' },
       { ticker: 'BSY', name: 'Bentley Systems', thesis: 'Bentley Systems provides AI-augmented infrastructure design software for engineers, digital twins for AI-driven infrastructure. PNTHR holds BSY as a focused engineering-AI pure play.' },
-      { ticker: 'PTC', name: 'PTC Inc.', thesis: 'PTC provides AI-augmented industrial software (CAD, PLM, IoT). PNTHR holds PTC as a focused industrial-AI software play.' },
-      { ticker: 'ROP', name: 'Roper Technologies', thesis: 'Roper Technologies operates a portfolio of vertical AI software businesses, diversified, recurring, AI-monetizing. PNTHR holds ROP as a diversified AI software conglomerate.' },
       { ticker: 'FICO', name: 'Fair Isaac Corp', thesis: 'FICO delivers AI-driven credit scoring and decisioning analytics, irreplaceable AI-fintech infrastructure. PNTHR holds FICO as a deep-moat AI analytics Elite holding.' },
       { ticker: 'VRSK', name: 'Verisk Analytics', thesis: 'Verisk provides AI-augmented analytics for insurance and energy, proprietary data plus AI insights. PNTHR holds VRSK as a focused AI-data-analytics play.' },
       { ticker: 'MANH', name: 'Manhattan Associates', thesis: 'Manhattan Associates leads AI-driven supply chain software for retail and commerce. PNTHR holds MANH as a focused AI supply chain pure play.' },
-      { ticker: 'VEEV', name: 'Veeva Systems', thesis: 'Veeva provides AI-augmented life sciences cloud software, pharmaceutical and biotech AI workflow infrastructure. PNTHR holds VEEV as a focused vertical AI SaaS play.' },
       { ticker: 'U', name: 'Unity Software', thesis: 'Unity runs the leading 3D content engine plus AI-driven mobile ad-tech. AI 3D content generation tailwind. PNTHR holds U as a focused AI 3D engine play.' },
       { ticker: 'RBLX', name: 'Roblox Corporation', thesis: 'Roblox is the leading user-generated 3D platform with AI-driven content creation tools and AI moderation. PNTHR holds RBLX as a consumer AI 3D platform play.' },
       { ticker: 'TTWO', name: 'Take-Two Interactive', thesis: 'Take-Two integrates AI across game development with Rockstar and 2K studios. AI-driven NPCs, content, and procedural generation. PNTHR holds TTWO as a premium AI gaming play.' },
       { ticker: 'TYL', name: 'Tyler Technologies', thesis: 'Tyler Technologies is the leading government software vendor, increasingly integrating AI for civic workflows. PNTHR holds TYL as a focused government-AI software play.' },
-      { ticker: 'PINS', name: 'Pinterest Inc.', thesis: 'Pinterest operates AI-driven visual search and discovery, billions of pins, AI-powered recommendations. PNTHR holds PINS as a focused consumer AI-discovery play.' },
       { ticker: 'ALRM', name: 'Alarm.com Holdings', thesis: 'Alarm.com delivers AI-powered home and business security plus IoT platform. Edge AI for residential and SMB. PNTHR holds ALRM as a focused IoT-AI security play.' },
       { ticker: 'SOUN', name: 'SoundHound AI', thesis: 'SoundHound AI is the voice AI pure-play with disclosed NVIDIA stake, automotive voice AI and enterprise conversational AI. PNTHR holds SOUN as a high-beta voice-AI lottery ticket.' },
       { ticker: 'CDW', name: 'CDW Corporation', thesis: 'CDW is the leading IT distribution channel for AI servers and infrastructure to enterprise. AI hardware buildout flows through CDW\'s warehouses. PNTHR holds CDW as the AI IT distribution and channel pure play.' },
@@ -316,6 +312,7 @@ export const SECTORS = [
     weight: 1,
     thesis: 'Programmatic advertising and AI training data are two sides of the same coin, both monetize attention and data with AI at the center. PNTHR holds a small, focused position in the AI-ad-tech leaders, knowing the trade is ROI-sensitive but the AI tailwind is real.',
     holdings: [
+      { ticker: 'PINS', name: 'Pinterest Inc.', thesis: 'Pinterest operates AI-driven visual search and discovery, billions of pins, AI-powered recommendations. PNTHR holds PINS as a focused consumer AI-discovery play.' },
       { ticker: 'TTD', name: 'The Trade Desk', thesis: 'The Trade Desk is the leading independent demand-side ad platform, AI-driven programmatic advertising with Kokai AI agent. PNTHR holds TTD as the cornerstone AI-ad-tech Elite holding.' },
       { ticker: 'RDDT', name: 'Reddit Inc.', thesis: 'Reddit licenses its training data to OpenAI and Google, pure-play AI data licensing plus AI-driven advertising. Recently public, AI-native data play. PNTHR holds RDDT as a unique AI training data licensing pure play.' },
       { ticker: 'DV', name: 'DoubleVerify Holdings', thesis: 'DoubleVerify delivers AI-driven ad verification and brand safety. PNTHR holds DV as a focused ad-verification AI play.' },
@@ -363,6 +360,7 @@ export const SECTORS = [
     weight: 5,
     thesis: 'AI is rewriting drug discovery, diagnostics, and personalized medicine. NVIDIA-backed Tempus, Recursion, and Schrödinger are building the AI-pharma infrastructure of the future. PNTHR captures the pure-play AI biotech leaders plus the genomics tools companies that will be irreplaceable in AI-driven medicine.',
     holdings: [
+      { ticker: 'VEEV', name: 'Veeva Systems', thesis: 'Veeva provides AI-augmented life sciences cloud software, pharmaceutical and biotech AI workflow infrastructure. PNTHR holds VEEV as a focused vertical AI SaaS play.' },
       { ticker: 'TEM', name: 'Tempus AI', thesis: 'Tempus AI is NVIDIA-backed AI healthcare data platform, clinical-genomic AI for personalized medicine and drug discovery. Recently public, explosive growth. PNTHR holds TEM as the cornerstone AI healthcare Elite holding.' },
       { ticker: 'RXRX', name: 'Recursion Pharmaceuticals', thesis: 'Recursion uses AI to accelerate drug discovery, NVIDIA partnership and proprietary phenomics platform. PNTHR holds RXRX as a focused AI-drug-discovery pure play.' },
       { ticker: 'SDGR', name: 'Schrödinger Inc.', thesis: 'Schrödinger provides AI-driven physics-based drug discovery software plus internal pipeline. PNTHR holds SDGR as a focused AI-drug-discovery software play.' },
@@ -397,12 +395,10 @@ export const SECTORS = [
       { ticker: 'SATS', name: 'EchoStar Corporation', thesis: 'EchoStar/SATS operates satellite communications and 5G spectrum, AI-augmented connectivity. PNTHR holds SATS as a focused satellite-comms AI play.' },
       { ticker: 'AVAV', name: 'AeroVironment Inc.', thesis: 'AeroVironment builds the Switchblade loitering munitions and Puma drones, AI-augmented military drones with massive Department of Defense exposure. PNTHR holds AVAV as a top-tier military drone Elite holding.' },
       { ticker: 'ONDS', name: 'Ondas Holdings', thesis: 'Ondas Holdings operates American Robotics autonomous drones and rail networking. PNTHR holds ONDS as a small-cap drone-AI play.' },
-      { ticker: 'HON', name: 'Honeywell International', thesis: 'Honeywell operates Quantinuum (quantum), avionics, and industrial AI businesses. Diversified AI exposure with quantum optionality. PNTHR holds HON as a quality industrial AI conglomerate.' },
       { ticker: 'OSK', name: 'Oshkosh Corporation', thesis: 'Oshkosh builds tactical military vehicles and AI-augmented logistics, Department of Defense contracts. PNTHR holds OSK as a focused defense vehicles play.' },
       { ticker: 'BAH', name: 'Booz Allen Hamilton', thesis: 'Booz Allen Hamilton is a leading government AI services firm with deep Department of Defense and intelligence community AI contracts. PNTHR holds BAH as a top-tier government-AI services Elite holding.' },
       { ticker: 'KTOS', name: 'Kratos Defense & Security', thesis: 'Kratos builds the Valkyrie autonomous fighter wingman, pure-play AI military drones. Department of Defense AI program centerpiece. PNTHR holds KTOS as a high-conviction AI defense drone Elite holding.' },
       { ticker: 'LDOS', name: 'Leidos Holdings', thesis: 'Leidos provides AI-driven services to defense, intelligence, and civil government. PNTHR holds LDOS as a focused government-AI services play.' },
-      { ticker: 'TRMB', name: 'Trimble Inc.', thesis: 'Trimble delivers AI-augmented geospatial, agriculture, and construction technology. PNTHR holds TRMB as a focused geospatial-AI Elite holding.' },
       { ticker: 'MRCY', name: 'Mercury Systems', thesis: 'Mercury Systems builds AI-augmented mission electronics for defense and aerospace. PNTHR holds MRCY as a focused defense-electronics AI play.' },
       { ticker: 'IRDM', name: 'Iridium Communications', thesis: 'Iridium operates the only truly global satellite communications constellation, AI-augmented connectivity. PNTHR holds IRDM as a focused satellite-comms play.' },
       { ticker: 'LMT', name: 'Lockheed Martin', thesis: 'Lockheed Martin is the largest US defense prime, AI-augmented platforms across Aeronautics, Missiles, and Space. PNTHR holds LMT as a quality defense AI compounder.' },
@@ -466,8 +462,6 @@ export const SECTORS = [
       { ticker: 'AMKR', name: 'Amkor Technology', thesis: 'Amkor is the leading US-listed advanced packaging and OSAT vendor, CoWoS-adjacent packaging for AI chips. PNTHR holds AMKR as a focused advanced-packaging pure play.' },
       { ticker: 'ASX', name: 'ASE Technology Holding', thesis: 'ASE is the largest global OSAT, advanced packaging for AI chips at hyperscale. PNTHR holds ASX as a focused advanced-packaging Elite holding.' },
       { ticker: 'NVT', name: 'nVent Electric', thesis: 'nVent Electric provides electrical and liquid-cooling solutions for AI data centers. PNTHR holds NVT as a focused AI-cooling-and-electrical play.' },
-      { ticker: 'ROK', name: 'Rockwell Automation', thesis: 'Rockwell Automation leads industrial AI automation, factory robots and AI manufacturing software. PNTHR holds ROK as a top-tier industrial-AI Elite holding.' },
-      { ticker: 'EMR', name: 'Emerson Electric', thesis: 'Emerson Electric provides AI-augmented industrial automation plus AspenTech AI process modeling. PNTHR holds EMR as a diversified industrial AI play.' },
       { ticker: 'CARR', name: 'Carrier Global', thesis: 'Carrier Global delivers HVAC and refrigeration including AI data center cooling. PNTHR holds CARR as a focused HVAC AI play.' },
       { ticker: 'MTLS', name: 'Materialise NV', thesis: 'Materialise provides AI-driven 3D printing software. PNTHR holds MTLS as a focused 3D printing software play.' },
       { ticker: 'MP', name: 'MP Materials', thesis: 'MP Materials operates the only US rare earths mine and is building permanent magnet capacity, critical for AI data center motors, EVs, and defense. PNTHR holds MP as a strategic AI materials play.' },
@@ -476,6 +470,31 @@ export const SECTORS = [
       { ticker: 'FIX', name: 'Comfort Systems USA', thesis: 'Comfort Systems is a leading mechanical and HVAC contractor specializing in data center cooling infrastructure. Their modular cooling systems serve hyperscaler buildouts nationwide. PNTHR holds FIX as a focused HVAC contracting pure play on AI data center thermal management.' },
       { ticker: 'MOD', name: 'Modine Manufacturing', thesis: 'Modine manufactures precision thermal management solutions including liquid cooling systems purpose-built for AI data centers. Their data center cooling segment is the fastest-growing business line. PNTHR holds MOD as a focused thermal management pure play on AI compute cooling.' },
       { ticker: 'MLI', name: 'Mueller Industries', thesis: 'Mueller Industries is a leading copper and brass manufacturer supplying the tubing, fittings, and components critical to AI data center cooling and electrical systems. AI facilities consume multiples more copper than traditional buildings. PNTHR holds MLI as a strategic copper-products play on AI infrastructure buildout.' },
+    ],
+  },
+  {
+    id: 17,
+    name: 'Industrial AI',
+    weight: 5,
+    thesis: 'AI escaping the data center and entering the physical industrial economy. This sector captures autonomous machinery, factory automation, machine vision, robotics, and the industrial software and digital twins that run the factories, farms, mines, and supply chains of the global economy. PNTHR believes the next leg of the AI revolution is embodied: intelligence fused into physical equipment, where productivity gains are measured in real-world output, not just tokens.',
+    holdings: [
+      { ticker: 'CAT', name: 'Caterpillar Inc.', thesis: 'Caterpillar is the world leader in autonomous heavy machinery. Its Cat Command and MineStar systems run fully driverless mining and construction fleets at scale today, with onboard AI handling perception, routing, and load optimization across thousands of machines. PNTHR holds CAT as the blue-chip embodiment of Industrial AI: physical autonomy generating real productivity dollars, riding the same data-center and electrification supercycle powering the broader AI buildout.' },
+      { ticker: 'DE', name: 'Deere & Company', thesis: 'Deere is putting AI into the soil. See and Spray computer vision targets individual weeds in real time, autonomous tractors plant and harvest without a driver, and the John Deere Operations Center is becoming the data backbone of modern agriculture. PNTHR holds DE as the premier autonomous-machinery and precision-AI franchise, where embedded intelligence drives a durable recurring-revenue shift across the global farm economy.' },
+      { ticker: 'SIEGY', name: 'Siemens AG (ADR)', thesis: 'Siemens is the global standard-setter for Industrial AI. Its Xcelerator platform, Industrial Copilot built with Microsoft, and comprehensive digital-twin stack let manufacturers simulate, optimize, and automate entire factories. PNTHR holds SIEGY as the diversified mega-cap anchor of the Industrial AI sector, embedding intelligence across automation, rail, grid, and the physical industrial base of the world economy.' },
+      { ticker: 'SBGSY', name: 'Schneider Electric SE (ADR)', thesis: 'Schneider Electric pairs industrial automation with the energy intelligence that AI factories and data centers demand. EcoStruxure connects and optimizes equipment from the plant floor to the power room, placing Schneider at the intersection of automation and the electrification supercycle. PNTHR holds SBGSY as a core Industrial AI and AI-power name, monetizing both the automation of industry and the energy backbone the AI era requires.' },
+      { ticker: 'PH', name: 'Parker Hannifin Corporation', thesis: 'Parker Hannifin is the motion-and-control backbone of automated industry, moving and positioning machinery across aerospace, factories, and robotics. Parker is layering AI-driven predictive maintenance and connected-equipment analytics across a vast installed base. PNTHR holds PH as a high-quality Industrial AI compounder, where intelligence on physical motion converts hardware into recurring, data-rich service revenue.' },
+      { ticker: 'AME', name: 'AMETEK Inc.', thesis: 'AMETEK builds the precision instruments and automation that let machines sense and measure the physical world. Its analytics, vision, and process-monitoring tools are the eyes and ears of automated manufacturing, increasingly enhanced with embedded AI. PNTHR holds AME as a steady, acquisitive Industrial AI name capturing the sensing and measurement layer every automated process depends on.' },
+      { ticker: 'DOV', name: 'Dover Corporation', thesis: 'Dover is a diversified industrial automation leader spanning marking and coding, pumps, and connected equipment, with a growing software and AI-analytics layer across its platforms. PNTHR holds DOV as a broad-based Industrial AI play on the automation, digitization, and predictive intelligence reshaping mid-market manufacturing and logistics.' },
+      { ticker: 'ROK', name: 'Rockwell Automation', thesis: 'Rockwell Automation leads industrial AI automation, factory robots and AI manufacturing software. PNTHR holds ROK as a top-tier industrial-AI Elite holding.' },
+      { ticker: 'EMR', name: 'Emerson Electric', thesis: 'Emerson Electric provides AI-augmented industrial automation plus AspenTech AI process modeling. PNTHR holds EMR as a diversified industrial AI play.' },
+      { ticker: 'HON', name: 'Honeywell International', thesis: 'Honeywell operates Quantinuum (quantum), avionics, and industrial AI businesses. Diversified AI exposure with quantum optionality. PNTHR holds HON as a quality industrial AI conglomerate.' },
+      { ticker: 'SYM', name: 'Symbotic Inc.', thesis: 'Symbotic builds AI-driven warehouse automation systems for Walmart and others. Pure-play warehouse AI robotics. PNTHR holds SYM as a focused AI warehouse robotics pure play.' },
+      { ticker: 'CGNX', name: 'Cognex Corporation', thesis: 'Cognex is the leader in machine vision, AI-augmented industrial inspection used by every major manufacturer and warehouse robotics deployment. PNTHR holds CGNX as a top-tier AI machine vision Elite holding.' },
+      { ticker: 'ZBRA', name: 'Zebra Technologies', thesis: 'Zebra Technologies leads enterprise mobility, RFID, and machine-vision for AI-augmented warehouses, retail, and healthcare. PNTHR holds ZBRA as a top-tier industrial AI/IoT Elite holding.' },
+      { ticker: 'PTC', name: 'PTC Inc.', thesis: 'PTC provides AI-augmented industrial software (CAD, PLM, IoT). PNTHR holds PTC as a focused industrial-AI software play.' },
+      { ticker: 'ROP', name: 'Roper Technologies', thesis: 'Roper Technologies operates a portfolio of vertical AI software businesses, diversified, recurring, AI-monetizing. PNTHR holds ROP as a diversified AI software conglomerate.' },
+      { ticker: 'TRMB', name: 'Trimble Inc.', thesis: 'Trimble delivers AI-augmented geospatial, agriculture, and construction technology. PNTHR holds TRMB as a focused geospatial-AI Elite holding.' },
+      { ticker: 'TER', name: 'Teradyne', thesis: 'Teradyne builds the test equipment that every AI chip must pass before shipment. As AI chip complexity explodes, test time per die rises, a structural revenue tailwind. Their robotics arm captures the autonomy/manufacturing-AI cross-trade. PNTHR holds TER for its dual exposure to AI semi test and warehouse robotics.' },
     ],
   },
 ];

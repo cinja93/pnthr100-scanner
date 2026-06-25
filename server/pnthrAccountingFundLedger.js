@@ -19,7 +19,7 @@ const r2 = (n) => +(+n).toFixed(2);
 
 // Go-forward monthly accrual schedule.
 export const LEDGER_SCHEDULE = {
-  adminAccrual: 0,             // was $516.67 (NAV admin $350 + FS-prep $166.67) — now self-administered
+  adminAccrual: 516.67,        // admin fee $350 + FS-prep $166.67 — Scott 2026-06-25 chose to keep accruing both
   professionalAccrual: 1770.84, // audit $1,250 + tax $520.84 (continues: Spicer Jeffries + tax prep)
   operatingAccrual: 1325.78,   // compliance $659.11 + insurance $666.67 (accrued to the operating payable)
   orgAmortization: 546.72,     // organization-cost prepaid amortized monthly

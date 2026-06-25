@@ -42,6 +42,7 @@ export default function PnthrAccountingPage() {
   const [refDocs, setRefDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [auditBusy, setAuditBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -86,6 +87,26 @@ export default function PnthrAccountingPage() {
       }
     } catch (err) {
       alert(err.message);
+    }
+  }
+
+  // One-button auditor package: zips the year's statements + working papers + custodian sources.
+  async function downloadAuditPackage() {
+    setAuditBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/pnthr-accounting/audit-package/${year}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('Audit package failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PNTHR_Audit_Package_${year}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAuditBusy(false);
     }
   }
 
@@ -165,8 +186,15 @@ export default function PnthrAccountingPage() {
             }}>{y}</button>
           );
         })}
+        <button onClick={downloadAuditPackage} disabled={auditBusy}
+          title={`Download the ${year} audit package (zip) — all statements, working papers, and IBKR custodian sources — to send to the auditor`}
+          style={{
+            marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
+            border: '1px solid #2f6b46', background: '#0c140e', color: '#7fcf9f',
+            fontSize: 12, fontWeight: 700, fontFamily: 'monospace', cursor: auditBusy ? 'wait' : 'pointer',
+          }}>{auditBusy ? 'Packaging…' : `📦 Package for Audit (${year})`}</button>
         <button onClick={load} disabled={loading} style={{
-          marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
+          padding: '6px 14px', borderRadius: 6,
           border: '1px solid #333', background: '#111', color: DIM,
           fontSize: 12, fontFamily: 'monospace', cursor: 'pointer',
         }}>{loading ? 'Loading…' : '↻ Refresh'}</button>

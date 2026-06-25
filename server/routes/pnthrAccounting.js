@@ -10,6 +10,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { resolveRole } from '../auth.js';
 import { listPeriods, getDocument, ensurePeriods, listReferenceDocuments } from '../pnthrAccountingService.js';
+import { buildAuditPackageZip } from '../pnthrAccountingPackages.js';
 
 const router = express.Router();
 
@@ -75,6 +76,20 @@ router.get('/documents/:id/download', async (req, res) => {
     res.set('Content-Type', doc.contentType || 'application/octet-stream');
     res.set('Content-Disposition', `attachment; filename="${doc.filename}"`);
     res.send(doc.data?.buffer || doc.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pnthr-accounting/audit-package/:year — one-button auditor package (zip).
+router.get('/audit-package/:year', async (req, res) => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    if (!(year >= 2025 && year <= 2100)) return res.status(400).json({ error: 'bad year' });
+    const zipBuf = await buildAuditPackageZip(year);
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename="PNTHR_Audit_Package_${year}.zip"`);
+    res.send(zipBuf);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

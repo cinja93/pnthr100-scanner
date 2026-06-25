@@ -39,15 +39,23 @@ export function mapFlexToIncome(parsed) {
   const S = parsed.sections || {};
   const n = (v) => +(+v || 0);
   const c = (S.ChangeInNAV || [])[0] || {};
+  const cash = (S.CashReport || [])[0] || {};
+  // Trading P&L: realized/changeInUnrealized split (R&U option) else combined mtm (MTM option).
   const realized = n(c.realized), changeUnreal = n(c.changeInUnrealized), mtm = n(c.mtm);
-  const split = realized !== 0 || changeUnreal !== 0;   // true with the R&U query option
-  const netInterest = r2(n(c.interest) + n(c.changeInInterestAccruals));   // income + accrual change
+  const split = realized !== 0 || changeUnreal !== 0;
+  // Dividends/interest/commissions from their DEDICATED sections so they tie regardless of the
+  // Change-in-NAV option: dividends = cash + change in dividend accruals; interest = cash + change
+  // in the interest accrual balance (ending - starting).
+  const divAccrChange = (S.ChangeInDividendAccruals || []).reduce((a, r) => a + n(r.netAmount), 0);
+  const ia = (S.InterestAccruals || [])[0] || {};
+  const intAccrChange = ia.endingAccrualBalance != null ? (n(ia.endingAccrualBalance) - n(ia.startingAccrualBalance)) : n(c.changeInInterestAccruals);
+  const netInterest = r2(n(cash.brokerInterest) + intAccrChange);
   return {
-    realizedPL: r2(split ? realized : mtm),          // combined into realized until R&U split is on
+    realizedPL: r2(split ? realized : mtm),          // combined into realized only if R&U option is off
     unrealizedPL: r2(split ? changeUnreal : 0),
-    commission: r2(n(c.commissions)),
-    otherTradingCost: r2(n(c.otherFees)),
-    divIncomeUS: r2(n(c.dividends) + n(c.changeInDividendAccruals)),
+    commission: r2(n(cash.commissions) || n(c.commissions)),
+    otherTradingCost: r2(n(cash.otherFees) || n(c.otherFees)),
+    divIncomeUS: r2(n(cash.dividends) + divAccrChange),
     brokerInterestIncome: r2(netInterest >= 0 ? netInterest : 0),
     brokerInterestExpense: r2(netInterest < 0 ? netInterest : 0),
     brokerNAV: c.endingValue != null ? r2(n(c.endingValue)) : brokerNAVfromFlex(S),

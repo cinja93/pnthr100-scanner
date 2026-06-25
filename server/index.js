@@ -6608,6 +6608,23 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
   finally { pnthrTreeTickRunning = false; }
 }, { timezone: 'America/New_York' });
 
+// PNTHR Accounting — monthly close: 3rd of each month at 6:00am ET, pull the PRIOR month's
+// IBKR Flex and STAGE a pending close that awaits the GP's bank-balance input on the PNTHR
+// Accounting page. Writer-gated (Render only). The GP finalizes from the page; the
+// reconciliation gate keeps any non-tying statement a draft (never a finalized audited doc).
+cron.schedule('0 6 3 * *', async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+    let y = +parts.find(p => p.type === 'year').value, m = +parts.find(p => p.type === 'month').value;
+    m -= 1; if (m === 0) { m = 12; y -= 1; }
+    const period = `${y}-${String(m).padStart(2, '0')}`;
+    const { stageClose } = await import('./pnthrAccountingMonthlyClose.js');
+    const r = await stageClose(period);
+    console.log(`[PNTHR Accounting] monthly close staged for ${period}: ${r.status} (broker NAV ${r.brokerNAV})`);
+  } catch (err) { console.error('[PNTHR Accounting] monthly stage-close failed:', err.message); }
+}, { timezone: 'America/New_York' });
+
 // PNTHR Tree — EOD daily trade log, 4:35pm ET Mon–Fri (after the close, before
 // the 4:40 orders cron). Snapshots IBKR truth: NAV, open positions w/ IBKR P&L,
 // and every execution of the day, split strategy vs manual. Re-recordable via

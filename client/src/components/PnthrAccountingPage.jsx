@@ -44,6 +44,9 @@ export default function PnthrAccountingPage() {
   const [error, setError] = useState(null);
   const [auditBusy, setAuditBusy] = useState(false);
   const [k1Busy, setK1Busy] = useState(null);
+  const [closes, setCloses] = useState([]);
+  const [bankInput, setBankInput] = useState('');
+  const [closeBusy, setCloseBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -56,6 +59,9 @@ export default function PnthrAccountingPage() {
       setDocTypes(data.docTypes || []);
       setPeriods(data.periods || []);
       setRefDocs(ref.documents || []);
+      const cs = await fetch(`${API_BASE}/api/pnthr-accounting/close-status`, { headers: authHeaders() })
+        .then(r => (r.ok ? r.json() : { pending: [] })).catch(() => ({ pending: [] }));
+      setCloses(cs.pending || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -112,6 +118,23 @@ export default function PnthrAccountingPage() {
     } finally {
       setAuditBusy(false);
     }
+  }
+
+  // Finalize a staged monthly close once the GP enters the Axos bank balance.
+  async function finalizeMonthlyClose(period) {
+    const bal = parseFloat(bankInput);
+    if (!(bal >= 0)) { setError('Enter a valid bank balance'); return; }
+    setCloseBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/pnthr-accounting/close/${period}/finalize`, {
+        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ bankBalance: bal }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Finalize failed'); }
+      const r = await res.json();
+      setBankInput('');
+      await load();
+      if (!r.tiesToPenny) setError(`${period} statements produced as DRAFT — engine NAV ${r.engEnding} vs custody ${r.custodyNAV} did not reconcile (income mapping still being finalized).`);
+    } catch (err) { setError(err.message); } finally { setCloseBusy(false); }
   }
 
   // One-button K-1 tax-data package for a single investor + year (PDF for the tax preparer).
@@ -194,6 +217,25 @@ export default function PnthrAccountingPage() {
           </div>
         </div>
       )}
+
+      {/* Monthly close awaiting the bank balance — the one human input */}
+      {closes.map(c => (
+        <div key={c.period} style={{ border: '2px solid #f5b97f', borderRadius: 8, padding: '12px 16px', marginBottom: 14, background: '#1a1304' }}>
+          <div style={{ color: '#f5b97f', fontWeight: 800, fontSize: 14, marginBottom: 6 }}>📋 {c.period} close is ready — enter the Axos bank balance to finalize</div>
+          <div style={{ color: '#aaa', fontSize: 12, marginBottom: 10 }}>
+            Broker data pulled from IBKR{c.flexFrom ? ` (period ${c.flexFrom}→${c.flexTo})` : ''}. Enter the month-end <b>Axos bank balance</b> and the engine produces the statements.
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ color: '#ddd', fontFamily: 'monospace' }}>$</span>
+            <input type="number" step="0.01" min="0" value={bankInput} onChange={e => setBankInput(e.target.value)} placeholder="Axos bank balance"
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #6b4a2f', background: '#0d0d0d', color: '#f5e6c8', fontSize: 13, fontFamily: 'monospace', width: 180 }} />
+            <button onClick={() => finalizeMonthlyClose(c.period)} disabled={closeBusy}
+              style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #f5b97f', background: '#f5b97f', color: '#1a1304', fontSize: 13, fontWeight: 800, cursor: closeBusy ? 'wait' : 'pointer' }}>
+              {closeBusy ? 'Producing…' : 'Produce Statements'}
+            </button>
+          </div>
+        </div>
+      ))}
 
       {/* Year tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>

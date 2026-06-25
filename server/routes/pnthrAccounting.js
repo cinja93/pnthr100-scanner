@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import { resolveRole } from '../auth.js';
 import { listPeriods, getDocument, ensurePeriods, listReferenceDocuments } from '../pnthrAccountingService.js';
 import { buildAuditPackageZip, buildK1DataPackage } from '../pnthrAccountingPackages.js';
+import { stageClose, finalizeClose, pendingCloses } from '../pnthrAccountingMonthlyClose.js';
 
 const router = express.Router();
 
@@ -104,6 +105,28 @@ router.get('/k1-package/:year/:investorNo', async (req, res) => {
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', `attachment; filename="PNTHR_K1_DataPackage_${year}_Investor${req.params.investorNo}.pdf"`);
     res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pnthr-accounting/close-status — monthly closes awaiting the bank-balance input.
+router.get('/close-status', async (req, res) => {
+  try { res.json({ pending: await pendingCloses() }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/pnthr-accounting/close/:period/stage — pull Flex + stage a pending close (manual/cron).
+router.post('/close/:period/stage', async (req, res) => {
+  try { res.json(await stageClose(req.params.period)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/pnthr-accounting/close/:period/finalize { bankBalance } — finalize with the GP's bank balance.
+router.post('/close/:period/finalize', async (req, res) => {
+  try {
+    const bankBalance = Number((req.body || {}).bankBalance);
+    res.json(await finalizeClose(req.params.period, bankBalance));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

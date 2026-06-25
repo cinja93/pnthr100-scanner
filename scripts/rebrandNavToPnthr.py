@@ -21,7 +21,7 @@ def _is_black(cell):
     except Exception:
         return False
 
-NAVY='FF1F4E78'; BLACK='FF000000'; YELLOW='FFFCF000'   # PNTHR yellow sampled from the logo
+NAVY='FF1F4E78'; BLACK='FF000000'; YELLOW='FFFCF000'; WHITE='FFFFFFFF'   # PNTHR yellow sampled from the logo
 LOGO='/Users/cindyeagar/pnthr100-scanner/client/public/pnthr-logo-black-bg.png'  # head + wordmark on black
 DISCLAIMER=('Disclaimer:\n\nThese statements are prepared and provided by PNTHR Funds, LLC, the General Partner of the Fund, '
  'solely for informational purposes. The figures are unaudited estimates as of the reporting date and are subject to change; '
@@ -45,6 +45,12 @@ def rebrand(infile, outfile, kind):
         ws.sheet_properties.tabColor='000000'          # black sheet tab
         ws._images=[]                                   # drop NAV logo/band images
         for row in ws.iter_rows():
+            # Header/band rows (column titles, fund name) keep PNTHR-yellow lettering; data / subtotal /
+            # total rows that sit on a black fill get WHITE lettering — yellow-on-black is hard to read
+            # in the body. Heuristic: a row containing any numeric cell is a data/total row -> white;
+            # a pure-text row is a header/band row -> yellow.
+            row_has_number = any(isinstance(c.value,(int,float)) and not isinstance(c.value,bool) for c in row)
+            band_font = WHITE if row_has_number else YELLOW
             for c in row:
                 if isinstance(c.value,str):
                     # openpyxl reads NAV's line breaks as the literal escape "_x000A_" — convert to
@@ -57,9 +63,9 @@ def rebrand(infile, outfile, kind):
                     # NAV's navy table/group/subtotal headers are GRADIENT fills. c.fill is a proxy so
                     # isinstance(GradientFill) is False; the reliable signal is fill_type 'linear'/'path'.
                     if f and f.fill_type in ('linear','path'):
-                        c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
+                        c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, band_font)
                     elif f and f.fill_type=='solid' and f.fgColor and f.fgColor.rgb==NAVY:
-                        c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, YELLOW)
+                        c.fill=PatternFill(start_color=BLACK,end_color=BLACK,fill_type='solid'); set_font(c, band_font)
                     elif c.font and c.font.color and c.font.color.rgb==NAVY:
                         set_font(c, BLACK)
                 except Exception: pass
@@ -96,12 +102,14 @@ def rebrand(infile, outfile, kind):
                 if c==1: sides['left']=side
                 if c==last_col: sides['right']=side
                 if sides: ws.cell(r,c).border=Border(**sides)
-        # Indent any text in row 1 so it clears the logo (e.g. ReportLinks fund name in row 1)
+        # Left-justify row-1 fund-name text (e.g. ReportLinks, where the fund name shares the logo's
+        # row) to match the lines below it; keep it vertically centered so it sits below the logo in
+        # the tall header row. Leave right-aligned nav text (e.g. "Home") where it is.
         for c in range(1, max(last_col,1)+1):
             cell=ws.cell(1,c)
-            if isinstance(cell.value,str) and cell.value.strip():
+            if isinstance(cell.value,str) and cell.value.strip() and (cell.alignment.horizontal or 'left') in ('left','general'):
                 a=cell.alignment
-                cell.alignment=Alignment(indent=13, horizontal=(a.horizontal or 'left'), vertical=a.vertical, wrap_text=a.wrap_text)
+                cell.alignment=Alignment(indent=2, horizontal='left', vertical='center', wrap_text=a.wrap_text)
         # Give multi-line / wrapped column headers enough room. Accounts for NARROW columns that
         # wrap a header onto more lines than its explicit line breaks (e.g. "Period Begin Capital
         # Changes" -> "Period Begin / Capital / Changes" in a thin column).

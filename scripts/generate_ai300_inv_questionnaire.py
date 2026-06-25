@@ -35,7 +35,7 @@ Key revisions (v2.1 -> v2.2):
 
 PHASE 1 - LEGAL CONTENT ONLY. No PNTHR branding/design.
 
-Output: PNTHR_AI_Elite_300_InvQuest_v1.0_2026.pdf
+Output: PNTHR_AI_Elite_300_InvQuest_v1.1_2026.pdf
 """
 
 import os
@@ -58,7 +58,7 @@ from pnthr_design import (
     make_doc_template, make_page_handlers, build_cover_header,
 )
 
-OUT_PATH = os.path.expanduser("~/Downloads/PNTHR_AI_Elite_300_InvQuest_v1.0_2026.pdf")
+OUT_PATH = os.path.expanduser("~/Downloads/PNTHR_AI_Elite_300_InvQuest_v1.1_2026.pdf")
 
 # Register Unicode-capable TrueType font for open checkbox rendering.
 _CHECKBOX_FONT = None
@@ -217,7 +217,7 @@ def build_title():
         title_line_2="PNTHR AI ELITE 300 FUND, LP",
         subtitle="Subscriber Information Form & Investor Questionnaire",
         date_line="Dated as of:  June 1, 2026",
-        revision_line="Document Revision:  v1.0 - June 2026",
+        revision_line="Document Revision:  v1.1 - June 2026",
         issuer_line="Issuer:  PNTHR Funds, LLC (General Partner)",
         confidential_title=None,
         confidential_body=None,
@@ -511,8 +511,8 @@ def build_part_i():
         "either (a) has a net worth (together, in the case of a natural "
         "person, with assets held jointly with that person&rsquo;s spouse, "
         "but excluding the value of the Subscriber&rsquo;s primary "
-        "residence) in excess of $2,200,000, or (b) has no less than "
-        "$1,100,000 in aggregate under management in the Fund or other "
+        "residence) in excess of $2,700,000, or (b) has no less than "
+        "$1,400,000 in aggregate under management in the Fund or other "
         "investment funds managed by the Investment Manager.",
         BODY))
     story.extend(yes_no_row("Does the Subscriber satisfy one of the above tests?"))
@@ -811,7 +811,7 @@ def build_part_ii():
         ("<b>Rule 205-3(d)(1)(i) &mdash; Net Worth.</b>&nbsp;&nbsp;The "
          "Subscriber is a natural person whose individual net worth, or "
          "joint net worth with that person&rsquo;s spouse or spousal "
-         "equivalent, exceeds $2,200,000 at the time of the investment "
+         "equivalent, exceeds $2,700,000 at the time of the investment "
          "management contract, excluding the value of the "
          "Subscriber&rsquo;s primary residence, calculated by subtracting "
          "from the estimated fair market value of the property the amount "
@@ -820,7 +820,7 @@ def build_part_ii():
          "spousal equivalent may be included, but the primary "
          "residence&rsquo;s value must be excluded.").replace("&mdash;", "-"),
         ("<b>Rule 205-3(d)(1)(ii) - Assets Under Management.</b>&nbsp;&nbsp;"
-         "The Subscriber has at least $1,100,000 in assets under "
+         "The Subscriber has at least $1,400,000 in assets under "
          "management with the Investment Manager immediately after "
          "entering into the investment advisory relationship with the "
          "Investment Manager."),
@@ -908,7 +908,7 @@ def build_part_iii():
         "holders of equity or beneficial interests in the Subscriber "
         "(please answer both (A) and (B)):",
         BODY))
-    story.extend(yes_no_row("(A) has a net worth of at least $2,200,000"))
+    story.extend(yes_no_row("(A) has a net worth of at least $2,700,000"))
     story.extend(yes_no_row(
         "(B) is either an entity which is not engaged primarily in "
         "investing or trading in securities or a natural person"))
@@ -1173,11 +1173,11 @@ def build_part_iii():
         "if none applies, consult the General Partner.)",
         BODY))
     qc_entity = [
-        ("<b>Rule 205-3(d)(1)(i) &ndash; $2.2M Net Worth.</b>&nbsp;&nbsp;"
-         "The entity Subscriber has a net worth in excess of $2,200,000 "
+        ("<b>Rule 205-3(d)(1)(i) &ndash; $2.7M Net Worth.</b>&nbsp;&nbsp;"
+         "The entity Subscriber has a net worth in excess of $2,700,000 "
          "at the time of the investment management contract.").replace("&ndash;", "-"),
-        ("<b>Rule 205-3(d)(1)(ii) &ndash; $1.1M AUM.</b>&nbsp;&nbsp;The "
-         "entity Subscriber has at least $1,100,000 in assets under "
+        ("<b>Rule 205-3(d)(1)(ii) &ndash; $1.4M AUM.</b>&nbsp;&nbsp;The "
+         "entity Subscriber has at least $1,400,000 in assets under "
          "management with the Investment Manager immediately after "
          "entering into the investment advisory relationship with the "
          "Investment Manager.").replace("&ndash;", "-"),

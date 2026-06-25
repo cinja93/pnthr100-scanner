@@ -33,7 +33,7 @@ from pnthr_design import (
 
 OUT_DIR = os.path.expanduser("~/Downloads")
 os.makedirs(OUT_DIR, exist_ok=True)
-OUT_PATH = os.path.join(OUT_DIR, "PNTHR_Tree_Fund_LPA_v1.0_2026.pdf")
+OUT_PATH = os.path.join(OUT_DIR, "PNTHR_Tree_Fund_LPA_v1.1_2026.pdf")
 
 # ── Styles (match PPM v6.0 conventions) ─────────────────────────────────
 TITLE_STYLE = ParagraphStyle(
@@ -126,7 +126,7 @@ def build_cover():
         title_line_2=None,
         subtitle="LIMITED PARTNERSHIP AGREEMENT",
         date_line="Dated as of:  June 1, 2026",
-        revision_line="Document Revision:  v1.0 - June 2026",
+        revision_line="Document Revision:  v1.1 - June 2026",
         issuer_line="Issuer:  PNTHR Funds, LLC (General Partner)",
         confidential_title=None,
         confidential_body=None,
@@ -1664,8 +1664,8 @@ def build_article_vi():
         "Securities Act; and (b) qualifies as a Qualified Client within the "
         "meaning of Rule 205-3 under the Advisers Act (that is, the Limited "
         "Partner is a natural person or company that (i) has a net worth, "
-        "excluding the value of the primary residence, of at least $2,200,000 "
-        "immediately prior to admission; or (ii) has at least $1,100,000 under "
+        "excluding the value of the primary residence, of at least $2,700,000 "
+        "immediately prior to admission; or (ii) has at least $1,400,000 under "
         "the management of the Investment Manager). Each Limited Partner shall "
         "promptly notify the General Partner if at any time any of the foregoing "
         "representations ceases to be true, and the General Partner may require "

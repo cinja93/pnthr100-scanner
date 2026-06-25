@@ -11,7 +11,7 @@ description, strategy parameters, and regime gate methodology.
 Pre-Launch Live Testing disclosure and Exhibit A (Material Strategy
 Change Notice) removed — those are Carnivore-specific history.
 
-Output: PNTHR_AI_Elite_300_PPM_v1.0_2026.pdf
+Output: PNTHR_AI_Elite_300_PPM_v1.1_2026.pdf
 """
 
 import os
@@ -30,7 +30,7 @@ from reportlab.lib.colors import HexColor
 
 OUT_DIR = os.path.expanduser("~/Downloads")
 os.makedirs(OUT_DIR, exist_ok=True)
-OUT_PATH = os.path.join(OUT_DIR, "PNTHR_AI_Elite_300_PPM_v1.0_2026.pdf")
+OUT_PATH = os.path.join(OUT_DIR, "PNTHR_AI_Elite_300_PPM_v1.1_2026.pdf")
 
 # ----- PNTHR brand palette (exact hex values extracted from Key Personnel PDF) --
 PALETTE_YELLOW      = HexColor("#fcf000")  # top accent bar, footer brand
@@ -304,7 +304,7 @@ def build_cover():
 
     # Meta lines
     story.append(P("DATE:  June 1, 2026", COVER_META_GRAY))
-    story.append(P("Document Revision:  v1.0 - June 2026",
+    story.append(P("Document Revision:  v1.1 - June 2026",
                    COVER_META_GRAY))
     story.append(P("Issuer:  PNTHR Funds, LLC (General Partner)", COVER_META_GRAY))
 
@@ -593,8 +593,8 @@ def build_executive_summary():
         "Rule 205-3 under the Investment Advisers Act of 1940. A &ldquo;qualified "
         "client&rdquo; generally includes a natural person whose net worth (together with "
         "the net worth of that person&rsquo;s spouse or spousal equivalent, and excluding "
-        "the value of the primary residence) exceeds $2,200,000 immediately prior to "
-        "entering into an advisory contract, or who has at least $1,100,000 under the "
+        "the value of the primary residence) exceeds $2,700,000 immediately prior to "
+        "entering into an advisory contract, or who has at least $1,400,000 under the "
         "management of the Investment Manager.",
         BODY))
 

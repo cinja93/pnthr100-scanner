@@ -22,12 +22,13 @@ const PW = 612, PH = 792;
 const LM = 58, RM = 58;           // left / right margins
 const CONTENT_R = PW - RM;        // right content edge
 
-// Palette tuned to NAV's statement.
-const NAVY = '#1f3a5f';
+// PNTHR palette: black bands/headers, PNTHR yellow lettering on black, black ink on white.
+const NAVY = '#000000';      // band/brand fill (was NAV navy) — now PNTHR black
+const YELLOW = '#FFD700';    // PNTHR gold — lettering on black backgrounds
 const INK = '#222222';
 const GREY = '#777777';
 const SHADE = '#eef0f2';
-const RULE = '#222222';
+const RULE = '#000000';
 const LINK = '#2b5fa8';
 
 // ── number formatting (matches NAV exactly) ─────────────────────────────────────
@@ -76,7 +77,7 @@ export function renderAccountStatement(data) {
     // ── Header band ──
     const h = data.header;
     doc.rect(0, 0, PW, 72).fill(NAVY);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(15).text(h.fundName, ML, 11);
+    doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(15).text(h.fundName, ML, 11);
     doc.font('Helvetica').fontSize(9.5).text(h.statementTitle || 'Account Statement (Unaudited)', ML, 32);
     doc.fontSize(8.5);
     doc.text(`For the Period Ended ${h.periodEnded}`, ML, 48);
@@ -188,7 +189,7 @@ export function renderIndividualAccountStatement(data) {
     // ── INVESTOR NO. box (top right) ──
     const boxW = 110, boxX = CONTENT_R - boxW, boxY = 100;
     doc.rect(boxX, boxY, boxW, 20).fill(NAVY);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text('INVESTOR NO.', boxX, boxY + 6, { width: boxW, align: 'center', characterSpacing: 0.5 });
+    doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(9).text('INVESTOR NO.', boxX, boxY + 6, { width: boxW, align: 'center', characterSpacing: 0.5 });
     doc.rect(boxX, boxY + 20, boxW, 26).lineWidth(1).strokeColor(NAVY).stroke();
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(15).text(String(data.investor.no), boxX, boxY + 26, { width: boxW, align: 'center' });
 
@@ -210,7 +211,7 @@ export function renderIndividualAccountStatement(data) {
     // ── Section header bar ──
     const barY = 384;
     doc.rect(LM, barY, CONTENT_R - LM, 22).fill(NAVY);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10.5)
+    doc.fillColor(YELLOW).font('Helvetica-Bold').fontSize(10.5)
       .text('CAPITAL ACCOUNT SUMMARY', LM + 8, barY + 6, { characterSpacing: 0.3 });
 
     // ── Table ──

@@ -103,14 +103,19 @@ export default function PnthrAccountingPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {docs.map(d => {
           const sc = STATUS_COLORS[d.status] || STATUS_COLORS.draft;
+          const isPdf = (d.contentType || '').includes('pdf');
           return (
             <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span title={d.investorNo ? `Investor ${d.investorNo}` : sc.label}
                 style={{ width: 7, height: 7, borderRadius: '50%', background: sc.fg, flexShrink: 0 }} />
-              <button onClick={() => handleDoc(d.id, d.filename, false)}
-                style={linkBtn(sc.fg)} title="View">View</button>
-              <button onClick={() => handleDoc(d.id, d.filename, true)}
-                style={linkBtn(DIM)} title="Download">↓</button>
+              {isPdf ? (
+                <>
+                  <button onClick={() => handleDoc(d.id, d.filename, false)} style={linkBtn(sc.fg)} title="View in browser">View</button>
+                  <button onClick={() => handleDoc(d.id, d.filename, true)} style={linkBtn(DIM)} title="Download PDF">↓</button>
+                </>
+              ) : (
+                <button onClick={() => handleDoc(d.id, d.filename, true)} style={linkBtn(sc.fg)} title="Download Excel">Download</button>
+              )}
               {d.investorNo && <span style={{ color: DIM, fontSize: 10, fontFamily: 'monospace' }}>#{d.investorNo}</span>}
             </div>
           );

@@ -307,7 +307,7 @@ export default function PnthrTreePage() {
   const [logBusy, setLogBusy] = useState(false);
   const [scorecard, setScorecard] = useState(null);     // Risk Scorecard (forward-only)
   const [openDays, setOpenDays] = useState(() => new Set());   // which savings days are expanded
-  const [tickerFilter, setTickerFilter] = useState(null);      // "follow a ticker" — null = show all
+  const [openTickers, setOpenTickers] = useState(() => new Set());   // which day|ticker rows are expanded to their individual trades
   const seenLatestDay = useRef(null);
   // Default: only the latest trading day expanded. When a NEW latest day appears (tomorrow),
   // collapse the rest and open just that one — "show only the present day of trading".
@@ -317,6 +317,7 @@ export default function PnthrTreePage() {
     if (latest && seenLatestDay.current !== latest) { seenLatestDay.current = latest; setOpenDays(new Set([latest])); }
   }, [scorecard]);
   const toggleDay = (d) => setOpenDays(prev => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
+  const toggleTicker = (k) => setOpenTickers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const openDailyLog = async () => {
     setDailyLog([]);   // open immediately, fill when loaded
@@ -659,50 +660,70 @@ export default function PnthrTreePage() {
             if (events.length === 0) return (
               <div style={{ color: '#777', fontSize: 12, marginBottom: 10 }}>No sell decisions to score yet — they appear here as you exit positions.</div>
             );
-            const filtered = tickerFilter ? events.filter(e => e.ticker === tickerFilter) : events;
             const byDay = {};
-            for (const e of filtered) (byDay[e.date] ||= []).push(e);
+            for (const e of events) (byDay[e.date] ||= []).push(e);
             const days = Object.keys(byDay).sort((a, b) => String(b).localeCompare(String(a)));
-            const grandNet = filtered.reduce((s, e) => s + e.result, 0);
-            const savedN = filtered.filter(e => e.result > 0).length;
-            const costN  = filtered.filter(e => e.result < 0).length;
+            const grandNet = events.reduce((s, e) => s + e.result, 0);
+            const savedN = events.filter(e => e.result > 0).length;
+            const costN  = events.filter(e => e.result < 0).length;
             return (
               <div style={{ marginBottom: 12, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
                   <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 CAPITAL SCORECARD — did selling save us money?</span>
-                  <span title="Every sell decision grouped by the day you sold. Round trip = (exit − re-entry) × shares. Still out = (exit − current daily close) × shares. Positive = selling saved capital; negative = it cost you. Click any ticker to follow just that name across every day.">
+                  <span title="Every sell decision, grouped by day and netted per ticker. Round trip = (exit − re-entry) × shares. Still out = (exit − current daily close) × shares. Positive = selling saved capital; negative = it cost you. Click a ticker to see its individual trades.">
                     net <b style={{ color: grandNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(grandNet)}</b>
                   </span>
-                  <span style={{ color: '#777', fontSize: 11 }}>{filtered.length} sell{filtered.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
-                  {tickerFilter && (
-                    <span onClick={() => setTickerFilter(null)} style={{ cursor: 'pointer', marginLeft: 'auto', color: '#facc15', fontSize: 11, border: '1px solid #5f5418', borderRadius: 4, padding: '1px 8px' }}>following {tickerFilter} ✕ clear</span>
-                  )}
+                  <span style={{ color: '#777', fontSize: 11 }}>{events.length} sell{events.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
                 </div>
                 <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
                   {days.map((day) => {
-                    const rows = byDay[day].slice().sort((a, b) => a.result - b.result);   // biggest cost first within the day
-                    const dayNet = rows.reduce((s, e) => s + e.result, 0);
-                    const isOpen = !!tickerFilter || openDays.has(day);   // following a ticker → expand every day it appears
+                    // roll the day's sells up to ONE netted row per ticker (click a ticker for its individual trades)
+                    const byTicker = {};
+                    for (const e of byDay[day]) (byTicker[e.ticker] ||= []).push(e);
+                    const tickerRows = Object.entries(byTicker)
+                      .map(([ticker, trades]) => ({ ticker, trades, net: trades.reduce((s, e) => s + e.result, 0) }))
+                      .sort((a, b) => a.net - b.net);   // biggest cost first within the day
+                    const dayNet = tickerRows.reduce((s, r) => s + r.net, 0);
+                    const dayOpen = openDays.has(day);
                     return (
                       <div key={day} style={{ border: '1px solid #1c1c1c', borderRadius: 6, background: '#0e0e0e' }}>
-                        <div onClick={() => { if (!tickerFilter) toggleDay(day); }} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: tickerFilter ? 'default' : 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
-                          <span style={{ color: '#888', width: 10 }}>{isOpen ? '▾' : '▸'}</span>
+                        <div onClick={() => toggleDay(day)} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
+                          <span style={{ color: '#888', width: 10 }}>{dayOpen ? '▾' : '▸'}</span>
                           <span style={{ fontWeight: 800, color: '#ddd' }}>{day}</span>
-                          <span style={{ color: '#666', fontSize: 11 }}>{rows.length} sell{rows.length === 1 ? '' : 's'}</span>
+                          <span style={{ color: '#666', fontSize: 11 }}>{tickerRows.length} ticker{tickerRows.length === 1 ? '' : 's'}</span>
                           <span style={{ marginLeft: 'auto', fontWeight: 800, color: dayNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(dayNet)}</span>
                         </div>
-                        {isOpen && (
+                        {dayOpen && (
                           <div style={{ display: 'grid', gap: 4, padding: '0 10px 8px 24px' }}>
-                            {rows.map((e, i) => {
-                              const vColor = e.result > 0 ? '#22c55e' : e.result < 0 ? '#ef4444' : '#888';
-                              const vText  = e.result > 0 ? 'SAVED' : e.result < 0 ? 'COST' : 'FLAT';
+                            {tickerRows.map((tr) => {
+                              const vColor = tr.net > 0 ? '#22c55e' : tr.net < 0 ? '#ef4444' : '#888';
+                              const vText  = tr.net > 0 ? 'SAVED' : tr.net < 0 ? 'COST' : 'FLAT';
+                              const key = `${day}|${tr.ticker}`;
+                              const tOpen = openTickers.has(key);
+                              const multi = tr.trades.length > 1;
                               return (
-                                <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
-                                  <span onClick={() => setTickerFilter(e.ticker)} title="Click to follow this ticker across every day" style={{ fontWeight: 800, color: '#fff', minWidth: 48, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: '#3a3a3a' }}>{e.ticker}</span>
-                                  <span>{e.detail}</span>
-                                  <span style={{ color: '#777' }}>{e.shares}sh</span>
-                                  <span style={{ color: vColor, fontWeight: 700 }}>{money(e.result)}</span>
-                                  <span style={{ marginLeft: 'auto', color: vColor, background: vColor + '22', border: `1px solid ${vColor}66`, fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 4 }}>{vText}</span>
+                                <div key={tr.ticker}>
+                                  <div onClick={() => toggleTicker(key)} title={multi ? 'Click to see the individual trades' : 'Click to see this trade'} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontFamily: 'monospace', fontSize: 11, color: '#bbb', cursor: 'pointer', userSelect: 'none', padding: '1px 0' }}>
+                                    <span style={{ color: '#666', width: 8, fontSize: 10 }}>{tOpen ? '▾' : '▸'}</span>
+                                    <span style={{ fontWeight: 800, color: '#fff', minWidth: 52 }}>{tr.ticker}</span>
+                                    <span style={{ color: '#777' }}>{tr.trades.length} trade{multi ? 's' : ''}</span>
+                                    <span style={{ marginLeft: 'auto', color: vColor, fontWeight: 700 }}>{money(tr.net)}</span>
+                                    <span style={{ color: vColor, background: vColor + '22', border: `1px solid ${vColor}66`, fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 4, minWidth: 44, textAlign: 'center' }}>{vText}</span>
+                                  </div>
+                                  {tOpen && (
+                                    <div style={{ display: 'grid', gap: 3, padding: '2px 0 5px 26px' }}>
+                                      {tr.trades.slice().sort((a, b) => a.result - b.result).map((e, i) => {
+                                        const evC = e.result > 0 ? '#22c55e' : e.result < 0 ? '#ef4444' : '#888';
+                                        return (
+                                          <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#999' }}>
+                                            <span>{e.detail}</span>
+                                            <span style={{ color: '#666' }}>{e.shares}sh</span>
+                                            <span style={{ marginLeft: 'auto', color: evC, fontWeight: 700 }}>{money(e.result)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -712,7 +733,7 @@ export default function PnthrTreePage() {
                     );
                   })}
                 </div>
-                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Combines closed round-trips (realized) with names you're still out of (marked to the latest daily close — unrealized). Click a ticker to follow it across every day.</div>
+                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Each ticker is netted per day — a name traded several times shows one net row; click it for the individual trades. Combines closed round-trips (realized) with names you're still out of (marked to the latest daily close — unrealized).</div>
               </div>
             );
           })()}

@@ -132,7 +132,7 @@ function TreeDailyLogModal({ days, onClose, onRecordNow, busy }) {
                   </tr>))}
                 </tbody>
               </table>
-              <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Recorded {d.recordedAt ? new Date(d.recordedAt).toLocaleString() : '—'} · IBKR snapshot {d.ibkrSyncedAt ? new Date(d.ibkrSyncedAt).toLocaleString() : '—'} · mode {d.mode}</div>
+              <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 8 }}>Recorded {d.recordedAt ? new Date(d.recordedAt).toLocaleString() : '—'} · IBKR snapshot {d.ibkrSyncedAt ? new Date(d.ibkrSyncedAt).toLocaleString() : '—'} · mode {d.mode}</div>
             </div>
           );
         })}
@@ -540,7 +540,7 @@ export default function PnthrTreePage() {
           <span style={{ color: '#888', fontSize: 12 }} title="Your manual / off-strategy holdings — in IBKR but not part of the TREE strategy (e.g. SPCX)">IBKR P&amp;L <b style={{ color: (data.manualPnl || 0) >= 0 ? '#facc15' : '#ef4444' }}>{(data.manualPnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.manualPnl || 0))}</b></span>
           <span style={{ color: '#555' }}>=</span>
           <span style={{ color: '#bbb', fontSize: 12 }}>Total P&amp;L <b style={{ color: (data.openPnl || 0) >= 0 ? '#22c55e' : '#ef4444', fontSize: 15 }}>{(data.openPnl || 0) >= 0 ? '+' : '-'}{fmt(Math.abs(data.openPnl || 0))}</b> <span style={{ color: '#555' }}>= your IBKR account</span></span>
-          {!!data.simPnl && <span style={{ color: '#666', fontSize: 11 }}>· sim would-buys {data.simPnl >= 0 ? '+' : '-'}{fmt(Math.abs(data.simPnl))} (hypothetical, not in IBKR)</span>}
+          {!!data.simPnl && <span style={{ color: '#9a9a9a', fontSize: 11 }}>· sim would-buys {data.simPnl >= 0 ? '+' : '-'}{fmt(Math.abs(data.simPnl))} (hypothetical, not in IBKR)</span>}
         </div>
       )}
 
@@ -563,7 +563,7 @@ export default function PnthrTreePage() {
           <span style={{ color: '#888', fontSize: 12 }} title="What YOUR real account would give back if every position stopped from here">
             Your risk <b style={{ color: data.totalRisk.actual <= data.totalRisk.strategy ? '#22c55e' : '#ef4444' }}>{fmt(data.totalRisk.actual)}</b> <span style={{ color: data.totalRisk.actual <= data.totalRisk.strategy ? '#4ade80' : '#f87171' }}>({data.totalRisk.actualPct}% of NAV)</span>
           </span>
-          <span style={{ color: '#666', fontSize: 11 }}>
+          <span style={{ color: '#9a9a9a', fontSize: 11 }}>
             {data.totalRisk.actual < data.totalRisk.strategy ? `carrying ${fmt(data.totalRisk.strategy - data.totalRisk.actual)} less heat than the strategy`
               : data.totalRisk.actual > data.totalRisk.strategy ? `carrying ${fmt(data.totalRisk.actual - data.totalRisk.strategy)} more heat than the strategy`
               : 'matching the strategy’s heat'}
@@ -613,7 +613,7 @@ export default function PnthrTreePage() {
       {manualTrades.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <h3 style={{ color: '#f59e0b', fontSize: 13, letterSpacing: '0.08em' }}>✋ MANUAL TRADES — OFF STRATEGY ({manualTrades.length})</h3>
-          <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>You hold these; the engine doesn't manage them (excluded names like SPCX, or anything outside the AI-300). P&amp;L is your real P&amp;L.</div>
+          <div style={{ color: '#b3b3b3', fontSize: 11, marginBottom: 8 }}>You hold these; the engine doesn't manage them (excluded names like SPCX, or anything outside the AI-300). P&amp;L is your real P&amp;L.</div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{manualTrades.map((p, i) => <DevourCard key={i} p={p} offStrategy onClick={() => openChart(manualTrades.map(x => x.ticker), p.ticker)} />)}</div>
         </div>
       )}
@@ -639,7 +639,7 @@ export default function PnthrTreePage() {
             <span title="Peak-to-trough of your real AUM since live tracking began">Your max drawdown <b style={{ color: '#22c55e' }}>{scorecard.portfolio?.actualMaxDDPct}%</b></span>
             <span style={{ color: '#555' }}>vs</span>
             <span title="The backtest's max drawdown — the number you're trying to beat by managing risk">Backtest <b style={{ color: '#facc15' }}>{scorecard.portfolio?.backtestDDPct}%</b></span>
-            <span style={{ color: '#666', fontSize: 11 }}>· tracking since {scorecard.portfolio?.since || '—'} ({scorecard.portfolio?.aumDays || 0} days)</span>
+            <span style={{ color: '#9a9a9a', fontSize: 11 }}>· tracking since {scorecard.portfolio?.since || '—'} ({scorecard.portfolio?.aumDays || 0} days)</span>
           </div>
           {scorecard.journeyCompare?.totals?.count > 0 && (() => {
             const T = scorecard.journeyCompare.totals;
@@ -663,39 +663,39 @@ export default function PnthrTreePage() {
                       <span style={{ color: '#e6e6e6', fontWeight: 800, fontSize: 15 }}>🌳 TREE Plan</span>
                       <span style={{ fontSize: 10, fontWeight: 800, color: '#9aa6a0', border: '1px dashed #555', borderRadius: 4, padding: '2px 7px', letterSpacing: '0.05em' }}>THE PLAN · MODELED</span>
                     </div>
-                    <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>Held every signal to its stop — never touched</div>
+                    <div style={{ color: '#b3b3b3', fontSize: 11, marginBottom: 8 }}>Held every signal to its stop — never touched</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: T.planNet >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1.1 }}>{$(T.planNet)}</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#999', marginBottom: 10 }}>{pc(T.planPct)} on {T.count} TREE trades</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#c4c4c4', marginBottom: 10 }}>{pc(T.planPct)} on {T.count} TREE trades</div>
                     <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: 8, display: 'grid', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
                       <Row label="Would stop out (loss)" val={T.stopped} color="#e88" />
                       <Row label="Would trail to profit" val={T.trailed} color="#7fcf9f" />
                       <Row label="Would still be holding" val={T.openPlan} color="#ccc" />
                     </div>
-                    <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>Did my whole approach beat leaving TREE alone? This is TREE's full untouched outcome — held to its stop.</div>
+                    <div style={{ color: '#a8a8a8', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>Did my whole approach beat leaving TREE alone? This is TREE's full untouched outcome — held to its stop.</div>
                   </div>
                   <div style={{ flex: '1 1 300px', border: `1px solid ${win ? '#1f7a3f' : '#7a3030'}`, borderRadius: 10, padding: '12px 14px', background: '#0b0b0b' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                       <span style={{ color: '#e6e6e6', fontWeight: 800, fontSize: 15 }}>🐾 PNTHR Management</span>
                       <span style={{ fontSize: 10, fontWeight: 800, color: '#22c55e', border: '1px solid #1f7a3f', borderRadius: 4, padding: '2px 7px', letterSpacing: '0.05em' }}>LIVE · YOUR ACTUAL</span>
                     </div>
-                    <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>Your cutting, re-entering &amp; stepping aside</div>
+                    <div style={{ color: '#b3b3b3', fontSize: 11, marginBottom: 8 }}>Your cutting, re-entering &amp; stepping aside</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: T.actualNet >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1.1 }}>{$(T.actualNet)}</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#999', marginBottom: 10 }}>{pc(T.actualPct)} on the same {T.count} trades</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#c4c4c4', marginBottom: 10 }}>{pc(T.actualPct)} on the same {T.count} trades</div>
                     <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: 8, display: 'grid', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
                       <Row label="You beat the plan on" val={T.helped} color="#7fcf9f" />
                       <Row label="You trailed it on" val={T.hurt} color="#e88" />
                       <Row label="Edge vs the plan" val={$(T.edge)} color={win ? '#22c55e' : '#ef4444'} />
                     </div>
-                    <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>By cutting losses early, did it help? Edge = your result − the plan.</div>
+                    <div style={{ color: '#a8a8a8', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>By cutting losses early, did it help? Edge = your result − the plan.</div>
                   </div>
                 </div>
                 {T.exitsClassified > 0 && (
                   <div style={{ marginTop: 10, padding: '6px 10px', borderRadius: 6, background: '#0c1a0f', border: '1px solid #1f5130', fontFamily: 'monospace', fontSize: 11, color: '#86efac' }}>
                     🛡 <b>{T.exitsAboveStop} of {T.exitsClassified}</b> exits were <b>above TREE&apos;s stop</b> — your management, not TREE stop-outs. Only <b>{Math.max(0, T.exitsClassified - T.exitsAboveStop)}</b> actually hit TREE&apos;s stop.
-                    <span style={{ color: '#6b8f78' }}> (The 🌳 card&apos;s &quot;would stop out&quot; counts are TREE&apos;s <i>hypothetical</i> outcome if untouched — not what happened.) You exited a cumulative <b>${Math.round(T.aboveStopDollars).toLocaleString()}</b> above where TREE&apos;s stops sat — gross, shows how much more conservatively you manage; the net value is the edge above.</span>
+                    <span style={{ color: '#9fc7ad' }}> (The 🌳 card&apos;s &quot;would stop out&quot; counts are TREE&apos;s <i>hypothetical</i> outcome if untouched — not what happened.) You exited a cumulative <b>${Math.round(T.aboveStopDollars).toLocaleString()}</b> above where TREE&apos;s stops sat — gross, shows how much more conservatively you manage; the net value is the edge above.</span>
                   </div>
                 )}
-                {(T.carried || T.pending) ? <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Plan (A) is MODELED — a daily-bar simulation; your side (B) is real money. {T.carried ? `${T.carried} carried positions (adopted before go-live) excluded — no TREE entry to compare. ` : ''}{T.pending ? `${T.pending} just entered (no journey yet).` : ''}</div> : null}
+                {(T.carried || T.pending) ? <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 8 }}>Plan (A) is MODELED — a daily-bar simulation; your side (B) is real money. {T.carried ? `${T.carried} carried positions (adopted before go-live) excluded — no TREE entry to compare. ` : ''}{T.pending ? `${T.pending} just entered (no journey yet).` : ''}</div> : null}
               </div>
             );
           })()}
@@ -731,9 +731,9 @@ export default function PnthrTreePage() {
                   <span title="Every sell decision, grouped by day and netted per ticker. Round trip = (exit − re-entry) × shares. Still out = (exit − LIVE price) × shares. Positive = selling saved capital; negative = it cost you. Click a ticker to see its individual trades.">
                     net <b style={{ color: grandNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(grandNet)}</b>
                   </span>
-                  <span style={{ color: '#777', fontSize: 11 }}>{events.length} sell{events.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
+                  <span style={{ color: '#aaa', fontSize: 11 }}>{events.length} sell{events.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
                 </div>
-                <div style={{ color: '#6b7280', fontSize: 10, marginTop: 2 }}>Was my sell timing good? — your exit / re-entry prices vs where the stock is right now. (The 🌳 cards above answer the bigger question: did your whole approach beat leaving TREE alone?)</div>
+                <div style={{ color: '#9ca3af', fontSize: 10, marginTop: 2 }}>Was my sell timing good? — your exit / re-entry prices vs where the stock is right now. (The 🌳 cards above answer the bigger question: did your whole approach beat leaving TREE alone?)</div>
                 <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
                   {days.map((day) => {
                     // roll the day's sells up to ONE netted row per ticker (click a ticker for its individual trades)
@@ -749,7 +749,7 @@ export default function PnthrTreePage() {
                         <div onClick={() => toggleDay(day)} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
                           <span style={{ color: '#888', width: 10 }}>{dayOpen ? '▾' : '▸'}</span>
                           <span style={{ fontWeight: 800, color: '#ddd' }}>{day}</span>
-                          <span style={{ color: '#666', fontSize: 11 }}>{tickerRows.length} ticker{tickerRows.length === 1 ? '' : 's'}</span>
+                          <span style={{ color: '#9a9a9a', fontSize: 11 }}>{tickerRows.length} ticker{tickerRows.length === 1 ? '' : 's'}</span>
                           <span style={{ marginLeft: 'auto', fontWeight: 800, color: dayNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(dayNet)}</span>
                         </div>
                         {dayOpen && (
@@ -792,7 +792,7 @@ export default function PnthrTreePage() {
                     );
                   })}
                 </div>
-                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Each ticker is netted per day — a name traded several times shows one net row; click it for the individual trades. Combines closed round-trips (realized) with names you're still out of (marked to the LIVE price — unrealized, so it moves with the market).</div>
+                <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 8 }}>Each ticker is netted per day — a name traded several times shows one net row; click it for the individual trades. Combines closed round-trips (realized) with names you're still out of (marked to the LIVE price — unrealized, so it moves with the market).</div>
               </div>
             );
           })()}
@@ -807,7 +807,7 @@ export default function PnthrTreePage() {
                   <span title="A (the plan) = bought at your TREE entry and held with TREE's 2-week-low trailing stop until stopped out or trailed to a profit — MODELED on daily bars. B = your real fills. edge = B − A: positive means your cutting/timing beat leaving TREE alone. An overnight gap hits A and B equally, so it cancels — this isolates YOUR decisions.">
                     your edge <b style={{ color: (T.edge || 0) >= 0 ? '#22c55e' : '#ef4444' }}>{money(T.edge || 0)}</b>
                   </span>
-                  <span style={{ color: '#777', fontSize: 11 }}>plan {money(T.planNet || 0)} · you {money(T.actualNet || 0)} · {T.helped || 0} helped / {T.hurt || 0} hurt · {jc.rows.length} stocks</span>
+                  <span style={{ color: '#aaa', fontSize: 11 }}>plan {money(T.planNet || 0)} · you {money(T.actualNet || 0)} · {T.helped || 0} helped / {T.hurt || 0} hurt · {jc.rows.length} stocks</span>
                 </div>
                 <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
                   {jc.rows.map((r, i) => {
@@ -824,7 +824,7 @@ export default function PnthrTreePage() {
                     );
                   })}
                 </div>
-                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>
+                <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 8 }}>
                   Plan (A) is MODELED — TREE's 2-week-low trailing stop simulated forward from your entry on daily bars, not booked fills. Your side (B) is real money. edge = B − A.
                   {T.carried ? ` · ${T.carried} carried positions excluded (adopted before go-live — no TREE entry to compare).` : ''}
                   {T.pending ? ` · ${T.pending} just entered (no journey yet).` : ''}
@@ -862,15 +862,15 @@ export default function PnthrTreePage() {
             <div style={{ color: '#777', fontSize: 12 }}>No trades to score yet — fills recorded: <b style={{ color: '#aaa' }}>{scorecard.fillsRecorded}</b>. Scores each trade as you make it (return-per-drawdown vs the strategy).</div>
           )}
           {scorecard.strategyOnly.length > 0 && (
-            <div style={{ marginTop: 8, color: '#777', fontSize: 11 }}>
+            <div style={{ marginTop: 8, color: '#aaa', fontSize: 11 }}>
               Strategy benchmark (engine trades — the bar to beat): {scorecard.strategyOnly.slice(0, 6).map(s => `${s.ticker} ${s.returnPct >= 0 ? '+' : ''}${s.returnPct}%/${s.ddPct}%DD`).join(' · ')}
             </div>
           )}
-          <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>{scorecard.note}</div>
+          <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 8 }}>{scorecard.note}</div>
         </div>
       )}
 
-      <div style={{ color: '#555', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
+      <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
         Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.
       </div>
 

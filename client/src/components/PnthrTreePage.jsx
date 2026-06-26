@@ -737,6 +737,42 @@ export default function PnthrTreePage() {
               </div>
             );
           })()}
+          {scorecard.journeyCompare?.rows?.length > 0 && (() => {
+            const jc = scorecard.journeyCompare; const T = jc.totals || {};
+            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(Math.round(n)).toLocaleString()}`;
+            const reasonLabel = (r) => r === 'STOP_LOSS' ? 'stopped out' : r === 'TRAIL_PROFIT' ? 'trailed out' : 'still open';
+            return (
+              <div style={{ marginBottom: 12, border: '1px solid #20301f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
+                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>🌳 TREE PLAN vs YOUR MANAGEMENT</span>
+                  <span title="A (the plan) = bought at your TREE entry and held with TREE's 2-week-low trailing stop until stopped out or trailed to a profit — MODELED on daily bars. B = your real fills. edge = B − A: positive means your cutting/timing beat leaving TREE alone. An overnight gap hits A and B equally, so it cancels — this isolates YOUR decisions.">
+                    your edge <b style={{ color: (T.edge || 0) >= 0 ? '#22c55e' : '#ef4444' }}>{money(T.edge || 0)}</b>
+                  </span>
+                  <span style={{ color: '#777', fontSize: 11 }}>plan {money(T.planNet || 0)} · you {money(T.actualNet || 0)} · {T.helped || 0} helped / {T.hurt || 0} hurt · {jc.rows.length} stocks</span>
+                </div>
+                <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                  {jc.rows.map((r, i) => {
+                    const c = r.edge > 0 ? '#22c55e' : r.edge < 0 ? '#ef4444' : '#888';
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb', padding: '3px 0', borderBottom: '1px solid #141414' }}>
+                        <span style={{ fontWeight: 800, color: '#fff', minWidth: 52 }}>{r.ticker}</span>
+                        <span style={{ color: '#888' }}>TREE bought ${r.entryPrice} {String(r.entryDate).slice(5)}</span>
+                        <span title="What leaving TREE alone would have done (modeled)">plan {reasonLabel(r.plan?.reason)} ${r.plan?.exitPrice} <b style={{ color: r.planNet >= 0 ? '#7fcf9f' : '#e88' }}>{money(r.planNet)}</b></span>
+                        <span title="Your actual result from your ins/outs">you <b style={{ color: r.actualNet >= 0 ? '#7fcf9f' : '#e88' }}>{money(r.actualNet)}</b></span>
+                        <span style={{ marginLeft: 'auto', color: c, fontWeight: 700 }}>{money(r.edge)}</span>
+                        <span style={{ color: c, background: c + '22', border: `1px solid ${c}66`, fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 4, minWidth: 54, textAlign: 'center' }}>{r.verdict}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>
+                  Plan (A) is MODELED — TREE's 2-week-low trailing stop simulated forward from your entry on daily bars, not booked fills. Your side (B) is real money. edge = B − A.
+                  {T.carried ? ` · ${T.carried} carried positions excluded (adopted before go-live — no TREE entry to compare).` : ''}
+                  {T.pending ? ` · ${T.pending} just entered (no journey yet).` : ''}
+                </div>
+              </div>
+            );
+          })()}
           <div style={{ borderTop: '1px solid #1c1c1c', margin: '2px 0 8px' }} />
           <div title="A different question from capital saved: for each closed trade, did your active management beat just holding the strategy on return-per-drawdown? WIN = matched/beat the return for less (or equal) risk." style={{ color: '#9aa6a0', fontSize: 11, letterSpacing: '0.05em', fontWeight: 700, marginBottom: 6 }}>📊 VS THE STRATEGY — your return-per-drawdown vs just holding</div>
           {(scorecard.counts.WIN + scorecard.counts.MIXED + scorecard.counts.LOSS) > 0 && (

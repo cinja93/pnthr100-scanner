@@ -12,6 +12,7 @@
 // so it is unit-tested and proven correct before real trades arrive.
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { fetchFMP } from './stockService.js';
+import { buildTreeJourneyCompare } from './treeJourneyCompare.js';
 
 const AI_META = {};
 for (const s of AI_SECTORS) for (const h of s.holdings) AI_META[h.ticker] = { name: h.name, sector: s.sector };
@@ -298,11 +299,16 @@ export async function getPnthrTreeScorecard(db) {
   let backtestDDPct = null;
   try { backtestDDPct = JSON.parse((await import('fs')).readFileSync(new URL('./data/treeProjectionBaseline.json', import.meta.url), 'utf8')).metrics?.maxDDPct ?? null; } catch { /* ignore */ }
 
+  // TREE PLAN vs YOUR MANAGEMENT — per-stock journey: hold-the-signal (A) vs your ins/outs (B).
+  let journeyCompare = { rows: [], totals: { planNet: 0, actualNet: 0, edge: 0 } };
+  try { journeyCompare = await buildTreeJourneyCompare(db); } catch (e) { journeyCompare.note = 'journey compare failed: ' + e.message; }
+
   return {
     scored: scored.sort((a, b) => String(b.exitDate).localeCompare(String(a.exitDate))),
     strategyOnly: strategyLegs.filter((s, i) => !usedStrat.has(i) && !s.open).map(s => ({ ...s, company: AI_META[s.ticker]?.name || null })),
     roundTrips, savings,
     preventedExits, prevented,
+    journeyCompare,
     counts,
     portfolio: {
       actualMaxDDPct: +(actualMaxDD * 100).toFixed(2),

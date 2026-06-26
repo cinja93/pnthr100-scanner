@@ -19,7 +19,7 @@ export function isDemoMode() { return _demoMode; }
 
 // Central fetch wrapper: handles 401 globally
 export async function apiFetch(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { cache: 'no-store', ...options });
   if (response.status === 401 && _onUnauthorized) {
     _onUnauthorized(); // clears token + redirects to login
   }

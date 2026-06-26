@@ -153,7 +153,7 @@ export default function Pnthr300WeightsModal({ onClose }) {
             </div>
             <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
               {data?.ok
-                ? <>{data.constituentCount} holdings · capped market-cap weighted (4% / 1.5% hyperscaler) · as of last rebalance <strong style={{ color: '#fcf000' }}>{data.asOfRebalance}</strong></>
+                ? <>{data.constituentCount} holdings · capped market-cap weighted (2.5% / 1.0% hyperscaler) · as of last rebalance <strong style={{ color: '#fcf000' }}>{data.asOfRebalance}</strong></>
                 : <>Loading methodology…</>}
             </div>
           </div>

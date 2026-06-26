@@ -355,6 +355,21 @@ app.post('/auth/login', authLimiter, async (req, res) => {
 // ── API authentication ────────────────────────────────────────────────────────
 // Accepts either a valid JWT (browser sessions) or x-api-key (server-to-server, cron jobs).
 const API_KEY = process.env.API_KEY;
+
+// API responses are live fund data — never let a browser or proxy serve a stale copy.
+// Express otherwise emits only an ETag (no Cache-Control), which browsers cache
+// HEURISTICALLY; after a data update (e.g. an index rebuild) the client kept showing
+// the old cached response until that heuristic window expired — the cause of the AI-300
+// chart showing stale bars after a rebalance. no-store forces every poll to hit the
+// server, which keeps its own short in-memory caches for efficiency. Self-healing:
+// any data change now reaches every client on its next request, with no manual refresh.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 app.use('/api', (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   if (apiKey && apiKey === API_KEY) return next();

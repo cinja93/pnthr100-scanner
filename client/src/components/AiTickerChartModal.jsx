@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
+import ChartDrawingOverlay from './ChartDrawingOverlay';
 import { fetchAiStockChartData, fetchNav, fetchFcfData, fetchValuationData, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
@@ -40,139 +41,6 @@ function fmtPct(n) {
   return `${s}${n.toFixed(2)}%`;
 }
 
-// ── Drawing tools ─────────────────────────────────────────────────────────
-function useDrawingTools(chartRef, containerRef, priceSeriesRef) {
-  const canvasRef = useRef(null);
-  const [mode, setMode] = useState(null); // null | 'trendline' | 'horizontal'
-  const [drawings, setDrawings] = useState([]);
-  const pendingRef = useRef(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    let canvas = canvasRef.current;
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none;';
-      container.appendChild(canvas);
-      canvasRef.current = canvas;
-    }
-    const ro = new ResizeObserver(() => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-    });
-    ro.observe(container);
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    return () => { ro.disconnect(); };
-  }, [containerRef]);
-
-  // Redraw all drawings whenever they change or chart scrolls/zooms
-  useEffect(() => {
-    const chart = chartRef.current;
-    const canvas = canvasRef.current;
-    if (!chart || !canvas) return;
-
-    function redraw() {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const ts = chart.timeScale();
-
-      const series = priceSeriesRef.current;
-      if (!series) return;
-
-      for (const d of drawings) {
-        if (d.type === 'horizontal') {
-          const yCoord = series.priceToCoordinate(d.price);
-          if (yCoord != null) {
-            ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([6, 4]);
-            ctx.beginPath();
-            ctx.moveTo(0, yCoord);
-            ctx.lineTo(canvas.width, yCoord);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = '#e0e0e0';
-            ctx.font = '10px monospace';
-            ctx.fillText(`$${d.price.toFixed(2)}`, 4, yCoord - 4);
-          }
-        } else if (d.type === 'trendline') {
-          const x1 = ts.timeToCoordinate(d.time1);
-          const y1 = series.priceToCoordinate(d.price1);
-          const x2 = ts.timeToCoordinate(d.time2);
-          const y2 = series.priceToCoordinate(d.price2);
-          if (x1 != null && y1 != null && x2 != null && y2 != null) {
-            ctx.strokeStyle = '#fcf000';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-          }
-        }
-      }
-    }
-
-    redraw();
-    chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
-    return () => { try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(redraw); } catch {} };
-  }, [drawings, chartRef]);
-
-  // Click handler — attached/detached based on mode
-  useEffect(() => {
-    const chart = chartRef.current;
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!chart || !container || !canvas || !mode) {
-      if (canvas) canvas.style.pointerEvents = 'none';
-      return;
-    }
-    canvas.style.pointerEvents = 'auto';
-    canvas.style.cursor = mode === 'horizontal' ? 'crosshair' : 'crosshair';
-
-    function onClick(e) {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      const ts = chart.timeScale();
-      const time = ts.coordinateToTime(x);
-      const priceSeries = priceSeriesRef.current;
-      if (!priceSeries) return;
-      const price = priceSeries.coordinateToPrice(y);
-      if (time == null || price == null) return;
-
-      if (mode === 'horizontal') {
-        setDrawings(prev => [...prev, { type: 'horizontal', price }]);
-        setMode(null);
-      } else if (mode === 'trendline') {
-        if (!pendingRef.current) {
-          pendingRef.current = { time1: time, price1: price };
-        } else {
-          const p = pendingRef.current;
-          setDrawings(prev => [...prev, { type: 'trendline', time1: p.time1, price1: p.price1, time2: time, price2: price }]);
-          pendingRef.current = null;
-          setMode(null);
-        }
-      }
-    }
-
-    canvas.addEventListener('click', onClick);
-    return () => {
-      canvas.removeEventListener('click', onClick);
-      canvas.style.pointerEvents = 'none';
-      canvas.style.cursor = 'default';
-    };
-  }, [mode, chartRef, containerRef]);
-
-  function clearDrawings() { setDrawings([]); pendingRef.current = null; setMode(null); }
-  function cancelMode() { pendingRef.current = null; setMode(null); }
-
-  return { mode, setMode, drawings, clearDrawings, cancelMode, pendingPoint: pendingRef.current };
-}
-
 // ── Single chart panel (daily or weekly) ───────────────────────────────────
 function ChartPanel({
   title, period, fallback, bars, signals, chartType,
@@ -193,7 +61,15 @@ function ChartPanel({
   const [sizeLoading, setSizeLoading] = useState(false);
   const [sizePanel,   setSizePanel]   = useState(null);
 
-  const drawTools = useDrawingTools(chartRef, containerRef, priceSeriesRef);
+  const { isAdmin } = useAuth() || {};
+  // Drawing overlay inputs: the overlay keys time on `weekOf`; the chart keys on `date` — map them
+  // so snapping + coordinate mapping line up. Memoized so the overlay isn't re-synced every render.
+  const overlayBars = useMemo(
+    () => (bars || []).map(b => ({ weekOf: b.date, open: b.open, high: b.high, low: b.low, close: b.close })),
+    [bars],
+  );
+  // Daily and Weekly panels have different time axes → namespace persistence so their lines don't collide.
+  const drawTicker = title === 'Weekly' ? `${ticker}#W` : ticker;
 
   const barSpacingRef = useRef(barSpacing);
   useEffect(() => { barSpacingRef.current = barSpacing; }, [barSpacing]);
@@ -206,8 +82,8 @@ function ChartPanel({
     });
   }
 
-  // Reset sizing and drawings when ticker changes
-  useEffect(() => { setSizePanel(null); drawTools.clearDrawings(); }, [ticker]);
+  // Reset sizing when ticker changes (the drawing overlay reloads its lines per ticker via its key).
+  useEffect(() => { setSizePanel(null); }, [ticker]);
 
   // Auto-fire SIZE IT as soon as inputs are ready — Scott wants the sizing
   // info (NAV / Stop / Shares / Risk / etc.) visible by default without
@@ -619,37 +495,7 @@ function ChartPanel({
           </button>
         </span>
 
-        {/* Drawing tools */}
-        <span style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a', marginLeft: 4 }}>
-          <button
-            onClick={() => drawTools.mode === 'trendline' ? drawTools.cancelMode() : drawTools.setMode('trendline')}
-            title="Trendline — click two points to draw a line"
-            style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, background: drawTools.mode === 'trendline' ? '#fcf000' : 'transparent', color: drawTools.mode === 'trendline' ? '#000' : '#888', border: 'none', cursor: 'pointer', letterSpacing: '0.04em' }}
-          >
-            ╲ TREND
-          </button>
-          <button
-            onClick={() => drawTools.mode === 'horizontal' ? drawTools.cancelMode() : drawTools.setMode('horizontal')}
-            title="Horizontal line — click to place a price level"
-            style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, background: drawTools.mode === 'horizontal' ? '#e0e0e0' : 'transparent', color: drawTools.mode === 'horizontal' ? '#000' : '#888', border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a', letterSpacing: '0.04em' }}
-          >
-            — HORIZ
-          </button>
-          {drawTools.drawings.length > 0 && (
-            <button
-              onClick={drawTools.clearDrawings}
-              title="Clear all drawings"
-              style={{ padding: '3px 8px', fontSize: 10, fontWeight: 700, background: 'transparent', color: '#dc2626', border: 'none', cursor: 'pointer', borderLeft: '1px solid #2a2a2a' }}
-            >
-              ✕
-            </button>
-          )}
-        </span>
-        {drawTools.mode && (
-          <span style={{ fontSize: 9, color: '#fcf000', fontWeight: 600 }}>
-            {drawTools.mode === 'trendline' ? (drawTools.pendingPoint ? 'Click second point' : 'Click first point') : 'Click to place line'}
-          </span>
-        )}
+        {/* Drawing tools render on the chart itself via ChartDrawingOverlay (Draw / Horizontal / Clear). */}
       </div>
 
       {/* SIZE IT strip — appears below title bar after sizing computed */}
@@ -723,6 +569,18 @@ function ChartPanel({
           </div>
         )}
         <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+        {isAdmin && bars && bars.length > 0 && (
+          <ChartDrawingOverlay
+            key={drawTicker}
+            chartRef={chartRef}
+            seriesRef={priceSeriesRef}
+            weeklyBars={overlayBars}
+            ticker={drawTicker}
+            enabled={isAdmin}
+            buttonPosition="top-right"
+            topOffset={8}
+          />
+        )}
         {earningsWindow && (
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
             background: '#fff59d', color: '#5d4037', fontSize: 20, fontWeight: 800, letterSpacing: '0.08em',

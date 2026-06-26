@@ -667,9 +667,9 @@ export default function PnthrTreePage() {
                     <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: T.planNet >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1.1 }}>{$(T.planNet)}</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#999', marginBottom: 10 }}>{pc(T.planPct)} on {T.count} TREE trades</div>
                     <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: 8, display: 'grid', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
-                      <Row label="Stopped out (loss)" val={T.stopped} color="#e88" />
-                      <Row label="Trailed to profit" val={T.trailed} color="#7fcf9f" />
-                      <Row label="Still riding" val={T.openPlan} color="#ccc" />
+                      <Row label="Would stop out (loss)" val={T.stopped} color="#e88" />
+                      <Row label="Would trail to profit" val={T.trailed} color="#7fcf9f" />
+                      <Row label="Would still be holding" val={T.openPlan} color="#ccc" />
                     </div>
                     <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>Did my whole approach beat leaving TREE alone? This is TREE's full untouched outcome — held to its stop.</div>
                   </div>
@@ -691,8 +691,8 @@ export default function PnthrTreePage() {
                 </div>
                 {T.exitsClassified > 0 && (
                   <div style={{ marginTop: 10, padding: '6px 10px', borderRadius: 6, background: '#0c1a0f', border: '1px solid #1f5130', fontFamily: 'monospace', fontSize: 11, color: '#86efac' }}>
-                    🛡 <b>{T.exitsAboveStop} of {T.exitsClassified}</b> exits were <b>above TREE&apos;s stop</b> — your management, not TREE stop-outs.
-                    <span style={{ color: '#6b8f78' }}> You exited a cumulative <b>${Math.round(T.aboveStopDollars).toLocaleString()}</b> above where TREE&apos;s stops sat (gross — shows how much more conservatively you manage; the net value is the edge above).</span>
+                    🛡 <b>{T.exitsAboveStop} of {T.exitsClassified}</b> exits were <b>above TREE&apos;s stop</b> — your management, not TREE stop-outs. Only <b>{Math.max(0, T.exitsClassified - T.exitsAboveStop)}</b> actually hit TREE&apos;s stop.
+                    <span style={{ color: '#6b8f78' }}> (The 🌳 card&apos;s &quot;would stop out&quot; counts are TREE&apos;s <i>hypothetical</i> outcome if untouched — not what happened.) You exited a cumulative <b>${Math.round(T.aboveStopDollars).toLocaleString()}</b> above where TREE&apos;s stops sat — gross, shows how much more conservatively you manage; the net value is the edge above.</span>
                   </div>
                 )}
                 {(T.carried || T.pending) ? <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Plan (A) is MODELED — a daily-bar simulation; your side (B) is real money. {T.carried ? `${T.carried} carried positions (adopted before go-live) excluded — no TREE entry to compare. ` : ''}{T.pending ? `${T.pending} just entered (no journey yet).` : ''}</div> : null}

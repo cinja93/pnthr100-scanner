@@ -160,7 +160,11 @@ export function scoreEpisode(actual, strategy) {
 
 // ── ORCHESTRATOR: build the scorecard from the DB ────────────────────────────
 export async function getPnthrTreeScorecard(db) {
-  const fills = await db.collection('pnthr_tree_fills').find({}).toArray();
+  // LIVE fills only. The ledger also holds PAPER (simulated) fills from before Tree went live
+  // (2026-06-18); counting those as real capital saved/lost overstates the track record (06-17/06-18
+  // paper trades were adding ~−$5,732 of phantom cost). This scorecard is a REAL-money record, so it
+  // starts at go-live. `mode: 'paper'` is the only non-live tag; $ne keeps live + any future real fill.
+  const fills = await db.collection('pnthr_tree_fills').find({ mode: { $ne: 'paper' } }).toArray();
   const paperTrades = await db.collection('pnthr_tree_trades').find({}).sort({ exitDate: 1 }).toArray();
   const openPaper = await db.collection('pnthr_tree_positions').find({ status: 'ACTIVE' }).toArray();
 

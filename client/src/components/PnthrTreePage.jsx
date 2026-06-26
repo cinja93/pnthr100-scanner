@@ -641,6 +641,58 @@ export default function PnthrTreePage() {
             <span title="The backtest's max drawdown — the number you're trying to beat by managing risk">Backtest <b style={{ color: '#facc15' }}>{scorecard.portfolio?.backtestDDPct}%</b></span>
             <span style={{ color: '#666', fontSize: 11 }}>· tracking since {scorecard.portfolio?.since || '—'} ({scorecard.portfolio?.aumDays || 0} days)</span>
           </div>
+          {scorecard.journeyCompare?.totals?.count > 0 && (() => {
+            const T = scorecard.journeyCompare.totals;
+            const $ = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(Math.round(n)).toLocaleString()}`;
+            const pc = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(2)}%`;
+            const win = T.edge >= 0;
+            const Row = ({ label, val, color }) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#bbb' }}><span>{label}</span><b style={{ color }}>{val}</b></div>
+            );
+            return (
+              <div style={{ margin: '4px 0 14px' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', padding: '8px 12px', borderRadius: 8, background: win ? '#0c1a0f' : '#1a0c0c', border: `1px solid ${win ? '#1f5130' : '#5e2020'}`, marginBottom: 10, fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 12, color: '#cfcfcf', fontWeight: 700, letterSpacing: '0.03em' }}>🎯 ARE WE EFFECTIVE? — your management vs leaving TREE alone:</span>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: win ? '#22c55e' : '#ef4444' }}>{$(T.edge)}</span>
+                  <span style={{ fontSize: 12, color: win ? '#86efac' : '#fca5a5', fontWeight: 700 }}>{win ? '✅ ADDING VALUE' : '✗ COSTING'} {pc(T.edgePct)}</span>
+                  <span style={{ fontSize: 11, color: '#777', marginLeft: 'auto' }}>drawdown {scorecard.portfolio?.actualMaxDDPct}% vs {scorecard.portfolio?.backtestDDPct}% backtested</span>
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 300px', border: '1px dashed #3a3a3a', borderRadius: 10, padding: '12px 14px', background: '#0b0b0b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                      <span style={{ color: '#e6e6e6', fontWeight: 800, fontSize: 15 }}>🌳 TREE Plan</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#9aa6a0', border: '1px dashed #555', borderRadius: 4, padding: '2px 7px', letterSpacing: '0.05em' }}>THE PLAN · MODELED</span>
+                    </div>
+                    <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>Held every signal to its stop — never touched</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: T.planNet >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1.1 }}>{$(T.planNet)}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#999', marginBottom: 10 }}>{pc(T.planPct)} on {T.count} TREE trades</div>
+                    <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: 8, display: 'grid', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                      <Row label="Stopped out (loss)" val={T.stopped} color="#e88" />
+                      <Row label="Trailed to profit" val={T.trailed} color="#7fcf9f" />
+                      <Row label="Still riding" val={T.openPlan} color="#ccc" />
+                    </div>
+                    <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>Did my whole approach beat leaving TREE alone? This is TREE's full untouched outcome — held to its stop.</div>
+                  </div>
+                  <div style={{ flex: '1 1 300px', border: `1px solid ${win ? '#1f7a3f' : '#7a3030'}`, borderRadius: 10, padding: '12px 14px', background: '#0b0b0b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                      <span style={{ color: '#e6e6e6', fontWeight: 800, fontSize: 15 }}>🐾 PNTHR Management</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#22c55e', border: '1px solid #1f7a3f', borderRadius: 4, padding: '2px 7px', letterSpacing: '0.05em' }}>LIVE · YOUR ACTUAL</span>
+                    </div>
+                    <div style={{ color: '#777', fontSize: 11, marginBottom: 8 }}>Your cutting, re-entering &amp; stepping aside</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: T.actualNet >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1.1 }}>{$(T.actualNet)}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#999', marginBottom: 10 }}>{pc(T.actualPct)} on the same {T.count} trades</div>
+                    <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: 8, display: 'grid', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                      <Row label="You beat the plan on" val={T.helped} color="#7fcf9f" />
+                      <Row label="You trailed it on" val={T.hurt} color="#e88" />
+                      <Row label="Edge vs the plan" val={$(T.edge)} color={win ? '#22c55e' : '#ef4444'} />
+                    </div>
+                    <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>By cutting losses early, did it help? Edge = your result − the plan.</div>
+                  </div>
+                </div>
+                {(T.carried || T.pending) ? <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Plan (A) is MODELED — a daily-bar simulation; your side (B) is real money. {T.carried ? `${T.carried} carried positions (adopted before go-live) excluded — no TREE entry to compare. ` : ''}{T.pending ? `${T.pending} just entered (no journey yet).` : ''}</div> : null}
+              </div>
+            );
+          })()}
           {(() => {
             const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
             // ONE timeline of every SELL decision: round trips (sold → re-bought) + walk-aways
@@ -675,6 +727,7 @@ export default function PnthrTreePage() {
                   </span>
                   <span style={{ color: '#777', fontSize: 11 }}>{events.length} sell{events.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
                 </div>
+                <div style={{ color: '#6b7280', fontSize: 10, marginTop: 2 }}>Was my sell timing good? — your exit / re-entry prices vs where the stock is right now. (The 🌳 cards above answer the bigger question: did your whole approach beat leaving TREE alone?)</div>
                 <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
                   {days.map((day) => {
                     // roll the day's sells up to ONE netted row per ticker (click a ticker for its individual trades)

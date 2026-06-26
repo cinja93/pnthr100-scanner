@@ -149,13 +149,25 @@ export async function buildTreeJourneyCompare(db) {
   }
 
   const scored = rows.filter(r => !r.skip);
+  const planNetSum   = +scored.reduce((a, r) => a + r.planNet, 0).toFixed(2);
+  const actualNetSum = +scored.reduce((a, r) => a + r.actualNet, 0).toFixed(2);
+  // common denominator for both returns = the original TREE position cost (entry × planned shares),
+  // so A% and B% are the same trade measured two ways (apples-to-apples).
+  const cost = +scored.reduce((a, r) => a + r.entryPrice * r.planShares, 0).toFixed(2);
   const totals = {
-    planNet:   +scored.reduce((a, r) => a + r.planNet, 0).toFixed(2),
-    actualNet: +scored.reduce((a, r) => a + r.actualNet, 0).toFixed(2),
-    edge:      +scored.reduce((a, r) => a + r.edge, 0).toFixed(2),
+    planNet:   planNetSum,
+    actualNet: actualNetSum,
+    edge:      +(actualNetSum - planNetSum).toFixed(2),
+    cost,
+    planPct:   cost > 0 ? +((planNetSum / cost) * 100).toFixed(2) : 0,
+    actualPct: cost > 0 ? +((actualNetSum / cost) * 100).toFixed(2) : 0,
+    edgePct:   cost > 0 ? +(((actualNetSum - planNetSum) / cost) * 100).toFixed(2) : 0,
     helped:    scored.filter(r => r.verdict === 'HELPED').length,
     hurt:      scored.filter(r => r.verdict === 'HURT').length,
     count:     scored.length,
+    stopped:   scored.filter(r => r.plan.reason === 'STOP_LOSS').length,    // plan rode it down to the stop (a loss)
+    trailed:   scored.filter(r => r.plan.reason === 'TRAIL_PROFIT').length, // plan trailed up and locked a profit
+    openPlan:  scored.filter(r => r.plan.reason === 'OPEN').length,         // plan still riding (not stopped yet)
   };
   rows.sort((a, b) => (b.edge || -1e9) - (a.edge || -1e9));   // biggest help first
   totals.carried = carried.length;

@@ -552,6 +552,41 @@ export async function fetchGreenHourMap(tickers) {
   return map;
 }
 
+// ── PURE: the 2-week (10 trading-day) low stop ───────────────────────────────
+// Lowest low of the last STOP_LOOKBACK bars (excluding today's forming bar) minus $0.01 —
+// the same rule the AI-300 names use. Returns { ok, stop, low, lastClose, barCount } so the
+// caller can gate on history depth (a fresh IPO with < 2 weeks of bars is NOT auto-stopped).
+export function tenDayLowStop(bars, todayStr) {
+  const clean = (bars || [])
+    .filter(b => b && b.date < todayStr && +b.low > 0)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (clean.length < STOP_LOOKBACK) return { ok: false, barCount: clean.length, reason: `only ${clean.length} bar(s), need ${STOP_LOOKBACK}` };
+  const window = clean.slice(-STOP_LOOKBACK);
+  const low = Math.min(...window.map(b => +b.low));
+  return { ok: true, barCount: clean.length, low, lastClose: +clean[clean.length - 1].close, stop: +(low - 0.01).toFixed(2) };
+}
+
+// ── PURE: should we auto-place this coverage stop? ───────────────────────────
+// Gates so we NEVER place a dangerous stop on untrusted data — the safety the engine-exclusion
+// gave us, kept as a per-stop check instead of a blanket skip. The stop must be a real number
+// BELOW market (a stop at/above price sells you out instantly), and the live price must be sane
+// vs the last close (a split/bad-data guard). Returns { place, reason }.
+export function coverageStopDecision({ stop, lastPrice, lastClose }) {
+  if (!(stop > 0)) return { place: false, reason: 'no valid stop' };
+  if (!(lastPrice > 0)) return { place: false, reason: 'no current price' };
+  if (stop >= lastPrice) return { place: false, reason: `stop $${stop} >= price $${lastPrice} — data suspect` };
+  if (lastClose > 0 && Math.abs(lastPrice - lastClose) / lastClose > 0.5) return { place: false, reason: `price $${lastPrice} vs last close $${lastClose} — split/data suspect` };
+  return { place: true, reason: 'ok' };
+}
+
+// Daily OHLC for a NON-universe ticker (e.g. GLD) not in the AI candle store. FMP returns
+// newest-first; tenDayLowStop sorts ascending so the order here doesn't matter.
+async function fetchDailyBarsFMP(ticker) {
+  const r = await fetchFMP(`/historical-price-full/${ticker}?timeseries=25`).catch(() => null);
+  const hist = (r && r.historical) || [];
+  return hist.map(b => ({ date: b.date, high: +b.high, low: +b.low, close: +b.close }));
+}
+
 // ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
@@ -836,6 +871,42 @@ export async function runPnthrTreeTick(db) {
       const beSnap = beStop && target === beStop && beStop > lowStop;
       await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: target, shares: sh, reason: beSnap ? 'TREE_BE_SNAP' : 'TREE_TRAIL' });
       actions.push({ type: beSnap ? 'LIVE_BE_SNAP' : 'LIVE_TRAIL', ticker: t, newStop: target, from: cur });
+    }
+
+    // ── NAKED-POSITION STOP COVERAGE (Scott 2026-06-26) ──────────────────────────────────────
+    // ANY held long with no protective stop gets the 2-week-low − $0.01 stop — including
+    // non-universe names (GLD) and engine-excluded names (SPCX) that the AI-300 trail loop above
+    // intentionally skips. Self-healing each tick. The exclusion's safety (never place a wrong-
+    // scale stop on untrusted IPO/split data) is preserved as a per-stop GATE: we place ONLY a
+    // sane stop (full 2-week window, below market, price not split-suspect); otherwise we flag it
+    // and leave the position for manual handling rather than place a dangerous stop. Uses
+    // MODIFY_STOP — the same place-or-replace path the trail loop already uses to put a fresh stop
+    // on a naked AI-300 name, so this is a proven enqueue, just widened to all held names.
+    if (snapFreshConfirmed) {
+      const covToday = etDateStr();
+      const haveStop = new Set((snap.stopOrders || [])
+        .filter(o => (o.action || '').toUpperCase() === 'SELL' && +o.stopPrice > 0)
+        .map(o => (o.symbol || o.ticker || '').toUpperCase()));
+      for (const p of (snap.positions || [])) {
+        const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
+        if (!(sh > 0) || haveStop.has(t)) continue;                 // not a naked long
+        if (AI_META[t] && !excl.has(t)) continue;                   // in-scope name → already covered by the trail loop above
+        if ((pendingStop[t] || 0) > 0) { actions.push({ type: 'COVERAGE_INFLIGHT_SKIP', ticker: t }); continue; }
+        // 2-week low: AI candle store first (covers excluded in-universe names like SPCX, which
+        // priorBands skips), else a fresh FMP pull (non-universe names like GLD).
+        let bars = null;
+        const doc = await db.collection('pnthr_ai_bt_candles').findOne({ ticker: t }, { projection: { daily: 1 } });
+        bars = doc?.daily?.length ? doc.daily : await fetchDailyBarsFMP(t);
+        const low = tenDayLowStop(bars, covToday);
+        if (!low.ok) { actions.push({ type: 'COVERAGE_SKIP', ticker: t, reason: low.reason }); continue; }
+        let price = +quotes[t]?.price || 0;
+        if (!(price > 0)) { const q = await fetchQuotes([t]).catch(() => ({})); price = +q[t]?.price || 0; }
+        const dec = coverageStopDecision({ stop: low.stop, lastPrice: price, lastClose: low.lastClose });
+        if (!dec.place) { actions.push({ type: 'COVERAGE_SKIP', ticker: t, stop: low.stop, price, reason: dec.reason }); continue; }
+        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: low.stop, shares: Math.abs(sh), reason: 'TREE_NAKED_COVERAGE' });
+        pendingStop[t] = low.stop;   // reserve so a second naked name this tick can't race a duplicate
+        actions.push({ type: 'COVERAGE_STOP_PLACED', ticker: t, stop: low.stop, shares: Math.abs(sh), price });
+      }
     }
   }
   // Stop-out capture (exec-driven, reads your real SELL fills) — runs in BOTH paper and live

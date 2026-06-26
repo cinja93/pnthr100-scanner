@@ -26,8 +26,8 @@ export const INDEX_TICKER  = 'PAI300';
 export const BASE_DATE     = '2022-01-03';
 export const BASE_VALUE    = 1000.00;
 
-export const SINGLE_NAME_CAP = 0.04;   // 4.00% — any non-hyperscaler
-export const HYPERSCALER_CAP = 0.015;  // 1.50% — hyperscaler-tier mega-caps
+export const SINGLE_NAME_CAP = 0.025;  // 2.50% non-hyperscaler cap (lowered 2026-06-25 for Mag-7 de-concentration)
+export const HYPERSCALER_CAP = 0.01;   // 1.00% hyperscaler-tier cap (lowered 2026-06-25)
 
 // Hyperscaler set = AI Hyperscalers & Mega-Cap Software (sector 6 of the
 // AI Universe taxonomy). These are the names that, uncapped, would dominate

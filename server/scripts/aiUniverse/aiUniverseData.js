@@ -1,7 +1,10 @@
 // PNTHR AI Universe, Master holdings data with PNTHR investment-thesis paragraphs
 // Each paragraph reads as: "Why PNTHR believes this name belongs in the AI Elite Universe"
-// 320 holdings across 17 sectors. Last updated: 2026-06-25.
+// 321 holdings across 17 sectors. Last updated: 2026-06-25.
 //
+// v4.2 (2026-06-25): +AXON to S17 (public-safety AI; added on conviction despite weak
+//   tape). Index caps tightened to de-concentrate from Mag-7: SINGLE_NAME_CAP 4%->2.5%,
+//   HYPERSCALER_CAP 1.5%->1.0% (Mag-7 ~14%->~8%). 320 -> 321 holdings.
 // v4.1 (2026-06-25): NEW SECTOR S17 'Industrial AI'. +7 new (CAT, DE, SIEGY, SBGSY,
 //   PH, AME, DOV) + re-homed ROK/EMR (from S16), SYM/CGNX/ZBRA (S5), PTC/ROP (S7),
 //   HON/TRMB (S13), TER (S1). Reorg: PATH S5->S7, PINS S7->S9, DOCN S7->S4, VEEV S7->S12.
@@ -34,9 +37,9 @@
 export const FUND_META = {
   fundName: 'PNTHR AI Universe',
   fullName: 'PNTHR AI Elite 300 Fund',
-  version: 'v4.1',
+  version: 'v4.2',
   date: 'June 2026',
-  totalHoldings: 320,
+  totalHoldings: 321,
   totalSectors: 17,
 };
 
@@ -478,6 +481,7 @@ export const SECTORS = [
     weight: 5,
     thesis: 'AI escaping the data center and entering the physical industrial economy. This sector captures autonomous machinery, factory automation, machine vision, robotics, and the industrial software and digital twins that run the factories, farms, mines, and supply chains of the global economy. PNTHR believes the next leg of the AI revolution is embodied: intelligence fused into physical equipment, where productivity gains are measured in real-world output, not just tokens.',
     holdings: [
+      { ticker: 'AXON', name: 'Axon Enterprise', thesis: 'Axon is the AI platform for public safety. Its connected ecosystem of Tasers, body cameras, and the Axon Evidence cloud increasingly runs on AI, with Draft One automating police report writing and computer vision indexing video evidence at scale. PNTHR adds AXON as an AI-first public-safety compounder with a deep data moat, on conviction that the current drawdown is a re-rating setup rather than a broken thesis.' },
       { ticker: 'CAT', name: 'Caterpillar Inc.', thesis: 'Caterpillar is the world leader in autonomous heavy machinery. Its Cat Command and MineStar systems run fully driverless mining and construction fleets at scale today, with onboard AI handling perception, routing, and load optimization across thousands of machines. PNTHR holds CAT as the blue-chip embodiment of Industrial AI: physical autonomy generating real productivity dollars, riding the same data-center and electrification supercycle powering the broader AI buildout.' },
       { ticker: 'DE', name: 'Deere & Company', thesis: 'Deere is putting AI into the soil. See and Spray computer vision targets individual weeds in real time, autonomous tractors plant and harvest without a driver, and the John Deere Operations Center is becoming the data backbone of modern agriculture. PNTHR holds DE as the premier autonomous-machinery and precision-AI franchise, where embedded intelligence drives a durable recurring-revenue shift across the global farm economy.' },
       { ticker: 'SIEGY', name: 'Siemens AG (ADR)', thesis: 'Siemens is the global standard-setter for Industrial AI. Its Xcelerator platform, Industrial Copilot built with Microsoft, and comprehensive digital-twin stack let manufacturers simulate, optimize, and automate entire factories. PNTHR holds SIEGY as the diversified mega-cap anchor of the Industrial AI sector, embedding intelligence across automation, rail, grid, and the physical industrial base of the world economy.' },

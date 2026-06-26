@@ -57,6 +57,7 @@ import { SECTOR_EMA_PERIODS as AI_SECTOR_EMA_PERIODS } from './data/pnthrAiSecto
 import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
+import { getHalfAndHalf } from './halfAndHalfService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
 import { runLotTriggerSync, registerLotTriggerCron } from './lotTriggerCron.js';
@@ -2466,6 +2467,17 @@ app.get('/api/pnthr-ai-stock/:ticker', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/pnthr-ai-stock:', err);
     res.status(500).json({ error: 'Failed to load AI stock chart data' });
+  }
+});
+
+// ── Half and Half — AI-300 split into daily/weekly shorts & longs vs EMA ────
+app.get('/api/half-and-half', authenticateJWT, async (req, res) => {
+  try {
+    const data = await getHalfAndHalf();
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/half-and-half:', err);
+    res.status(500).json({ error: 'Failed to load Half and Half board' });
   }
 });
 

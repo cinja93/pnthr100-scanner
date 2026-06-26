@@ -1436,6 +1436,12 @@ export async function fetchNewHighsLows() {
   return res.json();
 }
 
+export async function fetchHalfAndHalf() {
+  const res = await apiFetch(`${API_BASE}/api/half-and-half`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchAmbushReconcile() {
   const res = await apiFetch(`${API_BASE}/api/ambush/live-reconcile`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

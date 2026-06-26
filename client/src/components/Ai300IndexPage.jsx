@@ -22,14 +22,14 @@ export default function Ai300IndexPage() {
             color: '#fcf000', letterSpacing: '0.5px', margin: 0, textTransform: 'uppercase',
           }}>AI 300 Index</h1>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>
-            PNTHR AI 300 proprietary index — 304 AI-elite holdings, capped market-cap weighted, monthly rebalance.
+            PNTHR AI 300 proprietary index — 321 AI-elite holdings, capped market-cap weighted, monthly rebalance.
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <div ref={toolbarRef} style={{ display: 'flex', gap: 6, alignItems: 'center' }} />
           <button
             onClick={() => setShowWeights(true)}
-            title="Show how each of the 304 holdings is weighted in the index"
+            title="Show how each of the 321 holdings is weighted in the index"
             style={{
               padding: '6px 14px', fontSize: 12, fontWeight: 700,
               letterSpacing: '0.04em', background: 'transparent',

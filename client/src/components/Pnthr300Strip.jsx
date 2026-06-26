@@ -76,7 +76,7 @@ export default function Pnthr300Strip({ onOpenChart, onOpenWeights }) {
         {onOpenWeights && (
           <button
             onClick={e => { e.stopPropagation(); onOpenWeights(); }}
-            title="Show how each of the 304 holdings is weighted in the index"
+            title="Show how each of the 321 holdings is weighted in the index"
             style={{
               padding: '5px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
               background: 'transparent', border: '1px solid #fcf000', borderRadius: 4,

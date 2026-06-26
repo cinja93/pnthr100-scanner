@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import AiTickerChartModal from './AiTickerChartModal';
 import pantherHead from '../assets/panther head.png';
 
-// Pnthr300WeightsModal — popup showing how each of the 304 constituents is
+// Pnthr300WeightsModal — popup showing how each of the 321 constituents is
 // weighted in the PNTHR AI 300, plus a per-sector roll-up. Read from
 // /api/pnthr-ai-300/weights (sourced from pnthr_ai_index_meta after each
 // monthly rebalance). Searchable, sortable.

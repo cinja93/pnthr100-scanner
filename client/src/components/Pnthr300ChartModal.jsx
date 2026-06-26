@@ -222,7 +222,15 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
       color: '#D4A017', lineWidth: 2,
       priceLineVisible: true, lastValueVisible: true, crosshairMarkerVisible: true,
     });
-    const rsiData = rsiVals.map((v, i) => ({ time: bars[rsiStartIdx + i].date, value: parseFloat(v.toFixed(1)) }));
+    // Whitespace-pad the warm-up bars so the RSI pane has the SAME bar count and
+    // time domain as the price pane. With identical logical indices, a given date
+    // maps to the same x on both panes and the crosshair lines up exactly — the
+    // 14-fewer-bars mismatch was drifting the RSI crosshair 1-2 bars to the right.
+    const rsiData = bars.map((b, i) =>
+      i < rsiStartIdx
+        ? { time: b.date }
+        : { time: b.date, value: parseFloat(rsiVals[i - rsiStartIdx].toFixed(1)) }
+    );
     rsiLine.setData(rsiData);
 
     // Build date→RSI lookup for crosshair tooltip
@@ -238,13 +246,13 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
       color: '#28a745', lineWidth: 1, lineStyle: 2,
       priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     });
-    const rsiDates = rsiVals.map((_, i) => bars[rsiStartIdx + i].date);
     const lastBarDate = bars[bars.length - 1].date;
-    if (rsiDates.length >= 2) {
-      const first = rsiDates[0];
-      const last = lastBarDate > rsiDates[rsiDates.length - 1] ? lastBarDate : rsiDates[rsiDates.length - 1];
-      rsi70.setData([{ time: first, value: 70 }, { time: last, value: 70 }]);
-      rsi30.setData([{ time: first, value: 30 }, { time: last, value: 30 }]);
+    if (bars.length >= 2) {
+      // Span the full pane (first bar → last) so the 70/30 guides run edge-to-edge,
+      // matching the now-aligned time axis.
+      const first = bars[0].date;
+      rsi70.setData([{ time: first, value: 70 }, { time: lastBarDate, value: 70 }]);
+      rsi30.setData([{ time: first, value: 30 }, { time: lastBarDate, value: 30 }]);
     }
 
     // Sync time scales using time-based range (not logical index — RSI has

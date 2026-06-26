@@ -693,6 +693,31 @@ export default function PnthrTreePage() {
               </div>
             );
           })()}
+          {scorecard.preventedExits?.length > 0 && scorecard.prevented && (() => {
+            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
+            return (
+              <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
+                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>🛡 EXITS THAT PREVENTED LOSSES</span>
+                  <span title="For every name you SOLD and have NOT bought back: (your exit price − current price) × shares. Positive = the stock fell after you sold, so exiting PREVENTED that loss (the drop you dodged). Negative = it rose after you sold (you gave back upside). Current price = latest daily close. Names you currently hold are excluded.">
+                    net <b style={{ color: scorecard.prevented.net >= 0 ? '#22c55e' : '#ef4444' }}>{money(scorecard.prevented.net)}</b>
+                  </span>
+                  <span style={{ color: '#777', fontSize: 11 }}>{scorecard.prevented.count} exit{scorecard.prevented.count === 1 ? '' : 's'} · {scorecard.prevented.dodged} dodged / {scorecard.prevented.gaveBack} gave back{scorecard.prevented.markDate ? ` · current = close ${String(scorecard.prevented.markDate).slice(5)}` : ''}</span>
+                </div>
+                <div style={{ display: 'grid', gap: 4, marginTop: 8, padding: '0 10px' }}>
+                  {scorecard.preventedExits.map((w, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
+                      <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{w.ticker}</span>
+                      <span>sold ${w.exitPx} {String(w.exitDate).slice(5)} → now ${w.currentPx}</span>
+                      <span style={{ color: '#777' }}>{w.shares}sh</span>
+                      <span style={{ color: w.preventedPct >= 0 ? '#22c55e' : '#ef4444' }}>{w.preventedPct >= 0 ? '+' : ''}{w.preventedPct}%</span>
+                      <span style={{ marginLeft: 'auto', color: w.preventedDollar >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{w.preventedDollar >= 0 ? 'prevented ' : 'gave back '}{money(w.preventedDollar)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {scorecard.scored.length > 0 ? (
             <div style={{ display: 'grid', gap: 6 }}>
               {scorecard.scored.map((s, i) => {

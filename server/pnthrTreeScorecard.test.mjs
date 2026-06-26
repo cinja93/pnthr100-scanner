@@ -1,6 +1,6 @@
 // Unit tests for the Risk Scorecard math (run: node pnthrTreeScorecard.test.mjs).
 // No DB — pure functions only. Proves return/drawdown/score logic before real trades arrive.
-import { reconstructEpisodes, priceDrawdownPct, scoreEpisode, pairRoundTrips } from './pnthrTreeScorecard.js';
+import { reconstructEpisodes, priceDrawdownPct, scoreEpisode, pairRoundTrips, findWalkAwayExits } from './pnthrTreeScorecard.js';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -71,6 +71,56 @@ const costly = pairRoundTrips(reconstructEpisodes([
   { ticker: 'EEE', side: 'SLD', shares: 5, price: 60, date: '2026-06-18' },
 ], { includeOpen: true }));
 eq('round trip COST -$35 (sold 48, re-bought 55, 5 sh)', [costly.length, costly[0].savings], [1, -35]);
+
+// ── findWalkAwayExits (exits that prevented losses) ──
+// FFF: bought 10@100, sold 10@120 and never re-bought. Current (daily close) 90 →
+//   prevented (120 − 90) × 10 = +$300 (the drop you dodged by being out).
+const walk = reconstructEpisodes([
+  { ticker: 'FFF', side: 'BOT', shares: 10, price: 100, date: '2026-06-10' },
+  { ticker: 'FFF', side: 'SLD', shares: 10, price: 120, date: '2026-06-15' },
+], { includeOpen: true });
+eq('walk-away prevented +$300 (sold 120, now 90, 10 sh)',
+  (() => { const w = findWalkAwayExits(walk, { FFF: 90 }); return [w.length, w[0].preventedDollar, w[0].currentPx, w[0].shares]; })(),
+  [1, 300, 90, 10]);
+
+// HHH: sold 5@55, but it ROSE to 65 → you gave back upside: (55 − 65) × 5 = −$50.
+const gaveBack = reconstructEpisodes([
+  { ticker: 'HHH', side: 'BOT', shares: 5, price: 50, date: '2026-06-10' },
+  { ticker: 'HHH', side: 'SLD', shares: 5, price: 55, date: '2026-06-12' },
+], { includeOpen: true });
+eq('walk-away gave back -$50 (sold 55, now 65, 5 sh)',
+  (() => { const w = findWalkAwayExits(gaveBack, { HHH: 65 }); return [w.length, w[0].preventedDollar]; })(),
+  [1, -50]);
+
+// GGG: sold then re-bought and STILL HOLDING → currently held, NOT a walk-away (it's a round trip).
+const heldNow = reconstructEpisodes([
+  { ticker: 'GGG', side: 'BOT', shares: 10, price: 100, date: '2026-06-10' },
+  { ticker: 'GGG', side: 'SLD', shares: 10, price: 110, date: '2026-06-12' },
+  { ticker: 'GGG', side: 'BOT', shares: 10, price: 105, date: '2026-06-14' },   // re-entered, still open
+], { includeOpen: true });
+eq('currently-held name is NOT a walk-away', findWalkAwayExits(heldNow, { GGG: 90 }).length, 0);
+
+// III: round-trip THEN walk away (now flat). The two metrics must PARTITION the exits with no
+// double-count: first exit (120→re-enter 110) = round trip saved +$100; final exit (130, now 100)
+// = walk-away prevented +$300.
+const both = reconstructEpisodes([
+  { ticker: 'III', side: 'BOT', shares: 10, price: 100, date: '2026-06-01' },
+  { ticker: 'III', side: 'SLD', shares: 10, price: 120, date: '2026-06-05' },
+  { ticker: 'III', side: 'BOT', shares: 10, price: 110, date: '2026-06-08' },
+  { ticker: 'III', side: 'SLD', shares: 10, price: 130, date: '2026-06-12' },
+], { includeOpen: true });
+eq('round-trip + walk-away coexist, no double-count (trip +$100; final exit +$300)',
+  [pairRoundTrips(both).length, pairRoundTrips(both)[0].savings, findWalkAwayExits(both, { III: 100 }).length, findWalkAwayExits(both, { III: 100 })[0].preventedDollar],
+  [1, 100, 1, 300]);
+
+// No current price (no candle) → skipped, never invent a mark.
+eq('walk-away with no current price is skipped', findWalkAwayExits(walk, {}).length, 0);
+
+// Held-now guard: ledger shows FFF sold-and-flat, but the live broker snapshot says you still hold
+// it (a re-buy fill not yet recorded — the TXG 2026-06-26 case). Must be excluded, never shown as
+// a prevented loss.
+eq('currently-held name excluded even if ledger looks closed (TXG case)',
+  findWalkAwayExits(walk, { FFF: 90 }, new Set(['FFF'])).length, 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

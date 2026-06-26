@@ -91,6 +91,45 @@ export function pairRoundTrips(legs) {
   return trips;
 }
 
+// ── PURE: exits you WALKED AWAY from (sold and never re-bought), marked to current price ──
+// The round-trip pairing above only scores an exit that has a LATER re-entry. An exit with NO
+// re-entry (you sold and stayed out) is invisible to it — yet that's the highest-value discipline
+// move: selling something that then fell hard. For every ticker whose MOST RECENT leg is a closed
+// exit (i.e. you are NOT currently holding it), mark that exit against the current price:
+//   prevented$ = (exit price − current price) × shares
+// POSITIVE = the stock fell after you sold, so exiting PREVENTED that loss (the drop you dodged).
+// NEGATIVE = it rose after you sold (you gave back upside). currentPriceByTicker = latest daily
+// close (same mark the rest of the card uses). No double-counting with pairRoundTrips: an exit that
+// was followed by a re-entry is never the LAST leg, so it lands in round-trips, not here. Tickers
+// with no current price (no candle) are skipped — we never invent a mark.
+// heldTickers — names you ACTUALLY hold right now (from the live broker snapshot). A walk-away
+// means "sold and currently OUT", so anything you still hold is excluded even if the fill ledger
+// lags reality (a re-buy not yet recorded would otherwise misclassify a live position as an exit —
+// the TXG case, 2026-06-26). Belt-and-suspenders on top of the last.open ledger check.
+export function findWalkAwayExits(legs, currentPriceByTicker = {}, heldTickers = new Set()) {
+  const byT = {};
+  for (const l of legs) (byT[l.ticker] ||= []).push(l);
+  const out = [];
+  for (const [ticker, ls] of Object.entries(byT)) {
+    if (heldTickers.has(ticker)) continue;                                               // you still hold it → not a walk-away
+    ls.sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+    const last = ls[ls.length - 1];
+    if (!last || last.open || last.exitDate == null || last.avgExit == null) continue;   // currently held, or not a real exit
+    const cur = +currentPriceByTicker[ticker];
+    if (!Number.isFinite(cur) || cur <= 0) continue;                                      // can't mark without a current price
+    const shares = +last.shares || 0;
+    if (shares <= 0) continue;
+    const exitPx = +last.avgExit;
+    out.push({
+      ticker, exitDate: last.exitDate, exitPx, shares,
+      currentPx: +cur.toFixed(2),
+      preventedDollar: Math.round((exitPx - cur) * shares),
+      preventedPct: exitPx > 0 ? +(((exitPx - cur) / exitPx) * 100).toFixed(2) : 0,
+    });
+  }
+  return out.sort((a, b) => b.preventedDollar - a.preventedDollar);   // biggest loss dodged first
+}
+
 // ── PURE: worst peak-to-trough drawdown (%) off daily lows over [start,end] ───
 export function priceDrawdownPct(bars, startDate, endDate) {
   let peak = -Infinity, maxDD = 0;
@@ -195,6 +234,30 @@ export async function getPnthrTreeScorecard(db) {
     costs: roundTrips.filter(rt => rt.savings < 0).length,
   };
 
+  // ── EXITS THAT PREVENTED LOSSES — names you SOLD and did NOT buy back, marked to the current
+  // (latest daily close) price. Captures the discipline win the round-trip math can't see. ──
+  const closeByT = {};
+  for (const t of Object.keys(barsByT)) { const lb = lastBar(t); if (lb && +lb.close > 0) closeByT[t] = +lb.close; }
+  // What you ACTUALLY hold right now — from the freshest live broker snapshot (the bridge just
+  // wrote it). Used to exclude held names from walk-aways so fill-ledger lag can't misclassify a
+  // live position as a sold-and-gone exit. Freshest snapshot only — a stale/zombie snapshot under
+  // an old owner must never count as current holdings.
+  const heldTickers = new Set();
+  try {
+    const snaps = await db.collection('pnthr_ibkr_positions').find({}).toArray();
+    const fresh = snaps.sort((a, b) => new Date(b.syncedAt || b.stopOrdersSyncedAt || 0) - new Date(a.syncedAt || a.stopOrdersSyncedAt || 0))[0];
+    for (const p of (fresh?.positions || [])) { if ((+p.shares || 0) !== 0) heldTickers.add((p.symbol || '').toUpperCase()); }
+  } catch { /* no snapshot → ledger-only walk-away detection */ }
+  const preventedExits = findWalkAwayExits(yourLegs, closeByT, heldTickers)
+    .map(w => ({ ...w, company: AI_META[w.ticker]?.name || null }));
+  const prevented = {
+    net:      preventedExits.reduce((a, w) => a + w.preventedDollar, 0),
+    count:    preventedExits.length,
+    dodged:   preventedExits.filter(w => w.preventedDollar > 0).length,
+    gaveBack: preventedExits.filter(w => w.preventedDollar < 0).length,
+    markDate: latestDate || null,
+  };
+
   const counts = scored.reduce((acc, s) => {
     const v = s.score?.verdict; if (v) acc[v] = (acc[v] || 0) + 1; return acc;
   }, { WIN: 0, MIXED: 0, LOSS: 0 });
@@ -210,6 +273,7 @@ export async function getPnthrTreeScorecard(db) {
     scored: scored.sort((a, b) => String(b.exitDate).localeCompare(String(a.exitDate))),
     strategyOnly: strategyLegs.filter((s, i) => !usedStrat.has(i) && !s.open).map(s => ({ ...s, company: AI_META[s.ticker]?.name || null })),
     roundTrips, savings,
+    preventedExits, prevented,
     counts,
     portfolio: {
       actualMaxDDPct: +(actualMaxDD * 100).toFixed(2),
@@ -218,7 +282,7 @@ export async function getPnthrTreeScorecard(db) {
       since: aum.length ? aum[0].date : null,
     },
     fillsRecorded: fills.length,
-    note: 'Forward-only: scores trades made after the fill ledger started. Drawdown = worst peak-to-trough dip off daily lows over each leg’s holding window. Savings = round trip: (exit − re-entry) × shares; strategy legs still held are marked to the latest close (“so far”).',
+    note: 'Forward-only: scores trades made after the fill ledger started. Drawdown = worst peak-to-trough dip off daily lows over each leg’s holding window. Savings = round trip: (exit − re-entry) × shares; strategy legs still held are marked to the latest close (“so far”). Prevented losses = names you sold and did NOT buy back: (exit − current daily close) × shares; positive = the drop you dodged by exiting.',
     updatedAt: new Date().toISOString(),
   };
 }

@@ -135,6 +135,21 @@ export async function buildTreeJourneyCompare(db) {
     const actualNet = +(soldProceeds - boughtCost + openSh * endPrice).toFixed(2);
     const actualPct = boughtCost > 0 ? +((actualNet / boughtCost) * 100).toFixed(2) : 0;
 
+    // EXIT ATTRIBUTION — was your exit ABOVE TREE's stop (your management) or did TREE's stop fire?
+    // Compare your weighted-avg sell price to where TREE's trailing stop sat on your last sell date.
+    let exitAboveStop = false, avgExit = null, treeStopAtExit = null, aboveStopDollars = 0;
+    if (soldSh > 0) {
+      avgExit = +(soldProceeds / soldSh).toFixed(2);
+      const lastSellDate = fs.filter(f => f.side === 'SLD').map(f => f.date).sort().slice(-1)[0];
+      const xi = bars.findIndex(b => b.date >= lastSellDate);
+      treeStopAtExit = (xi > 0 && lo[xi] != null) ? +(lo[xi] - 0.01).toFixed(2)
+        : (lo[entryIdx] != null ? +(lo[entryIdx] - 0.01).toFixed(2) : null);
+      if (treeStopAtExit != null && avgExit > treeStopAtExit + 0.01) {
+        exitAboveStop = true;
+        aboveStopDollars = +((avgExit - treeStopAtExit) * soldSh).toFixed(2);   // gross $ above the stop (NOT net P&L)
+      }
+    }
+
     rows.push({
       ticker: t,
       entryDate: ep.entryDate, entryPrice: +P0.toFixed(2), planShares: N0,
@@ -145,6 +160,7 @@ export async function buildTreeJourneyCompare(db) {
       edge: +(actualNet - planNet).toFixed(2),                 // B − A : your management's $ impact vs holding
       verdict: (actualNet - planNet) > 0 ? 'HELPED' : (actualNet - planNet) < 0 ? 'HURT' : 'EVEN',
       marked: plan.exited ? 'plan exit' : (liveByT[t] ? 'live' : 'last close'),
+      avgExit, treeStopAtExit, exitAboveStop, aboveStopDollars,
     });
   }
 
@@ -168,6 +184,10 @@ export async function buildTreeJourneyCompare(db) {
     stopped:   scored.filter(r => r.plan.reason === 'STOP_LOSS').length,    // plan rode it down to the stop (a loss)
     trailed:   scored.filter(r => r.plan.reason === 'TRAIL_PROFIT').length, // plan trailed up and locked a profit
     openPlan:  scored.filter(r => r.plan.reason === 'OPEN').length,         // plan still riding (not stopped yet)
+    // exit attribution: how many of your exits were ABOVE TREE's stop (= your management, not a TREE stop-out)
+    exitsAboveStop:  scored.filter(r => r.exitAboveStop).length,
+    exitsClassified: scored.filter(r => r.avgExit != null).length,
+    aboveStopDollars: +scored.reduce((a, r) => a + (r.aboveStopDollars || 0), 0).toFixed(2),   // GROSS $ above stop (not net P&L)
   };
   rows.sort((a, b) => (b.edge || -1e9) - (a.edge || -1e9));   // biggest help first
   totals.carried = carried.length;

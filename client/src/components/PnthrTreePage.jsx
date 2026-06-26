@@ -689,6 +689,12 @@ export default function PnthrTreePage() {
                     <div style={{ color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' }}>By cutting losses early, did it help? Edge = your result − the plan.</div>
                   </div>
                 </div>
+                {T.exitsClassified > 0 && (
+                  <div style={{ marginTop: 10, padding: '6px 10px', borderRadius: 6, background: '#0c1a0f', border: '1px solid #1f5130', fontFamily: 'monospace', fontSize: 11, color: '#86efac' }}>
+                    🛡 <b>{T.exitsAboveStop} of {T.exitsClassified}</b> exits were <b>above TREE&apos;s stop</b> — your management, not TREE stop-outs.
+                    <span style={{ color: '#6b8f78' }}> You exited a cumulative <b>${Math.round(T.aboveStopDollars).toLocaleString()}</b> above where TREE&apos;s stops sat (gross — shows how much more conservatively you manage; the net value is the edge above).</span>
+                  </div>
+                )}
                 {(T.carried || T.pending) ? <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Plan (A) is MODELED — a daily-bar simulation; your side (B) is real money. {T.carried ? `${T.carried} carried positions (adopted before go-live) excluded — no TREE entry to compare. ` : ''}{T.pending ? `${T.pending} just entered (no journey yet).` : ''}</div> : null}
               </div>
             );

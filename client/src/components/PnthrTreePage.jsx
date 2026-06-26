@@ -307,11 +307,12 @@ export default function PnthrTreePage() {
   const [logBusy, setLogBusy] = useState(false);
   const [scorecard, setScorecard] = useState(null);     // Risk Scorecard (forward-only)
   const [openDays, setOpenDays] = useState(() => new Set());   // which savings days are expanded
+  const [tickerFilter, setTickerFilter] = useState(null);      // "follow a ticker" — null = show all
   const seenLatestDay = useRef(null);
   // Default: only the latest trading day expanded. When a NEW latest day appears (tomorrow),
   // collapse the rest and open just that one — "show only the present day of trading".
   useEffect(() => {
-    const days = [...new Set((scorecard?.roundTrips || []).map(rt => rt.exitDate))].sort();
+    const days = [...new Set([...(scorecard?.roundTrips || []).map(rt => rt.exitDate), ...(scorecard?.preventedExits || []).map(w => w.exitDate)])].sort();
     const latest = days[days.length - 1];
     if (latest && seenLatestDay.current !== latest) { seenLatestDay.current = latest; setOpenDays(new Set([latest])); }
   }, [scorecard]);
@@ -639,6 +640,84 @@ export default function PnthrTreePage() {
             <span title="The backtest's max drawdown — the number you're trying to beat by managing risk">Backtest <b style={{ color: '#facc15' }}>{scorecard.portfolio?.backtestDDPct}%</b></span>
             <span style={{ color: '#666', fontSize: 11 }}>· tracking since {scorecard.portfolio?.since || '—'} ({scorecard.portfolio?.aumDays || 0} days)</span>
           </div>
+          {(() => {
+            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
+            // ONE timeline of every SELL decision: round trips (sold → re-bought) + walk-aways
+            // (sold → still out, marked to the latest daily close). Same question for both: did
+            // selling save capital? Grouped by the day you sold, with a final SAVED / COST verdict.
+            const events = [];
+            for (const rt of (scorecard.roundTrips || [])) events.push({
+              date: rt.exitDate, ticker: rt.ticker,
+              detail: `sold $${rt.exitPx} → re-bought $${rt.reentryPx}${rt.reentryOpen ? ' (open)' : ''}`,
+              shares: rt.shares, result: rt.savings,
+            });
+            for (const w of (scorecard.preventedExits || [])) events.push({
+              date: w.exitDate, ticker: w.ticker,
+              detail: `sold $${w.exitPx} → still out, now $${w.currentPx}`,
+              shares: w.shares, result: w.preventedDollar,
+            });
+            if (events.length === 0) return (
+              <div style={{ color: '#777', fontSize: 12, marginBottom: 10 }}>No sell decisions to score yet — they appear here as you exit positions.</div>
+            );
+            const filtered = tickerFilter ? events.filter(e => e.ticker === tickerFilter) : events;
+            const byDay = {};
+            for (const e of filtered) (byDay[e.date] ||= []).push(e);
+            const days = Object.keys(byDay).sort((a, b) => String(b).localeCompare(String(a)));
+            const grandNet = filtered.reduce((s, e) => s + e.result, 0);
+            const savedN = filtered.filter(e => e.result > 0).length;
+            const costN  = filtered.filter(e => e.result < 0).length;
+            return (
+              <div style={{ marginBottom: 12, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
+                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 CAPITAL SCORECARD — did selling save us money?</span>
+                  <span title="Every sell decision grouped by the day you sold. Round trip = (exit − re-entry) × shares. Still out = (exit − current daily close) × shares. Positive = selling saved capital; negative = it cost you. Click any ticker to follow just that name across every day.">
+                    net <b style={{ color: grandNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(grandNet)}</b>
+                  </span>
+                  <span style={{ color: '#777', fontSize: 11 }}>{filtered.length} sell{filtered.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
+                  {tickerFilter && (
+                    <span onClick={() => setTickerFilter(null)} style={{ cursor: 'pointer', marginLeft: 'auto', color: '#facc15', fontSize: 11, border: '1px solid #5f5418', borderRadius: 4, padding: '1px 8px' }}>following {tickerFilter} ✕ clear</span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {days.map((day) => {
+                    const rows = byDay[day].slice().sort((a, b) => a.result - b.result);   // biggest cost first within the day
+                    const dayNet = rows.reduce((s, e) => s + e.result, 0);
+                    const isOpen = !!tickerFilter || openDays.has(day);   // following a ticker → expand every day it appears
+                    return (
+                      <div key={day} style={{ border: '1px solid #1c1c1c', borderRadius: 6, background: '#0e0e0e' }}>
+                        <div onClick={() => { if (!tickerFilter) toggleDay(day); }} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: tickerFilter ? 'default' : 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
+                          <span style={{ color: '#888', width: 10 }}>{isOpen ? '▾' : '▸'}</span>
+                          <span style={{ fontWeight: 800, color: '#ddd' }}>{day}</span>
+                          <span style={{ color: '#666', fontSize: 11 }}>{rows.length} sell{rows.length === 1 ? '' : 's'}</span>
+                          <span style={{ marginLeft: 'auto', fontWeight: 800, color: dayNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(dayNet)}</span>
+                        </div>
+                        {isOpen && (
+                          <div style={{ display: 'grid', gap: 4, padding: '0 10px 8px 24px' }}>
+                            {rows.map((e, i) => {
+                              const vColor = e.result > 0 ? '#22c55e' : e.result < 0 ? '#ef4444' : '#888';
+                              const vText  = e.result > 0 ? 'SAVED' : e.result < 0 ? 'COST' : 'FLAT';
+                              return (
+                                <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
+                                  <span onClick={() => setTickerFilter(e.ticker)} title="Click to follow this ticker across every day" style={{ fontWeight: 800, color: '#fff', minWidth: 48, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: '#3a3a3a' }}>{e.ticker}</span>
+                                  <span>{e.detail}</span>
+                                  <span style={{ color: '#777' }}>{e.shares}sh</span>
+                                  <span style={{ color: vColor, fontWeight: 700 }}>{money(e.result)}</span>
+                                  <span style={{ marginLeft: 'auto', color: vColor, background: vColor + '22', border: `1px solid ${vColor}66`, fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 4 }}>{vText}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Combines closed round-trips (realized) with names you're still out of (marked to the latest daily close — unrealized). Click a ticker to follow it across every day.</div>
+              </div>
+            );
+          })()}
+          <div style={{ borderTop: '1px solid #1c1c1c', margin: '2px 0 8px' }} />
+          <div title="A different question from capital saved: for each closed trade, did your active management beat just holding the strategy on return-per-drawdown? WIN = matched/beat the return for less (or equal) risk." style={{ color: '#9aa6a0', fontSize: 11, letterSpacing: '0.05em', fontWeight: 700, marginBottom: 6 }}>📊 VS THE STRATEGY — your return-per-drawdown vs just holding</div>
           {(scorecard.counts.WIN + scorecard.counts.MIXED + scorecard.counts.LOSS) > 0 && (
             <div style={{ display: 'flex', gap: 12, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
               <span style={{ color: '#22c55e' }}>WIN {scorecard.counts.WIN}</span>
@@ -646,78 +725,6 @@ export default function PnthrTreePage() {
               <span style={{ color: '#ef4444' }}>LOSS {scorecard.counts.LOSS}</span>
             </div>
           )}
-          {scorecard.savings && scorecard.roundTrips?.length > 0 && (() => {
-            // Group every round trip by its EXIT day (the day the round trip was initiated), newest first.
-            const byDay = {};
-            for (const rt of scorecard.roundTrips) (byDay[rt.exitDate] ||= []).push(rt);
-            const days = Object.keys(byDay).sort((a, b) => String(b).localeCompare(String(a)));
-            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
-            return (
-              <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
-                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 TRADE-SKILL SAVINGS</span>
-                  <span title="Round trip: (your exit price − your re-entry price) × shares, summed across every exit-and-reenter. Positive = you bought back lower; negative = you re-entered higher (the move ran away). Grouped by the day you exited.">
-                    net <b style={{ color: scorecard.savings.totalSaved >= 0 ? '#22c55e' : '#ef4444' }}>{money(scorecard.savings.totalSaved)}</b>
-                  </span>
-                  <span style={{ color: '#777', fontSize: 11 }}>{scorecard.roundTrips.length} round trips · {scorecard.savings.wins} saved / {scorecard.savings.costs} cost{scorecard.savings.openTrips ? ` · ${scorecard.savings.openTrips} re-entry still open` : ''}</span>
-                </div>
-                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                  {days.map((day) => {
-                    const trips = byDay[day].slice().sort((a, b) => a.savings - b.savings);   // biggest cost first within the day
-                    const dayPnl = trips.reduce((s, rt) => s + rt.savings, 0);
-                    const isOpen = openDays.has(day);
-                    return (
-                      <div key={day} style={{ border: '1px solid #1c1c1c', borderRadius: 6, background: '#0e0e0e' }}>
-                        <div onClick={() => toggleDay(day)} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', cursor: 'pointer', padding: '6px 10px', fontFamily: 'monospace', fontSize: 12, userSelect: 'none' }}>
-                          <span style={{ color: '#888', width: 10 }}>{isOpen ? '▾' : '▸'}</span>
-                          <span style={{ fontWeight: 800, color: '#ddd' }}>{day}</span>
-                          <span style={{ color: '#666', fontSize: 11 }}>{trips.length} trade{trips.length === 1 ? '' : 's'}</span>
-                          <span style={{ marginLeft: 'auto', fontWeight: 800, color: dayPnl >= 0 ? '#22c55e' : '#ef4444' }}>{money(dayPnl)}</span>
-                        </div>
-                        {isOpen && (
-                          <div style={{ display: 'grid', gap: 4, padding: '0 10px 8px 24px' }}>
-                            {trips.map((rt, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
-                                <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{rt.ticker}</span>
-                                <span>sold ${rt.exitPx} {String(rt.exitDate).slice(5)} → re-bought ${rt.reentryPx} {String(rt.reentryDate).slice(5)}{rt.reentryOpen ? ' (open)' : ''}</span>
-                                <span style={{ color: '#777' }}>{rt.shares}sh</span>
-                                <span style={{ marginLeft: 'auto', color: rt.savings >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{rt.savings >= 0 ? 'saved ' : 'cost '}{money(rt.savings)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-          {scorecard.preventedExits?.length > 0 && scorecard.prevented && (() => {
-            const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
-            return (
-              <div style={{ marginBottom: 10, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
-                  <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>🛡 EXITS THAT PREVENTED LOSSES</span>
-                  <span title="For every name you SOLD and have NOT bought back: (your exit price − current price) × shares. Positive = the stock fell after you sold, so exiting PREVENTED that loss (the drop you dodged). Negative = it rose after you sold (you gave back upside). Current price = latest daily close. Names you currently hold are excluded.">
-                    net <b style={{ color: scorecard.prevented.net >= 0 ? '#22c55e' : '#ef4444' }}>{money(scorecard.prevented.net)}</b>
-                  </span>
-                  <span style={{ color: '#777', fontSize: 11 }}>{scorecard.prevented.count} exit{scorecard.prevented.count === 1 ? '' : 's'} · {scorecard.prevented.dodged} dodged / {scorecard.prevented.gaveBack} gave back{scorecard.prevented.markDate ? ` · current = close ${String(scorecard.prevented.markDate).slice(5)}` : ''}</span>
-                </div>
-                <div style={{ display: 'grid', gap: 4, marginTop: 8, padding: '0 10px' }}>
-                  {scorecard.preventedExits.map((w, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace', fontSize: 11, color: '#bbb' }}>
-                      <span style={{ fontWeight: 800, color: '#fff', minWidth: 48 }}>{w.ticker}</span>
-                      <span>sold ${w.exitPx} {String(w.exitDate).slice(5)} → now ${w.currentPx}</span>
-                      <span style={{ color: '#777' }}>{w.shares}sh</span>
-                      <span style={{ color: w.preventedPct >= 0 ? '#22c55e' : '#ef4444' }}>{w.preventedPct >= 0 ? '+' : ''}{w.preventedPct}%</span>
-                      <span style={{ marginLeft: 'auto', color: w.preventedDollar >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{w.preventedDollar >= 0 ? 'prevented ' : 'gave back '}{money(w.preventedDollar)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
           {scorecard.scored.length > 0 ? (
             <div style={{ display: 'grid', gap: 6 }}>
               {scorecard.scored.map((s, i) => {

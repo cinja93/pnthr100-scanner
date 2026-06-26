@@ -11,6 +11,7 @@
 // The math lives in pure helpers (reconstructEpisodes / priceDrawdownPct / scoreEpisode)
 // so it is unit-tested and proven correct before real trades arrive.
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
+import { fetchFMP } from './stockService.js';
 
 const AI_META = {};
 for (const s of AI_SECTORS) for (const h of s.holdings) AI_META[h.ticker] = { name: h.name, sector: s.sector };
@@ -234,8 +235,10 @@ export async function getPnthrTreeScorecard(db) {
     costs: roundTrips.filter(rt => rt.savings < 0).length,
   };
 
-  // ── EXITS THAT PREVENTED LOSSES — names you SOLD and did NOT buy back, marked to the current
-  // (latest daily close) price. Captures the discipline win the round-trip math can't see. ──
+  // ── EXITS THAT PREVENTED LOSSES — names you SOLD and did NOT buy back, marked to the LIVE
+  // current price. The latest daily CLOSE lags today's intraday move (CARR 2026-06-26: yesterday's
+  // close $76 vs live $73.79), which on a down day flips a real save into a phantom cost — so we
+  // mark to a live quote and fall back to the daily close only when a quote is unavailable. ──
   const closeByT = {};
   for (const t of Object.keys(barsByT)) { const lb = lastBar(t); if (lb && +lb.close > 0) closeByT[t] = +lb.close; }
   // What you ACTUALLY hold right now — from the freshest live broker snapshot (the bridge just
@@ -248,14 +251,36 @@ export async function getPnthrTreeScorecard(db) {
     const fresh = snaps.sort((a, b) => new Date(b.syncedAt || b.stopOrdersSyncedAt || 0) - new Date(a.syncedAt || a.stopOrdersSyncedAt || 0))[0];
     for (const p of (fresh?.positions || [])) { if ((+p.shares || 0) !== 0) heldTickers.add((p.symbol || '').toUpperCase()); }
   } catch { /* no snapshot → ledger-only walk-away detection */ }
-  const preventedExits = findWalkAwayExits(yourLegs, closeByT, heldTickers)
+  // Candidate walk-away tickers (latest leg is a closed exit and NOT currently held) → fetch a LIVE
+  // quote for each so the "now" mark reflects today, not yesterday's close. Live primary, daily-close
+  // fallback. Only these names are quoted (a small set), not the whole fill history.
+  const legsByT = {};
+  for (const e of yourLegs) (legsByT[e.ticker] ||= []).push(e);
+  const markTickers = [];
+  for (const [t, ls] of Object.entries(legsByT)) {
+    if (heldTickers.has(t)) continue;
+    const sorted = ls.slice().sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+    const last = sorted[sorted.length - 1];
+    if (last && !last.open && last.exitDate != null && last.avgExit != null) markTickers.push(t);
+  }
+  const priceByT = { ...closeByT };          // fallback = latest daily close
+  let markedLive = false;
+  try {
+    for (let i = 0; i < markTickers.length; i += 200) {
+      const chunk = markTickers.slice(i, i + 200);
+      if (!chunk.length) break;
+      const qs = await fetchFMP(`/quote/${chunk.join(',')}`).catch(() => null);
+      if (Array.isArray(qs)) for (const q of qs) { if (q && q.symbol && +q.price > 0) { priceByT[q.symbol.toUpperCase()] = +q.price; markedLive = true; } }
+    }
+  } catch { /* quote fetch failed → daily-close fallback already in priceByT */ }
+  const preventedExits = findWalkAwayExits(yourLegs, priceByT, heldTickers)
     .map(w => ({ ...w, company: AI_META[w.ticker]?.name || null }));
   const prevented = {
     net:      preventedExits.reduce((a, w) => a + w.preventedDollar, 0),
     count:    preventedExits.length,
     dodged:   preventedExits.filter(w => w.preventedDollar > 0).length,
     gaveBack: preventedExits.filter(w => w.preventedDollar < 0).length,
-    markDate: latestDate || null,
+    markedLive,   // true = "now" prices are live quotes; false = daily-close fallback only
   };
 
   const counts = scored.reduce((acc, s) => {

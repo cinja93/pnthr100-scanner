@@ -644,7 +644,7 @@ export default function PnthrTreePage() {
           {(() => {
             const money = (n) => `${n >= 0 ? '+$' : '−$'}${Math.abs(n).toLocaleString()}`;
             // ONE timeline of every SELL decision: round trips (sold → re-bought) + walk-aways
-            // (sold → still out, marked to the latest daily close). Same question for both: did
+            // (sold → still out, marked to the LIVE price). Same question for both: did
             // selling save capital? Grouped by the day you sold, with a final SAVED / COST verdict.
             const events = [];
             for (const rt of (scorecard.roundTrips || [])) events.push({
@@ -670,7 +670,7 @@ export default function PnthrTreePage() {
               <div style={{ marginBottom: 12, border: '1px solid #1f2a1f', borderRadius: 8, padding: '8px 10px', background: '#0a0f0a' }}>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', fontFamily: 'monospace', fontSize: 12 }}>
                   <span style={{ color: '#86efac', fontWeight: 800, letterSpacing: '0.05em' }}>💰 CAPITAL SCORECARD — did selling save us money?</span>
-                  <span title="Every sell decision, grouped by day and netted per ticker. Round trip = (exit − re-entry) × shares. Still out = (exit − current daily close) × shares. Positive = selling saved capital; negative = it cost you. Click a ticker to see its individual trades.">
+                  <span title="Every sell decision, grouped by day and netted per ticker. Round trip = (exit − re-entry) × shares. Still out = (exit − LIVE price) × shares. Positive = selling saved capital; negative = it cost you. Click a ticker to see its individual trades.">
                     net <b style={{ color: grandNet >= 0 ? '#22c55e' : '#ef4444' }}>{money(grandNet)}</b>
                   </span>
                   <span style={{ color: '#777', fontSize: 11 }}>{events.length} sell{events.length === 1 ? '' : 's'} · {savedN} saved / {costN} cost · {days.length} day{days.length === 1 ? '' : 's'}</span>
@@ -733,7 +733,7 @@ export default function PnthrTreePage() {
                     );
                   })}
                 </div>
-                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Each ticker is netted per day — a name traded several times shows one net row; click it for the individual trades. Combines closed round-trips (realized) with names you're still out of (marked to the latest daily close — unrealized).</div>
+                <div style={{ color: '#555', fontSize: 10, marginTop: 8 }}>Each ticker is netted per day — a name traded several times shows one net row; click it for the individual trades. Combines closed round-trips (realized) with names you're still out of (marked to the LIVE price — unrealized, so it moves with the market).</div>
               </div>
             );
           })()}

@@ -137,7 +137,11 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
       autoSize: true,
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
       grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
-      rightPriceScale: { borderColor: '#333' },
+      // Fixed price-scale width so the price + RSI panes have IDENTICAL plot-area
+      // widths. Otherwise the price axis ("2400.00") is wider than the RSI axis
+      // ("80.00"), shifting the plot area and drifting the RSI crosshair off the
+      // price crosshair. Both panes must use the same minimumWidth.
+      rightPriceScale: { borderColor: '#333', minimumWidth: 80 },
       timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily', barSpacing: barSpacingRef.current },
       crosshair: { mode: 1 },
     });
@@ -208,7 +212,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
       autoSize: true,
       layout: { background: { color: '#0c0c0c' }, textColor: '#d4d4d4', attributionLogo: false },
       grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
-      rightPriceScale: { borderColor: '#333', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      rightPriceScale: { borderColor: '#333', minimumWidth: 80, scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { borderColor: '#333', timeVisible: timeframe === 'daily', barSpacing: barSpacingRef.current, visible: false },
       crosshair: { mode: 1 },
     });

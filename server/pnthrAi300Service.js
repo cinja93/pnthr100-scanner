@@ -19,7 +19,7 @@ import {
 } from './data/pnthrAiIndexConfig.js';
 import { fetchFMP } from './stockService.js';
 import {
-  fetchAiQuotesBatch, computeIntradayBar,
+  fetchAiQuotesBatch, computeIntradayBar, ymdET,
   spliceTodayDaily, spliceTodayWeekly, spliceTodayMonthly,
 } from './aiIntradayOverlay.js';
 
@@ -38,6 +38,21 @@ async function loadIndexWeights() {
   cacheIndexWeights   = meta?.weights || null;
   cacheIndexWeightsAt = now;
   return cacheIndexWeights;
+}
+
+// Anchor close for the live intraday overlay. computeIntradayBar multiplies this by
+// each constituent's today-vs-prior-close return to synthesize today's bar, so the
+// anchor MUST be the PRIOR trading day's close. If the EOD cron (or a manual index
+// rebuild) has already stored TODAY's bar, anchoring on the last bar double-counts
+// today's move (observed: the de-concentrated 2031.45 stored close was displayed as
+// ~2057.56). Walk back past any bar dated today-or-later (ET) so the anchor is always
+// the prior session. Self-healing: correct whether or not today's bar is stored yet.
+function priorSessionClose(dailyAsc) {
+  if (!dailyAsc || !dailyAsc.length) return null;
+  const today = ymdET(Date.now() / 1000);
+  let i = dailyAsc.length - 1;
+  while (i > 0 && dailyAsc[i].date >= today) i--;
+  return dailyAsc[i].close;
 }
 
 // Standard EMA — first value = simple average of first `period` closes,
@@ -178,7 +193,8 @@ export async function getPnthrAi300Latest() {
   if (weights) {
     const tickers = Object.keys(weights).filter(t => weights[t] > 0);
     const qmap    = await fetchAiQuotesBatch(tickers, { cacheKey: 'ai-universe-all' });
-    intraday = computeIntradayBar({ weights, lastClose: lastBarClose, quoteMap: qmap });
+    // Anchor on the prior session's close so an already-stored today-bar isn't double-counted.
+    intraday = computeIntradayBar({ weights, lastClose: priorSessionClose(daily) ?? lastBarClose, quoteMap: qmap });
     if (intraday.ok) {
       liveValue  = intraday.close;
       liveAsOf   = intraday.todayET || lastBar.date;
@@ -411,8 +427,10 @@ export async function getPnthrAi300Bars({ timeframe = 'daily', limit = null } = 
       // Use most recent stored DAILY close as the lastClose anchor — daily
       // bars are always the most up-to-date close vs the weekly aggregate.
       const dailyForAnchor = timeframe === 'daily' ? bars : await loadDailyBars();
-      if (dailyForAnchor.length > 0) {
-        const lastDailyClose = dailyForAnchor[dailyForAnchor.length - 1].close;
+      // Anchor on the PRIOR session's close (not the last bar) so an already-stored
+      // today-bar isn't double-counted by the overlay's today-return multiply.
+      const lastDailyClose = priorSessionClose(dailyForAnchor);
+      if (lastDailyClose != null) {
         const tickers = Object.keys(weights).filter(t => weights[t] > 0);
         const qmap    = await fetchAiQuotesBatch(tickers, { cacheKey: 'ai-universe-all' });
         const intraday = computeIntradayBar({ weights, lastClose: lastDailyClose, quoteMap: qmap });

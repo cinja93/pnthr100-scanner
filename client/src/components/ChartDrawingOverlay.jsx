@@ -76,9 +76,17 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
   const [ctxMenu, setCtxMenu]       = useState(null);
   const [bodyDragLineId, setBodyDragLineId] = useState(null);
   const [selectedLineId, setSelectedLineId] = useState(null);
+  const [hoverLineId, setHoverLineId] = useState(null);
   const isDrawing = drawMode != null;
 
   useImperativeHandle(ref, () => ({ clearAll: () => deleteAllForChart() }), [ticker]);
+
+  // Selection + hover only make sense while a draw mode is active. Clear them
+  // when the user leaves draw mode so a highlighted line doesn't linger (and so
+  // arrow-key nudging doesn't fire on a chart the user is just viewing).
+  useEffect(() => {
+    if (drawMode == null) { setSelectedLineId(null); setHoverLineId(null); }
+  }, [drawMode]);
 
   useEffect(() => { if (onLineCountChange) onLineCountChange(drawnLines.length); }, [drawnLines.length, onLineCountChange]);
 
@@ -108,10 +116,10 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
     for (const ln of drawnLines) {
       // Hide the line being body-dragged — the temp line shows its new position
       if (ln._id === bodyDragLineId) continue;
-      const isSelected = ln._id === selectedLineId;
+      const isActive = ln._id === selectedLineId || ln._id === hoverLineId;
       const s = chart.addSeries(LineSeries, {
-        color: isSelected ? '#ffffff' : lineColor(ln),
-        lineWidth: isSelected ? 4 : 2,
+        color: isActive ? '#ffffff' : lineColor(ln),
+        lineWidth: isActive ? 4 : 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         autoscaleInfoProvider: () => null,
       });
@@ -123,7 +131,7 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
       ]);
       drawnSeriesRef.current.push(s);
     }
-  }, [drawnLines, chartRef, bodyDragLineId, selectedLineId, chartVersion]);
+  }, [drawnLines, chartRef, bodyDragLineId, selectedLineId, hoverLineId, chartVersion]);
 
   // ── Snap helpers ──
   function snapAt(clientX, clientY) {
@@ -161,7 +169,7 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
     if (!chart || !series || !overlayRef.current) return null;
     const rect = overlayRef.current.getBoundingClientRect();
     const x = clientX - rect.left, y = clientY - rect.top;
-    const HANDLE_R = 10;
+    const HANDLE_R = 12;
     for (const ln of drawnLines) {
       const x1 = chart.timeScale().timeToCoordinate(ln.t1);
       const y1 = series.priceToCoordinate(ln.v1);
@@ -187,7 +195,7 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
     if (!chart || !series || !overlayRef.current) return null;
     const rect = overlayRef.current.getBoundingClientRect();
     const x = clientX - rect.left, y = clientY - rect.top;
-    const HIT_TOL_PX = 6;     // perpendicular distance to line counts as a hit
+    const HIT_TOL_PX = 9;     // perpendicular distance to line counts as a hit
     const ENDPOINT_BUFFER = 10;  // skip body hit if cursor is on an endpoint
     let best = null, bestD = Infinity;
     for (const ln of drawnLines) {
@@ -309,8 +317,19 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
     } else if (editingRef.current) {
       setTempLine(prev => prev ? { x1: prev.x1, y1: prev.y1, x2: cursorX, y2: cursorY } : null);
     } else {
-      const snap = snapAt(e.clientX, e.clientY);
-      setHoverSnap(snap ? { x: snap.x, y: snap.y, snapHigh: snap.snapHigh } : null);
+      // Idle hover (no drag in progress): if the cursor is over an existing
+      // line (endpoint or body), highlight that line and switch to a move
+      // cursor so the user can SEE it's grabbable. Otherwise show the usual
+      // snap-to-high/low preview dot for starting a new line.
+      const overLine = findEndpointHit(e.clientX, e.clientY) || findBodyHit(e.clientX, e.clientY);
+      if (overLine) {
+        setHoverLineId(overLine.lineId);
+        setHoverSnap(null);
+      } else {
+        setHoverLineId(null);
+        const snap = snapAt(e.clientX, e.clientY);
+        setHoverSnap(snap ? { x: snap.x, y: snap.y, snapHigh: snap.snapHigh } : null);
+      }
     }
   }
 
@@ -510,6 +529,57 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
     }
   }
 
+  // Nudge the SELECTED line up/down by `px` screen pixels (>0 = up), keeping
+  // its slope. Used by the arrow keys for fine, minor-increment adjustments.
+  // The price math runs inside the state updater so holding the key keeps
+  // moving cumulatively (each press reads the latest position, not a stale one).
+  function nudgeSelected(px) {
+    const series = seriesRef.current;
+    if (!series || !selectedLineId) return;
+    let patchId = null, patchBody = null;
+    setDrawnLines(prev => prev.map(l => {
+      if (l._id !== selectedLineId) return l;
+      const isHoriz = l.kind === 'horizontal' || Math.abs(l.v2 - l.v1) < 0.01;
+      const y1 = series.priceToCoordinate(l.v1);
+      const y2 = series.priceToCoordinate(isHoriz ? l.v1 : l.v2);
+      if (y1 == null || y2 == null) return l;
+      const nv1 = series.coordinateToPrice(y1 - px);
+      const nv2 = isHoriz ? nv1 : series.coordinateToPrice(y2 - px);
+      if (nv1 == null || nv2 == null || nv1 < 0 || nv2 < 0) return l;
+      const r1 = +nv1.toFixed(2), r2 = +nv2.toFixed(2);
+      if (r1 === l.v1 && r2 === l.v2) return l;   // sub-cent move rounded away
+      const expectSide = computeExpectSide(l.t1, r1, l.t2, r2);
+      patchId = l._id;
+      patchBody = { t1: l.t1, v1: r1, t2: l.t2, v2: r2, expectSide };
+      return { ...l, v1: r1, v2: r2, expectSide };
+    }));
+    if (patchId && patchBody && !String(patchId).startsWith('pending-')) {
+      fetch(`${API_BASE}/api/test/trendlines/${patchId}`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchBody),
+      }).catch(err => console.error('nudge trendline failed', err));
+    }
+  }
+
+  // Arrow Up/Down = fine nudge of the selected line (Shift = larger step).
+  // Left/Right are reserved by the chart modal for prev/next ticker, so we only
+  // bind vertical nudges here.
+  useEffect(() => {
+    if (!enabled || drawMode == null || !selectedLineId) return;
+    function onKey(e) {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      const step = (e.shiftKey ? 8 : 2) * (e.key === 'ArrowUp' ? 1 : -1);
+      nudgeSelected(step);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, drawMode, selectedLineId]);
+
   if (!enabled) return null;
 
   const buttonStyle = (active) => ({
@@ -559,14 +629,14 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
         onMouseMove={onDrawMove}
         onMouseUp={onDrawUp}
         onMouseLeave={() => {
-          if (!drawStartRef.current && !editingRef.current) setHoverSnap(null);
+          if (!drawStartRef.current && !editingRef.current) { setHoverSnap(null); setHoverLineId(null); }
         }}
         onContextMenu={onContextMenu}
         onWheel={(e) => { if (isDrawing) e.preventDefault(); }}
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
           pointerEvents: isDrawing ? 'auto' : 'none',
-          cursor: isDrawing ? 'crosshair' : 'default',
+          cursor: isDrawing ? (hoverLineId ? 'move' : 'crosshair') : 'default',
           zIndex: 10,
           background: isDrawing ? 'rgba(252,240,0,0.04)' : 'transparent',
           border: isDrawing ? '1px dashed rgba(252,240,0,0.5)' : 'none',
@@ -580,7 +650,7 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
             const y1 = series.priceToCoordinate(ln.v1);
             const x2 = chart.timeScale().timeToCoordinate(ln.t2);
             const y2 = series.priceToCoordinate((ln.kind === 'horizontal') ? ln.v1 : ln.v2);
-            const isSel = ln._id === selectedLineId;
+            const isSel = ln._id === selectedLineId || ln._id === hoverLineId;
             const handleFill = isSel ? '#ffffff' : lineColor(ln);
             const handleR = isSel ? 8 : 6;
             const alertOn = ln.alertEnabled !== false;
@@ -623,6 +693,17 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
           })()}
         </svg>
       </div>
+
+      {/* Fine-adjust hint — shown while a line is selected */}
+      {isDrawing && selectedLineId && (
+        <div style={{
+          position: 'absolute', bottom: 8, left: 8, zIndex: 12, pointerEvents: 'none',
+          background: 'rgba(20,20,20,0.92)', border: '1px solid #fcf000', borderRadius: 4,
+          padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#fcf000', letterSpacing: '0.02em',
+        }}>
+          ↑ ↓ nudge · Shift = bigger · drag to move
+        </div>
+      )}
 
       {/* Right-click context menu */}
       {ctxMenu && (

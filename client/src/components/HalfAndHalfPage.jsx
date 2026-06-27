@@ -3,7 +3,7 @@
 //   RIGHT (longs):  Daily Longs  (price above the daily EMA) · Weekly Longs  (above the weekly EMA)
 // Each box is its own scrollable group: click any ticker to chart it, then use the
 // modal's ◀ ▶ (or arrow keys) to scroll through the rest of that box.
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchHalfAndHalf } from '../services/api';
 import PageHeader from './PageHeader';
 import AiTickerChartModal from './AiTickerChartModal';
@@ -32,20 +32,56 @@ function Chip({ item, tone, onClick }) {
   );
 }
 
+function SortToggle({ tone, sort, setSort }) {
+  const btn = (mode, label) => (
+    <button
+      onClick={() => setSort(mode)}
+      title={`Sort by ${label}`}
+      style={{
+        background: sort === mode ? tone.head : 'transparent',
+        color: sort === mode ? '#000' : '#888',
+        border: 'none', cursor: 'pointer',
+        padding: '3px 8px', fontSize: 10, fontWeight: 700, letterSpacing: '0.02em',
+        borderLeft: mode === 'longest' ? '1px solid #2a2a2a' : 'none',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <span style={{ display: 'inline-flex', borderRadius: 4, overflow: 'hidden', border: `1px solid ${tone.border}` }}>
+      {btn('shortest', 'Shortest Distance EMA')}
+      {btn('longest', 'Longest Distance EMA')}
+    </span>
+  );
+}
+
 function Box({ title, subtitle, tone, rows, onPick }) {
+  const [sort, setSort] = useState('shortest'); // 'shortest' = closest to EMA first
+  const sorted = useMemo(() => {
+    const copy = [...rows];
+    copy.sort((a, b) => sort === 'shortest'
+      ? Math.abs(a.distPct) - Math.abs(b.distPct)   // closest to EMA first
+      : Math.abs(b.distPct) - Math.abs(a.distPct)); // furthest from EMA first
+    return copy;
+  }, [rows, sort]);
+
   return (
     <div style={{ background: '#0d0d0d', border: '1px solid #222', borderRadius: 10, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
-        <span style={{ color: tone.head, fontWeight: 800, fontSize: 14, letterSpacing: '0.04em' }}>{title}</span>
-        <span style={{ color: tone.head, fontWeight: 800, fontSize: 13, fontFamily: 'monospace' }}>{rows.length}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ color: tone.head, fontWeight: 800, fontSize: 14, letterSpacing: '0.04em' }}>{title}</span>
+          <span style={{ color: tone.head, fontWeight: 800, fontSize: 13, fontFamily: 'monospace' }}>{rows.length}</span>
+        </span>
+        <SortToggle tone={tone} sort={sort} setSort={setSort} />
       </div>
       <div style={{ color: '#666', fontSize: 11, marginBottom: 12 }}>{subtitle}</div>
-      {rows.length === 0 ? (
+      {sorted.length === 0 ? (
         <div style={{ color: '#555', fontSize: 12 }}>none</div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
-          {rows.map((it, i) => (
-            <Chip key={it.ticker} item={it} tone={tone} onClick={() => onPick(rows.map(r => r.ticker), i)} />
+          {sorted.map((it, i) => (
+            <Chip key={it.ticker} item={it} tone={tone} onClick={() => onPick(sorted.map(r => r.ticker), i)} />
           ))}
         </div>
       )}

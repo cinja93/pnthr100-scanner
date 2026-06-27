@@ -60,6 +60,10 @@ function ChartPanel({
   const [barSpacing, setBarSpacing] = useState(title === 'Weekly' ? 12 : 14);
   const [sizeLoading, setSizeLoading] = useState(false);
   const [sizePanel,   setSizePanel]   = useState(null);
+  // Bumped every time the chart is (re)created — e.g. on the 30s silent refresh.
+  // The drawing overlay watches this so it re-attaches user trendlines to the
+  // NEW chart instance (a ref swap alone wouldn't re-run its render effect).
+  const [chartVersion, setChartVersion] = useState(0);
 
   const { isAdmin } = useAuth() || {};
   // Drawing overlay inputs: the overlay keys time on `weekOf`; the chart keys on `date` — map them
@@ -232,6 +236,11 @@ function ChartPanel({
     }
 
     // (do NOT call fitContent — see comment in earlier commit)
+
+    // Tell the drawing overlay a fresh chart instance exists so it re-attaches
+    // any user-drawn trendlines to it (otherwise they'd be left on the disposed
+    // chart and vanish on every silent refresh).
+    setChartVersion(v => v + 1);
 
     let destroyed = false;
     chart.subscribeCrosshairMove(param => {
@@ -574,6 +583,7 @@ function ChartPanel({
             key={drawTicker}
             chartRef={chartRef}
             seriesRef={priceSeriesRef}
+            chartVersion={chartVersion}
             weeklyBars={overlayBars}
             ticker={drawTicker}
             enabled={isAdmin}

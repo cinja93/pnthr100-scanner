@@ -46,6 +46,7 @@ function lineColor(ln) {
 const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
   chartRef,
   seriesRef,
+  chartVersion,                     // bumped by parent each time the chart is rebuilt — re-attach lines
   weeklyBars,                       // sorted [{weekOf, open, high, low, close}]
   ticker,
   enabled = true,
@@ -122,7 +123,7 @@ const ChartDrawingOverlay = forwardRef(function ChartDrawingOverlay({
       ]);
       drawnSeriesRef.current.push(s);
     }
-  }, [drawnLines, chartRef, bodyDragLineId, selectedLineId]);
+  }, [drawnLines, chartRef, bodyDragLineId, selectedLineId, chartVersion]);
 
   // ── Snap helpers ──
   function snapAt(clientX, clientY) {

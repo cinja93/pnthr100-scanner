@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createChart, BarSeries, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import ChartDrawingOverlay from './ChartDrawingOverlay';
-import { fetchAiStockChartData, fetchNav, fetchFcfData, fetchValuationData, API_BASE, authHeaders } from '../services/api';
+import { fetchAiStockChartData, fetchNav, fetchFcfData, fetchValuationData, fetchWatchlistTickers, addWatchlistTicker, removeWatchlistTicker, API_BASE, authHeaders } from '../services/api';
 import { sizePosition, STRIKE_PCT, isEtfTicker } from '../utils/sizingUtils';
 import { useQueue } from '../contexts/QueueContext';
 import { useAuth } from '../AuthContext';
@@ -46,6 +46,7 @@ function ChartPanel({
   title, period, fallback, bars, signals, chartType,
   currentSignal, pnthrStop, weeklyStop,
   ticker, entryPrice, nextEntryTrigger, mceTrigger, earningsDate,
+  canStar, isStarred, onToggleStar,
 }) {
   const containerRef    = useRef(null);
   const chartRef        = useRef(null);
@@ -464,6 +465,23 @@ function ChartPanel({
           {sizeLoading ? '⟳' : 'SIZE IT'}
         </button>
 
+        {/* STAR — save this ticker to the watchlist (independent per chart) */}
+        {canStar && (
+          <button
+            onClick={onToggleStar}
+            style={{
+              background: isStarred ? 'rgba(252,240,0,0.15)' : 'transparent',
+              color: isStarred ? '#fcf000' : '#888',
+              border: `1px solid ${isStarred ? '#fcf000' : '#3a3a3a'}`,
+              borderRadius: 4, padding: '3px 8px', fontSize: 12, lineHeight: 1,
+              cursor: 'pointer', fontWeight: 700,
+            }}
+            title={isStarred ? `Remove ${ticker} from your watchlist` : `Save ${ticker} to your watchlist`}
+          >
+            {isStarred ? '★' : '☆'}
+          </button>
+        )}
+
         {/* QUEUE IT (green, after sizing) */}
         {sizePanel && toggleQueue && (
           <button
@@ -680,11 +698,33 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [washWarning, setWashWarning] = useState(null);
   const [fcfMap, setFcfMap]       = useState({});
   const [valMap, setValMap]       = useState({});
+  const [watchlist, setWatchlist] = useState(() => new Set()); // tickers on the user's watchlist
 
   useEffect(() => {
     fetchFcfData().then(d => setFcfMap(d || {})).catch(() => {});
     fetchValuationData().then(d => setValMap(d || {})).catch(() => {});
   }, []);
+
+  // Load the user's watchlisted tickers once so the per-chart stars start filled
+  // for names already on the list. Admin-only (add/remove are admin-gated).
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchWatchlistTickers().then(arr => setWatchlist(new Set(arr))).catch(() => {});
+  }, [isAdmin]);
+
+  // Toggle a ticker on the watchlist (optimistic; reverts on failure).
+  async function toggleWatchlist(tk) {
+    if (!tk) return;
+    const wasOn = watchlist.has(tk);
+    setWatchlist(prev => { const n = new Set(prev); wasOn ? n.delete(tk) : n.add(tk); return n; });
+    try {
+      if (wasOn) await removeWatchlistTicker(tk);
+      else       await addWatchlistTicker(tk);
+    } catch (err) {
+      console.error('watchlist toggle failed', err);
+      setWatchlist(prev => { const n = new Set(prev); wasOn ? n.add(tk) : n.delete(tk); return n; }); // revert
+    }
+  }
 
   const canPrev = currentIdx > 0;
   const canNext = currentIdx < tickerList.length - 1;
@@ -893,6 +933,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 nextEntryTrigger={data.daily.nextEntryTrigger ?? null}
                 mceTrigger={data.daily.mceTrigger ?? null}
                 earningsDate={earnings[activeTicker] ?? null}
+                canStar={isAdmin}
+                isStarred={watchlist.has(activeTicker)}
+                onToggleStar={() => toggleWatchlist(activeTicker)}
               />
               <ChartPanel
                 title="Weekly"
@@ -907,6 +950,9 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 ticker={activeTicker}
                 entryPrice={data.currentPrice}
                 earningsDate={earnings[activeTicker] ?? null}
+                canStar={isAdmin}
+                isStarred={watchlist.has(activeTicker)}
+                onToggleStar={() => toggleWatchlist(activeTicker)}
               />
             </>
           )}

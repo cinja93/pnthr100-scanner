@@ -220,6 +220,13 @@ export async function fetchWatchlist() {
   return response.json();
 }
 
+export async function fetchWatchlistTickers() {
+  const response = await apiFetch(`${API_BASE}/api/watchlist/tickers`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const data = await response.json();
+  return data.tickers || [];
+}
+
 export async function addWatchlistTicker(ticker) {
   const response = await apiFetch(`${API_BASE}/api/watchlist`, {
     method: 'POST',

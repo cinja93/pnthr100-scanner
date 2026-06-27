@@ -1192,6 +1192,19 @@ app.get('/api/watchlist', async (req, res) => {
   }
 });
 
+// Lightweight: just the user's watchlisted tickers (no live enrichment).
+// Used to set the star state on the chart modal without the heavy /api/watchlist call.
+app.get('/api/watchlist/tickers', async (req, res) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
+    const tickers = await getWatchlistTickers(req.user.userId);
+    res.json({ tickers });
+  } catch (error) {
+    console.error('Error fetching watchlist tickers:', error);
+    res.status(500).json({ error: 'Failed to fetch watchlist tickers' });
+  }
+});
+
 // Add a ticker to the watchlist
 app.post('/api/watchlist', authenticateJWT, requireAdmin, async (req, res) => {
   try {

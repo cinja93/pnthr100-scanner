@@ -47,8 +47,9 @@ const NET_TOL = 0.5;    // pts of total-return %
 const CAGR_TOL = 0.3;   // pts of CAGR %
 
 // Re-run the LOCKED engine on CURRENT data and return the headline NET return + CAGR. This is the
-// single thing that decides whether the displayed track record is actually stale. (Fresh load,
-// one run — simulateTree mutates its inputs, so it must never be reused across runs.)
+// single thing that decides whether the displayed track record is actually stale. Identical engine
+// + defaults as build_tree_baseline.mjs (AI-300, frozen END, 210d), so a clean run reproduces the
+// committed baseline to the dollar.
 async function recomputeHeadline(db) {
   const data = await loadTreeData(db, { end: DEFAULT_END, universe: 'ai' });
   const sim = simulateTree(data, { nav0: 100000, start: DEFAULT_START });

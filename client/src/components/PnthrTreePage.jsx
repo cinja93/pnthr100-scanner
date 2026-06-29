@@ -481,7 +481,11 @@ export default function PnthrTreePage() {
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>Error: {err}</div>}
       {data?.baselineDrift?.drifted && (
         <div style={{ background: '#3b0d0d', border: '2px solid #ef4444', borderRadius: 8, padding: '10px 14px', marginTop: 10, color: '#fca5a5', fontSize: 12, fontWeight: 600 }}>
-          🔴 BACKTEST DRIFT — the data behind the backtest numbers below changed since they were locked (likely a split re-sync). The displayed backtest is now STALE and must be regenerated + verified. Last checked {data.baselineDrift.checkedAt ? new Date(data.baselineDrift.checkedAt).toLocaleString() : '—'}.
+          🔴 BACKTEST DRIFT — the displayed backtest numbers no longer match current data
+          {data.baselineDrift.storedNet != null && data.baselineDrift.currentNet != null
+            ? ` (locked ${data.baselineDrift.storedNet}% net vs ${data.baselineDrift.currentNet}% on current data)`
+            : ''}
+          . This is an AI-300 membership change or a trade-moving data revision, not a routine split. Regenerate + verify the baseline. Last checked {data.baselineDrift.checkedAt ? new Date(data.baselineDrift.checkedAt).toLocaleString() : '—'}.
         </div>
       )}
       {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 42-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}

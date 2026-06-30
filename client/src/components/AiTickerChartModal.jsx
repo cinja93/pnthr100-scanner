@@ -605,8 +605,8 @@ function ChartPanel({
             weeklyBars={overlayBars}
             ticker={drawTicker}
             enabled={isAdmin}
-            buttonPosition="top-right"
-            topOffset={8}
+            buttonPosition="top-left"
+            topOffset={118}
           />
         )}
         {earningsWindow && (
@@ -932,12 +932,12 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
             <>
               <div
                 onClick={() => setShowDesc(false)}
-                style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
+                style={{ position: 'absolute', inset: 0, zIndex: 15, background: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
               />
               <div
                 onClick={e => e.stopPropagation()}
                 style={{
-                  position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
+                  position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 16,
                   width: 'min(640px, 92%)', maxHeight: '74%', overflowY: 'auto',
                   background: '#111', border: '1px solid #fcf000', borderRadius: 8,
                   padding: '16px 18px', boxShadow: '0 12px 44px rgba(0,0,0,0.65)',

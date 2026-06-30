@@ -135,7 +135,7 @@ export async function fetchQuotes(tickers) {
 // Excluding today makes the live trigger identical to the backtest (prior-bars-only).
 export async function priorBands(db, tickers, excl) {
   const today = etDateStr();
-  const highs = {}, lows = {}, lastClose = {};
+  const highs = {}, lows = {}, lastClose = {}, adv = {};
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
   for (const d of docs) {
     if (excl?.has(d.ticker)) continue;   // manual-only (IPO seasoning / split re-sync pending) → no bands → no entry/manage
@@ -149,8 +149,13 @@ export async function priorBands(db, tickers, excl) {
     if (bars.length >= ENTRY_HIGH_LOOKBACK) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
     if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
     lastClose[d.ticker] = +bars[bars.length - 1].close;   // for the live-price sanity net
+    // 20-day average DOLLAR volume (shares × close) = liquidity rank for the funnel cards. Dollar volume
+    // (not raw shares) so a $5 name and a $500 name compare fairly. Past bars only — executable.
+    const av = bars.slice(-20); let dv = 0, n = 0;
+    for (const b of av) { const v = +b.volume || 0, c = +b.close || 0; if (v > 0 && c > 0) { dv += v * c; n++; } }
+    if (n) adv[d.ticker] = dv / n;
   }
-  return { highs, lows, lastClose };
+  return { highs, lows, lastClose, adv };
 }
 
 export function sizeFor(nav, price, stop) {
@@ -208,7 +213,7 @@ export async function getPnthrTreeState(db) {
     excl.set(f.ticker, `live $${f.price} vs stored $${f.lastClose} — data re-sync pending`);
     flagSuspectSplit(db, f.ticker, `Tree state: live $${f.price} vs stored close $${f.lastClose}`).catch(() => {});
   }
-  const { highs, lows } = bands;
+  const { highs, lows, adv } = bands;
 
   // ── Displayed book = your REAL IBKR account (adopted) + (paper only) the engine's
   //    SIMULATED would-buys, so paper mimics live automation exactly. The ONLY thing
@@ -251,7 +256,7 @@ export async function getPnthrTreeState(db) {
         ticker: t, sector: AI_META[t]?.sector, price, priorHigh: null, pctToHigh: null,
         changePct: +q.changesPercentage || 0, state: 'stalking', held: held.has(t),
         manual: true, note: excl.get(t) || null, stop: null, shares: 0, risk: 0, posValue: 0,
-        noBuyback: noBuyback.has(t),
+        adv: adv[t] ?? null, noBuyback: noBuyback.has(t),
       });
       continue;
     }
@@ -266,6 +271,7 @@ export async function getPnthrTreeState(db) {
       changePct: +q.changesPercentage || 0, state, held: held.has(t),
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
       attackAt: state === 'attack' ? (attackSeen[t] || null) : null,   // when this new-high signal first fired
+      adv: adv[t] ?? null,   // 20-day avg dollar volume → liquidity rank/gradient on the funnel cards
       noBuyback: noBuyback.has(t),
     });
   }

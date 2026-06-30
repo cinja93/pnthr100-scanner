@@ -174,12 +174,14 @@ function NoBuybackBadge({ ticker, blocked, onToggle, busy }) {
   );
 }
 
-function Badge({ f, onClick, onToggleBuyback }) {
-  // stalking = outline; approaching = flashing outline; attack = filled
+function Badge({ f, onClick, onToggleBuyback, liqFrac }) {
+  // stalking = outline; approaching = flashing; attack = filled. ATTACK/APPROACHING are shaded by
+  // liquidity: most liquid = DARK green (liqFrac 0), least liquid = LIGHT green (liqFrac 1).
   const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, margin: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' };
+  const liqBg = `hsl(142, 64%, ${Math.round(26 + (liqFrac ?? 1) * 30)}%)`;   // 26% dark → 56% light
   let style;
-  if (f.state === 'attack') style = { ...base, background: '#16a34a', border: '1px solid #22c55e', color: '#fff', fontWeight: 700 };
-  else if (f.state === 'approaching') style = { ...base, background: 'transparent', border: '1px solid #22c55e', color: '#22c55e', animation: 'treeflash 1s ease-in-out infinite' };
+  if (f.state === 'attack') style = { ...base, background: liqBg, border: '1px solid #22c55e', color: '#fff', fontWeight: 700 };
+  else if (f.state === 'approaching') style = { ...base, background: liqBg, border: '1px dashed #86efac', color: '#fff', fontWeight: 600, animation: 'treeflash 1s ease-in-out infinite' };
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
     <span className="tree-pulse" style={style} onClick={onClick} title={f.manual
@@ -416,8 +418,11 @@ export default function PnthrTreePage() {
   // partly/wholly hypothetical, so label them rather than let them read as real $.
   const devourAllSim = devourPos.length > 0 && devourPos.every(p => p.sim);
   const devourHasSim = devourPos.some(p => p.sim);
-  const attack = funnel.filter(f => f.state === 'attack' && !f.held);
-  const approaching = funnel.filter(f => f.state === 'approaching' && !f.held);
+  // ATTACK + APPROACHING sorted MOST-LIQUID → least (20-day avg dollar volume); a new name lands in
+  // its liquidity slot automatically. The Badge shades the card dark-green (liquid) → light-green (illiquid).
+  const byLiquidity = (a, b) => (b.adv ?? -1) - (a.adv ?? -1);
+  const attack = funnel.filter(f => f.state === 'attack' && !f.held).sort(byLiquidity);
+  const approaching = funnel.filter(f => f.state === 'approaching' && !f.held).sort(byLiquidity);
   const stalking = funnel.filter(f => f.state === 'stalking' && !f.held).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const nav = data?.nav || 0;
 
@@ -610,7 +615,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS · READY FOR PURCHASE ({attack.length})</h3>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
-          <div>{attack.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
+          <div>{attack.map((f, i, arr) => <Badge key={f.ticker} f={f} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* MANUAL TRADES — positions you hold that Tree never trades (SPCX, non-AI-300) */}
@@ -626,7 +631,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#facc15', fontSize: 13, letterSpacing: '0.08em' }}>APPROACHING — within 1% of a new high ({approaching.length})</h3>
         {approaching.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None close yet.</div> :
-          <div>{approaching.map(f => <Badge key={f.ticker} f={f} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
+          <div>{approaching.map((f, i, arr) => <Badge key={f.ticker} f={f} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* STALKING — the universe */}

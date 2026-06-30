@@ -33,7 +33,7 @@ import { connectToDatabase } from '../../database.js';
 import { SECTORS } from './aiUniverseData.js';
 import {
   INDEX_NAME, INDEX_TICKER, BASE_DATE, BASE_VALUE,
-  SINGLE_NAME_CAP, HYPERSCALER_CAP, HYPERSCALER_TICKERS,
+  SINGLE_NAME_CAP, HYPERSCALER_CAP, HYPERSCALER_TICKERS, SECTOR_CAP,
   COLL_INDEX_DAILY, COLL_INDEX_META,
 } from '../../data/pnthrAiIndexConfig.js';
 
@@ -115,6 +115,38 @@ function applyCaps(rawWeights, capFn, maxIter = 50) {
   if (Math.abs(total - 1) > 1e-6) {
     for (const t of Object.keys(weights)) weights[t] /= total;
   }
+  return weights;
+}
+
+// ticker → sector id (for the sector cap)
+const SECTOR_OF = {};
+for (const s of SECTORS) for (const h of s.holdings) SECTOR_OF[h.ticker] = s.id;
+
+// ── Cap enforcement WITH a SECTOR cap (added 2026-06-30) ────────────────────
+// Enforces BOTH the single-name cap (capFn) AND a per-sector cap (sectorCap), by
+// iterating: cap names → cap over-cap sectors (scale down, redistribute the freed weight
+// to under-cap sectors' names proportionally) → repeat until both hold. Keeps semis (~36%
+// raw) at ≤30% so the 18-sector index is genuinely diversified. Rules-based / self-maintaining.
+function applyCapsWithSector(rawWeights, capFn, sectorCap, maxIter = 100) {
+  let weights = { ...rawWeights };
+  for (let iter = 0; iter < maxIter; iter++) {
+    weights = applyCaps(weights, capFn);                 // 1) single-name caps (normalized)
+    const secSum = {};
+    for (const [t, w] of Object.entries(weights)) { const s = SECTOR_OF[t]; secSum[s] = (secSum[s] || 0) + w; }
+    const overCap = Object.values(secSum).some(sum => sum > sectorCap + 1e-9);
+    if (!overCap) break;                                 // both caps satisfied
+    let freed = 0; const underNames = [];                // 2) sector caps
+    for (const [t, w] of Object.entries(weights)) {
+      const sum = secSum[SECTOR_OF[t]];
+      if (sum > sectorCap + 1e-9) { const scaled = w * (sectorCap / sum); freed += w - scaled; weights[t] = scaled; }
+      else underNames.push(t);
+    }
+    const underTotal = underNames.reduce((a, t) => a + weights[t], 0);
+    if (underTotal > 0) for (const t of underNames) weights[t] += freed * (weights[t] / underTotal);
+    else break;                                          // nothing can absorb (degenerate) — stop
+  }
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  for (const t of Object.keys(weights)) weights[t] /= total;
   return weights;
 }
 
@@ -209,6 +241,7 @@ async function main() {
   const rebalanceLog = []; // for meta collection
   let currentShares = {}; // s_i — synthetic share counts (constant between rebalances)
   let currentIndexValue = BASE_VALUE;
+  let prevActiveCount = 0;   // coverage-guard reference
 
   for (let i = 0; i < tradingDates.length; i++) {
     const date = tradingDates[i];
@@ -218,6 +251,18 @@ async function main() {
     // already in the index). On any given day, a ticker is "active" if its
     // bar exists today.
     const activeTickers = tickersWithData.filter(t => barsByTicker[t][date]);
+
+    // COVERAGE GUARD (added 2026-06-30): skip a date whose constituent coverage
+    // collapses vs the prior emitted bar — i.e. an INCOMPLETE/partial day where only
+    // a handful of names have a bar (e.g. new tickers backfilled to "today" while the
+    // rest sit on yesterday). Computing the index from a few names crashed it to 5.8.
+    // The constituent set only ever GROWS at inception, so a sudden drop = a bad/partial
+    // day, never legitimate. Skip it — don't emit a bar (the tail then ends on the last
+    // complete day; tonight's daily cron fills the real bar uniformly for everyone).
+    if (prevActiveCount > 0 && activeTickers.length < 0.5 * prevActiveCount) {
+      console.warn(`[coverage-guard] skipping ${date}: only ${activeTickers.length} constituents have a bar (prev ${prevActiveCount}) — incomplete day`);
+      continue;
+    }
 
     if (isRebalance) {
       // ── Rebalance step: compute new weights + new synthetic shares ──────
@@ -249,7 +294,7 @@ async function main() {
 
       const rawWeights = {};
       for (const [t, m] of Object.entries(mcaps)) rawWeights[t] = m / mcapTotal;
-      const capped = applyCaps(rawWeights, capFor);
+      const capped = applyCapsWithSector(rawWeights, capFor, SECTOR_CAP);
 
       // New synthetic share counts: s_i = weight_i × index_value / price_i
       const newShares = {};
@@ -292,6 +337,7 @@ async function main() {
       close:  parseFloat(C.toFixed(4)),
       volume: V,
     });
+    prevActiveCount = activeTickers.length;   // coverage-guard reference (only after a real bar)
   }
 
   const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);

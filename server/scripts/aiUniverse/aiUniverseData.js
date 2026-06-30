@@ -47,7 +47,7 @@ export const SECTORS = [
   {
     id: 1,
     name: 'AI Compute & Semiconductors',
-    weight: 16,
+    weight: 30,
     thesis: 'The silicon foundation of every AI workload on Earth. From training the largest frontier models to running inference on edge devices, every AI dollar starts as a chip. PNTHR\'s largest sector concentration captures the GPUs, CPUs, custom ASICs, memory, equipment, and design tools that mint the entire AI revolution.',
     holdings: [
       { ticker: 'NVDA', name: 'NVIDIA Corporation', thesis: 'NVIDIA designs the GPUs that train and run virtually every large-scale AI model on Earth. The H100, B200, and forthcoming Rubin architectures, paired with CUDA\'s near-monopoly software moat, give NVDA pricing power no competitor has matched. Every hyperscaler, every sovereign AI program, every enterprise AI deployment funnels capital through NVIDIA. PNTHR considers NVDA the undisputed cornerstone holding of the AI Elite Universe, the picks-and-shovels of the entire AI revolution.' },
@@ -107,7 +107,7 @@ export const SECTORS = [
   {
     id: 2,
     name: 'AI Power, Energy & Electrification',
-    weight: 17,
+    weight: 8.5,
     thesis: 'AI is the largest electrical load growth event in modern grid history. Hyperscalers are signing direct power deals, nuclear, gas, renewable, because the existing grid cannot meet AI training demand. PNTHR\'s second-largest sector captures the utilities, nuclear operators, gas producers, electrical equipment, and storage companies that will literally power the AI revolution.',
     holdings: [
       { ticker: 'GEV', name: 'GE Vernova', thesis: 'GE Vernova builds the gas turbines, wind turbines, and grid-scale electrical equipment powering the AI infrastructure buildout. Their HA-class gas turbines are the workhorse of new gas-fired AI data centers, with multi-year backlogs. PNTHR holds GEV as a foundational AI-power Elite holding, the company that builds the actual generation capacity AI needs.' },
@@ -147,7 +147,7 @@ export const SECTORS = [
   {
     id: 3,
     name: 'AI Optical, Photonics & Networking',
-    weight: 13,
+    weight: 8.2,
     thesis: 'AI clusters move oceans of data between GPUs at speeds that only optical can deliver. The bandwidth bottleneck of AI training has minted a new generation of optical and networking leaders. PNTHR\'s third-largest sector captures the silent winners of the AI bandwidth wars, names like CRDO and ALAB that the broader market is still under-owning.',
     holdings: [
       { ticker: 'ANET', name: 'Arista Networks', thesis: 'Arista is the leader in high-speed Ethernet switching for AI data centers. Their 800G platforms ship into every major hyperscaler AI cluster, displacing InfiniBand. PNTHR holds ANET as a top-tier AI networking Elite holding, bandwidth bottleneck monetized.' },
@@ -173,7 +173,7 @@ export const SECTORS = [
   {
     id: 4,
     name: 'AI Cloud & Data Centers',
-    weight: 6,
+    weight: 3,
     thesis: 'AI compute lives somewhere, and that "somewhere" is increasingly purpose-built AI data centers, neoclouds, and edge nodes. PNTHR captures the REITs that own AI real estate, the neoclouds that rent GPU capacity, the Bitcoin miners pivoting to AI hosting, and the edge networks delivering AI to end users.',
     holdings: [
       { ticker: 'DOCN', name: 'DigitalOcean Holdings', thesis: 'DigitalOcean serves SMB cloud infrastructure with growing AI compute exposure through Paperspace acquisition. PNTHR holds DOCN as an SMB-focused AI cloud play.' },
@@ -198,7 +198,7 @@ export const SECTORS = [
   {
     id: 5,
     name: 'Robotics, Autonomous & Auto AI',
-    weight: 6,
+    weight: 4.7,
     thesis: 'AI is breaking out of data centers and into the physical world, robots, autonomous cars, autonomous trucks, drones, eVTOLs. PNTHR captures the leaders making AI-first hardware that moves: industrial robots, surgical robots, autonomous driving, LIDAR, and the Tier 1 suppliers that integrate AI into vehicles.',
     holdings: [
       { ticker: 'TSLA', name: 'Tesla Inc.', thesis: 'Tesla is building the largest fleet of AI-enabled vehicles, the Optimus humanoid robot, and Dojo training infrastructure. Full Self-Driving plus humanoid robotics make TSLA the most diversified AI-physical-world bet. PNTHR holds TSLA as a top-tier AI Elite holding spanning autonomy and robotics.' },
@@ -229,7 +229,7 @@ export const SECTORS = [
   {
     id: 6,
     name: 'AI Hyperscalers & Mega-Cap Software',
-    weight: 2,
+    weight: 7.8,
     thesis: 'The hyperscalers are the demand pull of the entire AI economy, they buy the chips, build the data centers, sign the power deals, and operate the foundational AI services. PNTHR holds them at deliberately reduced weight: their AI exposure is real, but they are already over-owned in every benchmark and represent rotation risk in a concentrated AI fund.',
     holdings: [
       { ticker: 'MSFT', name: 'Microsoft Corporation', thesis: 'Microsoft is the leading enterprise AI provider with Azure OpenAI, Copilot across the entire product suite, and direct OpenAI partnership. They are the AI-monetization mega-cap. PNTHR holds MSFT as a foundational AI Elite name with intentionally capped weight.' },
@@ -245,7 +245,7 @@ export const SECTORS = [
   {
     id: 7,
     name: 'AI Software & Agentic Platforms',
-    weight: 5,
+    weight: 9.2,
     thesis: 'Where AI meets enterprise revenue. From Palantir\'s government AI dominance to Salesforce\'s Agentforce platform to ServiceNow\'s AI-native workflows, this sector captures the application-layer AI software companies monetizing the model layer. PNTHR holds the durable software franchises with the cleanest AI inflections.',
     holdings: [
       { ticker: 'PATH', name: 'UiPath Inc.', thesis: 'UiPath is the leader in robotic process automation, AI-augmented enterprise workflow automation. PNTHR holds PATH as the software-RPA AI play.' },
@@ -284,7 +284,7 @@ export const SECTORS = [
   {
     id: 8,
     name: 'AI Cybersecurity',
-    weight: 3,
+    weight: 3.1,
     thesis: 'AI is creating the largest attack surface in computing history, agents, models, data pipelines, all vulnerable. AI also empowers attackers with new capabilities. PNTHR holds the cybersecurity leaders monetizing both the AI defense buildout and the AI-augmented detection arms race.',
     holdings: [
       { ticker: 'PANW', name: 'Palo Alto Networks', thesis: 'Palo Alto Networks is the leading cybersecurity platform with AI-driven XSIAM, Cortex, and Prisma Cloud. AI-augmented security across the kill chain. PNTHR holds PANW as a top-tier AI cyber Elite holding.' },
@@ -305,7 +305,7 @@ export const SECTORS = [
   {
     id: 9,
     name: 'AI Ad-Tech, Marketing & Data Licensing',
-    weight: 1,
+    weight: 0.3,
     thesis: 'Programmatic advertising and AI training data are two sides of the same coin, both monetize attention and data with AI at the center. PNTHR holds a small, focused position in the AI-ad-tech leaders, knowing the trade is ROI-sensitive but the AI tailwind is real.',
     holdings: [
       { ticker: 'PINS', name: 'Pinterest Inc.', thesis: 'Pinterest operates AI-driven visual search and discovery, billions of pins, AI-powered recommendations. PNTHR holds PINS as a focused consumer AI-discovery play.' },
@@ -321,7 +321,7 @@ export const SECTORS = [
   {
     id: 10,
     name: 'AI Fintech',
-    weight: 0.5,
+    weight: 0.7,
     thesis: 'AI underwriting, AI insurance, AI lending, the financial services renovation is just beginning. PNTHR holds a small RADAR position in the pure-play AI fintech names: not because the thesis is broken, but because capital is currently elsewhere. Small starter positions ensure we are positioned when flow returns.',
     holdings: [
       { ticker: 'UPST', name: 'Upstart Holdings', thesis: 'Upstart operates AI-driven consumer lending, the original pure-play AI lender. Currently rate-sensitive but AI underwriting thesis intact. PNTHR holds UPST as a small RADAR position in pure-play AI lending.' },
@@ -335,7 +335,7 @@ export const SECTORS = [
   {
     id: 11,
     name: 'AI Vertical SaaS & Workflow',
-    weight: 0.5,
+    weight: 0.7,
     thesis: 'Every vertical SaaS company is becoming an AI company, communications, contracts, real estate, restaurants. PNTHR holds a small RADAR position covering vertical SaaS AI exposure, ready to scale up when flow rotates here.',
     holdings: [
       { ticker: 'TWLO', name: 'Twilio Inc.', thesis: 'Twilio delivers AI-driven communications APIs and customer engagement platform. PNTHR holds TWLO as a focused communications-AI play.' },
@@ -353,7 +353,7 @@ export const SECTORS = [
   {
     id: 12,
     name: 'AI Healthcare, Genomics & Drug Discovery',
-    weight: 5,
+    weight: 0.7,
     thesis: 'AI is rewriting drug discovery, diagnostics, and personalized medicine. NVIDIA-backed Tempus, Recursion, and Schrödinger are building the AI-pharma infrastructure of the future. PNTHR captures the pure-play AI biotech leaders plus the genomics tools companies that will be irreplaceable in AI-driven medicine.',
     holdings: [
       { ticker: 'VEEV', name: 'Veeva Systems', thesis: 'Veeva provides AI-augmented life sciences cloud software, pharmaceutical and biotech AI workflow infrastructure. PNTHR holds VEEV as a focused vertical AI SaaS play.' },
@@ -379,7 +379,7 @@ export const SECTORS = [
   {
     id: 13,
     name: 'Drones, Space & Defense AI',
-    weight: 7,
+    weight: 5,
     thesis: 'The Pentagon and allies are spending unprecedented capital on AI-powered drones, autonomous systems, satellite intelligence, and AI-augmented defense software. PNTHR\'s defense-AI sector captures the prime contractors, drone pure-plays, space companies, and government services firms profiting from the AI defense super-cycle.',
     holdings: [
       { ticker: 'SPCX', name: 'SpaceX (Space Exploration Technologies)', thesis: 'SpaceX is the dominant launch provider and operator of Starlink, the largest satellite-internet network, public since its record June 2026 IPO. AI-driven autonomous launch/landing plus the Starlink AI backbone. PNTHR holds SPCX as the flagship space-AI Elite holding.' },
@@ -418,7 +418,7 @@ export const SECTORS = [
   {
     id: 14,
     name: 'International AI / EM ADRs',
-    weight: 0.5,
+    weight: 3.1,
     thesis: 'AI is global. Chinese hyperscalers, Latin American ecommerce platforms, Asian fintech, all are AI-monetizing at scale. PNTHR holds a small RADAR position in the international AI ADRs, accepting geopolitical risk in exchange for exposure to AI markets US benchmarks ignore.',
     holdings: [
       { ticker: 'BABA', name: 'Alibaba Group', thesis: 'Alibaba runs Qwen open-source LLMs, Alibaba Cloud AI infrastructure, and AI-driven ecommerce at Chinese scale. PNTHR holds BABA as a focused Chinese AI-cloud RADAR position.' },
@@ -433,7 +433,7 @@ export const SECTORS = [
   {
     id: 15,
     name: 'Quantum Computing',
-    weight: 2,
+    weight: 0.3,
     thesis: 'Quantum is the next computing paradigm, and an existential complement to AI. PNTHR holds a focused quantum basket: not because the technology is mature, but because when capital flow accelerates here, it accelerates violently. Small positions in every credible name ensure participation.',
     holdings: [
       { ticker: 'IONQ', name: 'IonQ Inc.', thesis: 'IonQ is the leading trapped-ion quantum computing pure-play with cloud quantum access via AWS, Azure, and Google. PNTHR holds IONQ as the cornerstone quantum holding.' },
@@ -449,7 +449,7 @@ export const SECTORS = [
   {
     id: 16,
     name: 'AI Materials, Packaging, Thermal & Industrial',
-    weight: 1.5,
+    weight: 3.6,
     thesis: 'Advanced packaging is the AI manufacturing chokepoint. AI cooling is the AI data center bottleneck. AI rare earths and copper are the physical foundations of the AI economy. PNTHR captures the materials, packaging, thermal, and industrial pure-plays that make AI possible at the atomic and physical layer.',
     holdings: [
       { ticker: 'VRT', name: 'Vertiv Holdings', thesis: 'Vertiv is the leading AI data center thermal and power management vendor, liquid cooling for NVIDIA HGX systems. PNTHR holds VRT as a top-tier AI-cooling Elite holding.' },
@@ -471,7 +471,7 @@ export const SECTORS = [
   {
     id: 17,
     name: 'Industrial AI',
-    weight: 4,
+    weight: 8,
     thesis: 'AI escaping the data center and entering the physical industrial economy. This sector captures autonomous machinery, factory automation, machine vision, robotics, and the industrial software and digital twins that run the factories, farms, mines, and supply chains of the global economy. PNTHR believes the next leg of the AI revolution is embodied: intelligence fused into physical equipment, where productivity gains are measured in real-world output, not just tokens.',
     holdings: [
       { ticker: 'AXON', name: 'Axon Enterprise', thesis: 'Axon is the AI platform for public safety. Its connected ecosystem of Tasers, body cameras, and the Axon Evidence cloud increasingly runs on AI, with Draft One automating police report writing and computer vision indexing video evidence at scale. PNTHR adds AXON as an AI-first public-safety compounder with a deep data moat, on conviction that the current drawdown is a re-rating setup rather than a broken thesis.' },
@@ -496,7 +496,7 @@ export const SECTORS = [
   {
     id: 18,
     name: 'AI Edge Computing',
-    weight: 10,
+    weight: 3,
     thesis: 'AI escaping the data center to run at the edge, on devices, in networks, and near where data is created. This sector captures the silicon that performs on-device inference and the distributed infrastructure that moves AI compute closer to users, where latency, bandwidth, privacy, and cost make the centralized cloud impractical. PNTHR believes inference at the edge is the next leg of AI proliferation, intelligence embedded in every phone, camera, vehicle, and access network.',
     holdings: [
       { ticker: 'NET', name: 'Cloudflare Inc.', thesis: 'Cloudflare is the leading edge AI compute platform, Workers AI runs inference at the network edge globally. Edge inference is a structural AI growth vector. PNTHR holds NET as the cornerstone edge-AI platform.' },

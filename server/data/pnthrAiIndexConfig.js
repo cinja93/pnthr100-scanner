@@ -28,6 +28,8 @@ export const BASE_VALUE    = 1000.00;
 
 export const SINGLE_NAME_CAP = 0.025;  // 2.50% non-hyperscaler cap (lowered 2026-06-25 for Mag-7 de-concentration)
 export const HYPERSCALER_CAP = 0.01;   // 1.00% hyperscaler-tier cap (lowered 2026-06-25)
+export const SECTOR_CAP = 0.30;        // 30% cap on any single SECTOR (added 2026-06-30) — keeps semis (~36% raw)
+                                       // from dominating the 18-sector index; redistributed to under-cap sectors.
 
 // Hyperscaler set = AI Hyperscalers & Mega-Cap Software (sector 6 of the
 // AI Universe taxonomy). These are the names that, uncapped, would dominate

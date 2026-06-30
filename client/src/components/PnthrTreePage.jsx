@@ -418,8 +418,8 @@ export default function PnthrTreePage() {
   // partly/wholly hypothetical, so label them rather than let them read as real $.
   const devourAllSim = devourPos.length > 0 && devourPos.every(p => p.sim);
   const devourHasSim = devourPos.some(p => p.sim);
-  // ATTACK + APPROACHING sorted MOST-LIQUID → least (20-day avg dollar volume); a new name lands in
-  // its liquidity slot automatically. The Badge shades the card dark-green (liquid) → light-green (illiquid).
+  // ATTACK + APPROACHING sorted MOST-LIQUID → least (20-day avg share volume = the engine's buy priority);
+  // a new name lands in its liquidity slot automatically. Badge shades dark-green (liquid) → light-green.
   const byLiquidity = (a, b) => (b.adv ?? -1) - (a.adv ?? -1);
   const attack = funnel.filter(f => f.state === 'attack' && !f.held).sort(byLiquidity);
   const approaching = funnel.filter(f => f.state === 'approaching' && !f.held).sort(byLiquidity);

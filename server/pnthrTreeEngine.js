@@ -149,11 +149,12 @@ export async function priorBands(db, tickers, excl) {
     if (bars.length >= ENTRY_HIGH_LOOKBACK) highs[d.ticker] = Math.max(...hi.map(b => +b.high));
     if (lo.length) lows[d.ticker] = Math.min(...lo.map(b => +b.low));
     lastClose[d.ticker] = +bars[bars.length - 1].close;   // for the live-price sanity net
-    // 20-day average DOLLAR volume (shares × close) = liquidity rank for the funnel cards. Dollar volume
-    // (not raw shares) so a $5 name and a $500 name compare fairly. Past bars only — executable.
-    const av = bars.slice(-20); let dv = 0, n = 0;
-    for (const b of av) { const v = +b.volume || 0, c = +b.close || 0; if (v > 0 && c > 0) { dv += v * c; n++; } }
-    if (n) adv[d.ticker] = dv / n;
+    // 20-day average SHARE volume = liquidity rank. Share volume (not dollar) is what the robustness
+    // battery validated as the most durable entry-selection signal (best out-of-sample). Drives BOTH the
+    // funnel card sort/shade AND the engine's scarce-capital buy priority. Past bars only — executable.
+    const av = bars.slice(-20); let vol = 0, n = 0;
+    for (const b of av) { const v = +b.volume || 0; if (v > 0) { vol += v; n++; } }
+    if (n) adv[d.ticker] = vol / n;
   }
   return { highs, lows, lastClose, adv };
 }
@@ -271,7 +272,7 @@ export async function getPnthrTreeState(db) {
       changePct: +q.changesPercentage || 0, state, held: held.has(t),
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
       attackAt: state === 'attack' ? (attackSeen[t] || null) : null,   // when this new-high signal first fired
-      adv: adv[t] ?? null,   // 20-day avg dollar volume → liquidity rank/gradient on the funnel cards
+      adv: adv[t] ?? null,   // 20-day avg share volume → liquidity rank/gradient + buy priority
       noBuyback: noBuyback.has(t),
     });
   }
@@ -608,7 +609,7 @@ export async function runPnthrTreeTick(db) {
     actions.push({ type: 'DATA_SANITY_EXCLUDE', ticker: f.ticker, price: f.price, lastClose: f.lastClose });
     await flagSuspectSplit(db, f.ticker, `Tree tick: live $${f.price} vs stored close $${f.lastClose}`).catch(() => {});
   }
-  const { highs, lows } = bands;
+  const { highs, lows, adv } = bands;
 
   // held set + current GROSS exposure (for the 2× leverage cap). Read your REAL account
   // ONCE (adopted in BOTH modes). In paper, ALSO count the engine's simulated would-buys
@@ -694,11 +695,15 @@ export async function runPnthrTreeTick(db) {
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const { shares: fullShares } = stop ? sizeFor(nav, price, stop) : { shares: 0 };
     if (!stop || fullShares < 1) continue;   // unchanged: no valid stop / sub-1-share full size → not a candidate
-    candidates.push({ t, price, priorHigh, stop, fullShares });
+    candidates.push({ t, price, priorHigh, stop, fullShares, adv: adv[t] ?? 0 });
   }
-  // CLOSEST-TO-TRIGGER first: the freshest breakout (price nearest its breakout line) gets scarce
-  // capital first. When capital is plentiful every candidate buys full-size regardless of order.
-  candidates.sort((a, b) => Math.abs(a.price - a.priorHigh) / a.priorHigh - Math.abs(b.price - b.priorHigh) / b.priorHigh);
+  // MOST-LIQUID first: when the 2× cap can't fund every same-day breakout, scarce capital goes to the
+  // highest 20-day share-volume names first. This replaced closest-to-trigger after a robustness battery
+  // (in-sample + out-of-sample on a separate universe) showed liquidity-priority materially beats it
+  // (e.g. ~92% vs ~60% CAGR at $100K, and it generalized OOS where closest-trigger did not). Ticker
+  // tiebreak = deterministic/reproducible. Matches the funnel card sort so the dark-green card is the
+  // one actually bought first. When capital is plentiful every candidate buys full-size regardless of order.
+  candidates.sort((a, b) => (b.adv - a.adv) || (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
   // SMA_BUFFER: a new entry must leave at least this much room under the 2× cap so buying power is
   // never driven to zero (Scott 2026-06-22 — "keep ≥$500 SMA available"). Anchored to the engine's
   // own room (grossCap − gross), computed from live positions + live NAV, because the broker's stored

@@ -1,0 +1,206 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: #0d0d0d;
+  color: #fff;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 4px 24px 12px;
+  flex-shrink: 0;
+}
+
+.asOf {
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.02em;
+  margin-right: auto;
+  font-family: monospace;
+}
+
+.refreshBtn {
+  background: #fcf000;
+  color: #111;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* Section labels */
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 24px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ccc;
+}
+.dotOb, .dotOs {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block;
+}
+.dotOb { background: #ef5350; box-shadow: 0 0 8px rgba(239,83,80,0.6); }
+.dotOs { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.6); }
+
+/* Grid of category rows; each row holds a Daily + Weekly box */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 24px;
+}
+.catRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .catRow { grid-template-columns: 1fr; }
+}
+
+/* Box */
+.box {
+  background: #151515;
+  border: 1px solid #262626;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.boxOb { border-top: 3px solid #ef5350; }
+.boxOs { border-top: 3px solid #4ade80; }
+
+.boxHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 4px;
+}
+.boxTitle { font-size: 14px; font-weight: 700; color: #fff; }
+.boxTf {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #777;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.boxCount {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #111;
+  background: #fcf000;
+  border-radius: 10px;
+  min-width: 22px;
+  text-align: center;
+  padding: 1px 7px;
+}
+.boxBlurb {
+  font-size: 10.5px;
+  color: #777;
+  padding: 0 14px 8px;
+  line-height: 1.35;
+}
+
+.empty {
+  padding: 10px 14px 16px;
+  font-size: 12px;
+  color: #555;
+  font-style: italic;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.table thead th {
+  text-align: left;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #666;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-bottom: 1px solid #262626;
+}
+.thRsi, .thPrice { text-align: right; }
+.table tbody td {
+  padding: 5px 14px;
+  border-bottom: 1px solid #1c1c1c;
+  vertical-align: middle;
+}
+.table tbody tr:last-child td { border-bottom: none; }
+
+.tickerBtn {
+  background: none;
+  border: none;
+  color: #fcf000;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.02em;
+}
+.tickerBtn:hover { text-decoration: underline; }
+
+.sectorCell {
+  color: #999;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rsiCell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rsiFrom { color: #aaa; }
+.rsiArrow { color: #666; margin: 0 4px; }
+.rsiTo { color: #fff; font-weight: 700; }
+
+.priceCell { text-align: right; color: #ccc; font-variant-numeric: tabular-nums; }
+
+/* Loading / error */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 60px 24px;
+  color: #888;
+}
+.spinner {
+  width: 34px; height: 34px;
+  border: 3px solid #262626;
+  border-top-color: #fcf000;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.errorState {
+  margin: 24px;
+  padding: 16px;
+  background: #2a1414;
+  border: 1px solid #5c2222;
+  border-radius: 8px;
+  color: #ef9a9a;
+  font-size: 13px;
+}

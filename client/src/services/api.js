@@ -1449,6 +1449,13 @@ export async function fetchHalfAndHalf() {
   return res.json();
 }
 
+export async function fetchAiObOs(forceRefresh = false) {
+  const url = `${API_BASE}/api/ai-obos${forceRefresh ? '?refresh=1' : ''}`;
+  const res = await apiFetch(url, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchAmbushReconcile() {
   const res = await apiFetch(`${API_BASE}/api/ambush/live-reconcile`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

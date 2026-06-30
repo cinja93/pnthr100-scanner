@@ -32,6 +32,7 @@ import EtfPage from './components/EtfPage';
 import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
+import AiObOsPage from './components/AiObOsPage';
 import Ai300IndexPage from './components/Ai300IndexPage';
 import AiMembersPage from './components/AiMembersPage';
 import BondHeatPage from './components/BondHeatPage';
@@ -1775,6 +1776,8 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* New Highs — intraday new highs: Carnivore 4-week, AI 300 42-week (lows removed) */}
           {renderPage === 'newHighsLows' && <NewHighsLowsPage />}
+
+          {renderPage === 'aiObOs' && <AiObOsPage />}
 
           {/* Half and Half — AI 300 split daily/weekly shorts & longs by price vs EMA */}
           {renderPage === 'half-and-half' && <HalfAndHalfPage />}

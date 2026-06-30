@@ -57,6 +57,7 @@ import { SECTOR_EMA_PERIODS as AI_SECTOR_EMA_PERIODS } from './data/pnthrAiSecto
 import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
+import { getAiObOs } from './aiObOsService.js';
 import { getHalfAndHalf } from './halfAndHalfService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -2480,6 +2481,17 @@ app.get('/api/pnthr-ai-stock/:ticker', async (req, res) => {
   } catch (err) {
     console.error('Error in /api/pnthr-ai-stock:', err);
     res.status(500).json({ error: 'Failed to load AI stock chart data' });
+  }
+});
+
+// ── OB/OS — AI-300 overbought/oversold RSI tracker (daily + weekly) ─────────
+app.get('/api/ai-obos', authenticateJWT, async (req, res) => {
+  try {
+    const data = await getAiObOs(req.query.refresh === '1');
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/ai-obos:', err);
+    res.status(500).json({ ok: false, error: 'Failed to load OB/OS data' });
   }
 });
 

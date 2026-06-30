@@ -9,7 +9,7 @@ import PageHeader from './PageHeader';
 import Pnthr300Strip from './Pnthr300Strip';
 import styles from './JunglePage.module.css';
 
-// PNTHR AI Jungle — the AI Universe (321 holdings, 17 sectors).
+// PNTHR AI Jungle — the AI Universe (324 holdings, 18 sectors).
 // Mirrors PNTHR 679 Jungle layout with three differences:
 //   • Performance Rank is by YTD return (sorted server-side, computed identically to 679)
 //   • Exchange column dropped (room for daily signals)

@@ -1744,10 +1744,10 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Jungle page */}
           {renderPage === 'jungle' && <JunglePage />}
 
-          {/* PNTHR AI Jungle — AI Universe (304 holdings, 16 sectors) */}
+          {/* PNTHR AI Jungle — AI Universe (324 holdings, 18 sectors) */}
           {renderPage === 'aiJungle' && <AiJunglePage />}
 
-          {/* PNTHR AI Sectors — 16 synthetic sector indices */}
+          {/* PNTHR AI Sectors — 18 synthetic sector indices */}
           {renderPage === 'aiSectors' && <AiSectorsPage />}
 
           {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}

@@ -328,7 +328,7 @@ export default function PulsePage({ onNavigate, fund }) {
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <MoversPanel movers={movers} onTickerClick={(stocks, idx) => { setChartList(stocks); setChartIndex(idx); }} />
         </div>
-        {/* Sector Performance — 27 sectors ranked by 5D return */}
+        {/* Sector Performance — 29 sectors ranked by 5D return */}
         <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
           <SectorPerformanceChart data={sectorPerf} />
         </div>
@@ -370,7 +370,7 @@ export default function PulsePage({ onNavigate, fund }) {
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <Ai300MoversPanel movers={ai300Movers} onTickerClick={(stocks, idx) => { setAi300ChartList(stocks); setAi300ChartIndex(idx); }} />
           </div>
-          {/* Sector Performance — 27 sectors ranked by 5D return */}
+          {/* Sector Performance — 29 sectors ranked by 5D return */}
           <div style={{ border: '1px solid rgba(255,215,0,0.30)', borderRadius: 10, background: '#0c0c0c', padding: '14px 14px', marginBottom: 14 }}>
             <SectorPerformanceChart data={sectorPerf} />
           </div>

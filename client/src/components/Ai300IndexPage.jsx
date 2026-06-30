@@ -29,7 +29,7 @@ export default function Ai300IndexPage() {
           <div ref={toolbarRef} style={{ display: 'flex', gap: 6, alignItems: 'center' }} />
           <button
             onClick={() => setShowWeights(true)}
-            title="Show how each of the 321 holdings is weighted in the index"
+            title="Show how each holding is weighted in the index"
             style={{
               padding: '6px 14px', fontSize: 12, fontWeight: 700,
               letterSpacing: '0.04em', background: 'transparent',

@@ -199,7 +199,7 @@ export default function AiSectorsPage() {
         <div>
           {!loading && !error && data?.ok && (
             <p className={junglePageStyles.subtitle}>
-              16 synthetic sector indices · capped market-cap weighted · monthly rebalance · base {data.baseDate} = {fmtNum(data.baseValue)} · as of {data.asOf}
+              {data.sectors?.length ?? 18} synthetic sector indices · capped market-cap weighted · monthly rebalance · base {data.baseDate} = {fmtNum(data.baseValue)} · as of {data.asOf}
             </p>
           )}
         </div>

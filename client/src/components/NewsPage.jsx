@@ -171,7 +171,7 @@ export default function NewsPage() {
 
   const rawHtml = issue?.narrative ? marked.parse(issue.narrative) : '';
 
-  // Build the combined 27-sector performance chart (11 S&P 500 + 16 AI 300,
+  // Build the combined sector performance chart (11 S&P 500 GICS + the AI-300 sectors,
   // ranked by 5-day return). Injected after the WHERE THE MONEY IS MOVING section.
   const sectorPerformanceChartHtml = useMemo(() => {
     const rows = issue?.charts?.sectorPerformance || [];
@@ -200,7 +200,7 @@ export default function NewsPage() {
     }).join('');
     return `
       <div class="pnthr-perf-panel">
-        <div class="pnthr-perf-title">ALL 27 SECTORS — 5-DAY PERFORMANCE RANKING</div>
+        <div class="pnthr-perf-title">ALL ${rows.length} SECTORS — 5-DAY PERFORMANCE RANKING</div>
         <div class="pnthr-perf-legend">
           <span class="pnthr-perf-legend-item"><span class="pnthr-perf-legend-dot" style="background:#fcf000"></span>S&P 500 Sectors</span>
           <span class="pnthr-perf-legend-item"><span class="pnthr-perf-legend-dot" style="background:#3b82f6"></span>AI 300 Sectors</span>

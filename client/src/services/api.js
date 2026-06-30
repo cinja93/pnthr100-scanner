@@ -547,7 +547,7 @@ export async function fetchAiStockChartData(ticker) {
   return response.json();
 }
 
-// PNTHR AI Sectors — latest snapshot for all 16 sector indices (grid page)
+// PNTHR AI Sectors — latest snapshot for all 18 sector indices (grid page)
 export async function fetchPnthrAiSectorsLatest(forceRefresh = false) {
   const url = `${API_BASE}/api/pnthr-ai-sectors${forceRefresh ? '?refresh=1' : ''}`;
   const response = await apiFetch(url, { headers: authHeaders() });
@@ -572,7 +572,7 @@ export async function fetchPnthrAiSectorConstituents(sectorId) {
   return response.json();
 }
 
-// Fetch PNTHR AI Jungle: 304 AI Universe holdings across 16 sectors
+// Fetch PNTHR AI Jungle: 324 AI Universe holdings across 18 sectors
 export async function fetchAiUniverse(forceRefresh = false) {
   const url = `${API_BASE}/api/ai-universe${forceRefresh ? '?refresh=1' : ''}`;
   const response = await apiFetch(url, { headers: authHeaders() });

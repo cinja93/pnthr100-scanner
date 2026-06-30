@@ -679,7 +679,7 @@ export default function Pnthr300ChartModal({ onClose, embedded = false, toolbarR
           fontSize: 10, color: '#666', fontStyle: 'italic',
           display: 'flex', justifyContent: 'space-between',
         }}>
-          <span>321 holdings · capped market-cap weighted (2.5% / 1.0% hyperscaler) · monthly rebalance · base {latest?.baseDate} = {fmtNum(latest?.baseValue)}</span>
+          <span>{latest?.totalHoldings ?? 324} holdings · capped market-cap weighted (2.5% / 1.0% hyperscaler) · monthly rebalance · base {latest?.baseDate} = {fmtNum(latest?.baseValue)}</span>
           {latest?.asOf && <span>as of {latest.asOf}</span>}
         </div>
       </div>

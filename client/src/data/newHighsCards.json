@@ -5,27 +5,27 @@
     "rows": [
       [
         "Net return",
-        "+840%"
+        "+742%"
       ],
       [
         "CAGR",
-        "91.9%"
+        "85.9%"
       ],
       [
         "Sharpe",
-        "1.39"
+        "1.34"
       ],
       [
         "Sortino",
-        "2.04"
+        "1.94"
       ],
       [
         "Profit factor",
-        "1.97x"
+        "1.84x"
       ],
       [
         "Calmar",
-        "1.90"
+        "1.77"
       ],
       [
         "Max drawdown",
@@ -33,11 +33,11 @@
       ],
       [
         "Win rate",
-        "28% (5.17x payoff)"
+        "27% (4.94x payoff)"
       ],
       [
         "Trades",
-        "1,375"
+        "1,385"
       ],
       [
         "S&P 500 (same window)",
@@ -45,11 +45,11 @@
       ],
       [
         "Outperformance vs S&P",
-        "+746%"
+        "+649%"
       ]
     ],
     "asOf": "2026-06-11",
-    "inputHash": "9f0d18d0218fa6356c59ed33a5b8a82248469e0b"
+    "inputHash": "292ace7bbd2901ed1f56de17eaf6f82bce427531"
   },
   "carn": {
     "rows": [

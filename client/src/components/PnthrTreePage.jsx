@@ -174,11 +174,12 @@ function NoBuybackBadge({ ticker, blocked, onToggle, busy }) {
   );
 }
 
-function Badge({ f, onClick, onToggleBuyback, liqFrac }) {
-  // stalking = outline; approaching = flashing; attack = filled. ATTACK/APPROACHING are shaded by
-  // liquidity: most liquid = DARK green (liqFrac 0), least liquid = LIGHT green (liqFrac 1).
+function Badge({ f, onClick, onToggleBuyback, liqFrac, rank }) {
+  // stalking = outline; approaching = flashing; attack = filled. ATTACK/APPROACHING carry a liquidity
+  // RANK (#1 = most liquid = first for scarce capital) + the 20-day avg share volume, and shade dark→light.
   const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, margin: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' };
   const liqBg = `hsl(142, 64%, ${Math.round(26 + (liqFrac ?? 1) * 30)}%)`;   // 26% dark → 56% light
+  const fmtVol = (v) => v == null ? '' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? Math.round(v / 1e3) + 'K' : String(Math.round(v));
   let style;
   if (f.state === 'attack') style = { ...base, background: liqBg, border: '1px solid #22c55e', color: '#fff', fontWeight: 700 };
   else if (f.state === 'approaching') style = { ...base, background: liqBg, border: '1px dashed #86efac', color: '#fff', fontWeight: 600, animation: 'treeflash 1s ease-in-out infinite' };
@@ -188,6 +189,12 @@ function Badge({ f, onClick, onToggleBuyback, liqFrac }) {
       ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 42wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
       : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 42wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
+      {rank != null && (f.state === 'attack' || f.state === 'approaching') && (
+        <span style={{ background: '#0009', padding: '1px 6px', borderRadius: 5, fontSize: 11, fontWeight: 700 }}
+          title={`Liquidity rank #${rank} — buy priority when capital is tight (20-day avg ${fmtVol(f.adv)} shares/day)`}>
+          #{rank}<span style={{ opacity: 0.7, fontWeight: 400, marginLeft: 3 }}>({fmtVol(f.adv)})</span>
+        </span>
+      )}
       {f.manual && <span style={{ background: '#0008', padding: '1px 5px', borderRadius: 5, color: '#facc15', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>MANUAL</span>}
       {(f.state === 'attack' || f.state === 'approaching') && f.shares > 0 && (
         <>
@@ -614,8 +621,9 @@ export default function PnthrTreePage() {
       {/* ATTACK — new highs */}
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#22c55e', fontSize: 13, letterSpacing: '0.08em' }}>⚔️ ATTACK — NEW 42-WEEK HIGHS · READY FOR PURCHASE ({attack.length})</h3>
+        <div style={{ color: '#6b8f78', fontSize: 10, marginBottom: 4 }}>#1–#{attack.length} = liquidity rank (20-day avg shares/day). Buy priority when capital is tight; with room, all buy.</div>
         {attack.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None at a new high right now.</div> :
-          <div>{attack.map((f, i, arr) => <Badge key={f.ticker} f={f} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
+          <div>{attack.map((f, i, arr) => <Badge key={f.ticker} f={f} rank={i + 1} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(attack.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* MANUAL TRADES — positions you hold that Tree never trades (SPCX, non-AI-300) */}
@@ -631,7 +639,7 @@ export default function PnthrTreePage() {
       <div style={{ marginTop: 18 }}>
         <h3 style={{ color: '#facc15', fontSize: 13, letterSpacing: '0.08em' }}>APPROACHING — within 1% of a new high ({approaching.length})</h3>
         {approaching.length === 0 ? <div style={{ color: '#666', fontSize: 12 }}>None close yet.</div> :
-          <div>{approaching.map((f, i, arr) => <Badge key={f.ticker} f={f} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
+          <div>{approaching.map((f, i, arr) => <Badge key={f.ticker} f={f} rank={i + 1} liqFrac={arr.length > 1 ? i / (arr.length - 1) : 0} onClick={() => openChart(approaching.map(x => x.ticker), f.ticker)} onToggleBuyback={toggleBuyback} />)}</div>}
       </div>
 
       {/* STALKING — the universe */}

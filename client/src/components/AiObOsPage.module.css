@@ -90,6 +90,17 @@
   gap: 8px;
   padding: 10px 14px 4px;
 }
+.sentiment {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.sentimentBull { background: rgba(74, 222, 128, 0.16); color: #4ade80; border: 1px solid rgba(74,222,128,0.45); }
+.sentimentBear { background: rgba(239, 83, 80, 0.16);  color: #ef5350; border: 1px solid rgba(239,83,80,0.45); }
+
 .boxTitle { font-size: 14px; font-weight: 700; color: #fff; }
 .boxTf {
   font-size: 10px;

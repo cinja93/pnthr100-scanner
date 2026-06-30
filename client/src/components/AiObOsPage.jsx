@@ -71,6 +71,9 @@ function ObOsBox({ category, timeframe, rows, onTickerClick, treeStages = {} }) 
   return (
     <div className={`${styles.box} ${category.side === 'ob' ? styles.boxOb : styles.boxOs}`}>
       <div className={styles.boxHead}>
+        <span className={`${styles.sentiment} ${category.side === 'ob' ? styles.sentimentBear : styles.sentimentBull}`}>
+          {category.side === 'ob' ? 'Bearish' : 'Bullish'}
+        </span>
         <span className={styles.boxTitle}>{category.title}</span>
         <span className={styles.boxTf}>{timeframe}</span>
         {freshCount > 0 && <span className={styles.freshHeadPill}>{freshCount} fresh</span>}

@@ -26,6 +26,7 @@ for (const sec of SECTORS) {
       sectorId:   sec.id,
       sectorName: sec.name,
       name:       h.name,
+      thesis:     h.thesis || null,   // the same brief description shown on AI Members
     };
   }
 }
@@ -84,7 +85,7 @@ export async function getAiStockChartData(ticker) {
   const profile = Array.isArray(profileArr) && profileArr.length > 0 ? profileArr[0] : null;
 
   // Resolve EMA period + gate offset
-  let sectorPeriod, gateOff, resolvedSectorName, resolvedSectorId, resolvedName;
+  let sectorPeriod, gateOff, resolvedSectorName, resolvedSectorId, resolvedName, resolvedThesis;
   if (isAI) {
     const carnivore = isCarnivoreMode(ticker);
     sectorPeriod = carnivore ? getCarnivoreEmaPeriod(ticker) : (SECTOR_EMA_PERIODS[meta.sectorId] || 30);
@@ -92,6 +93,7 @@ export async function getAiStockChartData(ticker) {
     resolvedSectorId   = meta.sectorId;
     resolvedSectorName = meta.sectorName;
     resolvedName       = meta.name;
+    resolvedThesis     = meta.thesis || null;
   } else {
     const fmpSector = profile?.sector || null;
     const isEtf = !!ETF_TO_SECTOR[ticker];
@@ -100,6 +102,7 @@ export async function getAiStockChartData(ticker) {
     resolvedSectorId   = fmpSector || null;
     resolvedSectorName = fmpSector || null;
     resolvedName       = profile?.companyName || ticker;
+    resolvedThesis     = null;   // non-AI names (679/ETFs) have no PNTHR thesis on file
   }
   const liveQuote = Array.isArray(liveQuoteArr) && liveQuoteArr.length > 0 ? liveQuoteArr[0] : null;
 
@@ -367,6 +370,7 @@ export async function getAiStockChartData(ticker) {
     name:         resolvedName,
     sectorId:     resolvedSectorId,
     sectorName:   resolvedSectorName,
+    thesis:       resolvedThesis,      // brief PNTHR description (AI names only) — for the chart "Description" button
     isAI,
     emaPeriod:        sectorPeriod,    // canonical sector period
     dailyEmaPeriod:   dailyPeriod,     // period actually used for daily (may be 21W fallback)

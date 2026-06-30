@@ -694,6 +694,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [chartType, setChartType] = useState('bars');
+  const [showDesc, setShowDesc]   = useState(false);   // PNTHR description popover (toggled from the header)
   const { isAdmin } = useAuth() || {};
   const [washWarning, setWashWarning] = useState(null);
   const [fcfMap, setFcfMap]       = useState({});
@@ -751,6 +752,7 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
   useEffect(() => {
     if (!activeTicker) return;
     let cancelled = false;
+    setShowDesc(false);   // close the description popover when switching names
     const fetchOnce = (silent) => {
       if (!silent) { setLoading(true); setError(null); setData(null); }
       fetchAiStockChartData(activeTicker)
@@ -879,6 +881,18 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
                 </span>
               );
             })()}
+            <button
+              onClick={() => setShowDesc(s => !s)}
+              title="Show the PNTHR description for this name (same as AI Members)"
+              style={{
+                padding: '5px 10px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                background: showDesc ? '#fcf000' : 'transparent',
+                color: showDesc ? '#000' : '#888',
+                border: '1px solid #2a2a2a', borderRadius: 4, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              Description
+            </button>
             <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
               {[
                 { key: 'bars',    label: 'OHLC Bars' },
@@ -912,7 +926,44 @@ export default function AiTickerChartModal({ ticker, tickers, initialIndex = 0, 
         </div>
 
         {/* Body — two charts side by side, each panel owns its own SIZE IT / QUEUE IT / stop line */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, position: 'relative' }}>
+          {/* PNTHR description popover — click the chart (the dim backdrop) to dismiss */}
+          {showDesc && (
+            <>
+              <div
+                onClick={() => setShowDesc(false)}
+                style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
+              />
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
+                  width: 'min(640px, 92%)', maxHeight: '74%', overflowY: 'auto',
+                  background: '#111', border: '1px solid #fcf000', borderRadius: 8,
+                  padding: '16px 18px', boxShadow: '0 12px 44px rgba(0,0,0,0.65)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ color: '#fcf000', fontSize: 11, fontWeight: 800, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
+                    PNTHR Description{data?.name ? ` — ${data.name}` : ` — ${activeTicker}`}
+                  </span>
+                  <button
+                    onClick={() => setShowDesc(false)}
+                    title="Close (or click the chart)"
+                    style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div style={{ color: '#ddd', fontSize: 13.5, lineHeight: 1.65 }}>
+                  {data?.thesis || 'No PNTHR description on file for this name.'}
+                </div>
+                <div style={{ color: '#555', fontSize: 10, marginTop: 12, fontStyle: 'italic' }}>
+                  Click anywhere on the chart to close.
+                </div>
+              </div>
+            </>
+          )}
           {loading && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Loading {activeTicker}…</div>}
           {error && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>{error}</div>}
 

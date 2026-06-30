@@ -142,7 +142,7 @@
   padding: 4px 14px;
   border-bottom: 1px solid #262626;
 }
-.thRsi, .thPrice { text-align: right; }
+.thRsi, .thMove, .thPrice { text-align: right; }
 .table tbody td {
   padding: 5px 14px;
   border-bottom: 1px solid #1c1c1c;
@@ -170,10 +170,67 @@
   text-overflow: ellipsis;
 }
 
-.rsiCell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.rsiFrom { color: #aaa; }
-.rsiArrow { color: #666; margin: 0 4px; }
-.rsiTo { color: #fff; font-weight: 700; }
+/* Ticker cell + FRESH tag */
+.tickerCell { white-space: nowrap; }
+.freshTag {
+  margin-left: 6px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #111;
+  background: #fcf000;
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: middle;
+}
+.freshRow td { background: rgba(252, 240, 0, 0.05); }
+.freshRow td:first-child { box-shadow: inset 3px 0 0 #fcf000; }
+.freshHeadPill {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fcf000;
+  border: 1px solid rgba(252, 240, 0, 0.45);
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+
+/* PNTHR weekly signal badge — colors match StockTable */
+.signalCell { white-space: nowrap; }
+.sigBadge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+}
+.badgeBL { background: rgba(74, 222, 128, 0.16); color: #4ade80; border: 1px solid rgba(74,222,128,0.4); }
+.badgeSS { background: rgba(239, 83, 80, 0.16);  color: #ef5350; border: 1px solid rgba(239,83,80,0.4); }
+.badgeBE { background: rgba(255, 167, 38, 0.16); color: #ffa726; border: 1px solid rgba(255,167,38,0.4); }
+.signalNone { color: #555; }
+
+/* Current RSI chip — colored by zone */
+.rsiCell { text-align: right; white-space: nowrap; }
+.rsiChip {
+  display: inline-block;
+  min-width: 38px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.rsiHot  { background: rgba(239, 83, 80, 0.18); color: #ff8a85; }
+.rsiCold { background: rgba(74, 222, 128, 0.18); color: #86efac; }
+.rsiMid  { background: rgba(255, 255, 255, 0.07); color: #ddd; }
+
+/* Move (peak/trough → current) */
+.moveCell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.moveFrom { color: #999; }
+.moveArrow { color: #666; margin: 0 3px; }
+.moveTo { color: #fff; font-weight: 700; }
 
 .priceCell { text-align: right; color: #ccc; font-variant-numeric: tabular-nums; }
 

@@ -32,6 +32,7 @@
 import { connectToDatabase } from './database.js';
 import { SECTORS, FUND_META } from './scripts/aiUniverse/aiUniverseData.js';
 import { computeWilderRSI } from './lib/rsi.js';
+import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 
 // ── Tunables (locked per spec 2026-06-30) ───────────────────────────────────
 const RSI_PERIOD     = 14;     // Wilder RSI-14
@@ -98,7 +99,11 @@ function closedBarCutoffs(now = new Date()) {
 // ── Classification state machine ────────────────────────────────────────────
 // Walks an ascending RSI series and reports the bucket of the LATEST bar, with
 // the episode peak/trough carried through OB_ACTIVE → OB_COOLING (and the
-// oversold mirror). Returns { bucket, from, to } or null.
+// oversold mirror). Returns { bucket, from, to, fresh } or null.
+// `fresh` = the defining event happened on the latest closed bar:
+//   rollingOver/turningUp — the turn was first confirmed (>= TURN off the
+//     extreme) on this bar (the previous bar did not yet qualify);
+//   brokeDown/brokeOut    — the line was crossed on this bar (coolBars === 1).
 export function classifyObOs(rsi, opts = {}) {
   const ob   = opts.ob   ?? OB_LINE;
   const os   = opts.os   ?? OS_LINE;
@@ -140,11 +145,18 @@ export function classifyObOs(rsi, opts = {}) {
     }
   }
 
-  const cur = vals[n - 1];
-  if (state === 'OB_ACTIVE')  return (peak != null && cur <= peak - turn)   ? { bucket: 'rollingOver', from: peak,   to: cur } : null;
-  if (state === 'OB_COOLING') return { bucket: 'brokeDown', from: peak,   to: cur };
-  if (state === 'OS_ACTIVE')  return (trough != null && cur >= trough + turn) ? { bucket: 'turningUp',  from: trough, to: cur } : null;
-  if (state === 'OS_WARMING') return { bucket: 'brokeOut',  from: trough, to: cur };
+  const cur  = vals[n - 1];
+  const prev = vals[n - 2];
+  if (state === 'OB_ACTIVE') {
+    if (peak == null || cur > peak - turn) return null;
+    return { bucket: 'rollingOver', from: peak, to: cur, fresh: prev > peak - turn };
+  }
+  if (state === 'OB_COOLING') return { bucket: 'brokeDown', from: peak, to: cur, fresh: coolBars === 1 };
+  if (state === 'OS_ACTIVE') {
+    if (trough == null || cur < trough + turn) return null;
+    return { bucket: 'turningUp', from: trough, to: cur, fresh: prev < trough + turn };
+  }
+  if (state === 'OS_WARMING') return { bucket: 'brokeOut', from: trough, to: cur, fresh: coolBars === 1 };
   return null;
 }
 
@@ -152,7 +164,7 @@ const r1 = v => Math.round(v * 10) / 10;   // 1-decimal RSI for display/truthful
 
 // Build the four buckets for one timeframe from a map of ticker → ascending
 // { closes, lastClose, asOf }.
-function buildBuckets(seriesByTicker, crossWindow) {
+function buildBuckets(seriesByTicker, crossWindow, signalsMap = {}) {
   const out = { rollingOver: [], brokeDown: [], turningUp: [], brokeOut: [] };
   for (const ticker of Object.keys(seriesByTicker)) {
     const s = seriesByTicker[ticker];
@@ -161,6 +173,7 @@ function buildBuckets(seriesByTicker, crossWindow) {
     const hit = classifyObOs(rsi, { crossWindow });
     if (!hit) continue;
     const meta = TICKER_META[ticker] || {};
+    const sig  = signalsMap[ticker] || null;
     out[hit.bucket].push({
       ticker,
       name:       meta.name || ticker,
@@ -168,15 +181,28 @@ function buildBuckets(seriesByTicker, crossWindow) {
       sectorName: meta.sectorName || null,
       from:       r1(hit.from),
       to:         r1(hit.to),
+      rsi:        r1(hit.to),     // current RSI = the "to" value
+      fresh:      !!hit.fresh,
       price:      s.lastClose,
       asOf:       s.asOf,
+      // Canonical PNTHR WEEKLY signal — same source as the Jungle
+      // (aiUniverseSignalsService). The "+N" weeks count is rendered on the
+      // client via computeWeeksAgo(signalDate, lastBarDate) so the BL+N / SS+N
+      // label matches StockTable exactly.
+      signal:      sig?.signal ?? null,
+      signalDate:  sig?.signalDate ?? null,
+      lastBarDate: sig?.lastBarDate ?? null,
+      isNewSignal: !!sig?.isNewSignal,
     });
   }
-  // Sort: overbought by peak desc (most extreme first); oversold by trough asc.
-  out.rollingOver.sort((a, b) => b.from - a.from);
-  out.brokeDown.sort((a, b) => b.from - a.from);
-  out.turningUp.sort((a, b) => a.from - b.from);
-  out.brokeOut.sort((a, b) => a.from - b.from);
+  // Sort by sector (canonical AI sector-id order), then by RSI extremity within
+  // sector (most overbought / most oversold first).
+  const bySectorThen = extremeCmp => (a, b) =>
+    ((a.sectorId ?? 999) - (b.sectorId ?? 999)) || extremeCmp(a, b);
+  out.rollingOver.sort(bySectorThen((a, b) => b.from - a.from));
+  out.brokeDown.sort(bySectorThen((a, b) => b.from - a.from));
+  out.turningUp.sort(bySectorThen((a, b) => a.from - b.from));
+  out.brokeOut.sort(bySectorThen((a, b) => a.from - b.from));
   return out;
 }
 
@@ -218,13 +244,15 @@ export async function getAiObOs(forceRefresh = false) {
 
   const { dailyCutoff, weeklyCutoff } = closedBarCutoffs();
 
-  const [dailySeries, weeklySeries] = await Promise.all([
+  const [dailySeries, weeklySeries, sigBundle] = await Promise.all([
     loadSeries(db, 'pnthr_ai_bt_candles',        'daily',  'date',   dailyCutoff),
     loadSeries(db, 'pnthr_ai_bt_candles_weekly',  'weekly', 'weekOf', weeklyCutoff),
+    getAiUniverseSignals().catch(() => ({ signals: {} })),
   ]);
+  const signalsMap = sigBundle?.signals || {};
 
-  const daily  = buildBuckets(dailySeries,  CROSS_WINDOW_D);
-  const weekly = buildBuckets(weeklySeries, CROSS_WINDOW_W);
+  const daily  = buildBuckets(dailySeries,  CROSS_WINDOW_D, signalsMap);
+  const weekly = buildBuckets(weeklySeries, CROSS_WINDOW_W, signalsMap);
 
   // as-of = the latest closed bar date actually used (max across names)
   const maxAsOf = obj => Object.values(obj).reduce((m, s) => (s.asOf > m ? s.asOf : m), '');

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import AiTickerChartModal from './AiTickerChartModal';
 import PageHeader from './PageHeader';
 import { fetchAiObOs } from '../services/api';
+import { computeWeeksAgo } from '../utils/dateUtils';
 import styles from './AiObOsPage.module.css';
 
 // PNTHR OB/OS — Overbought / Oversold tracker for the AI Elite 300.
@@ -21,13 +22,36 @@ const CATEGORIES = [
   { key: 'brokeOut',    title: 'Broke Above 30', side: 'os', blurb: 'RSI crossed up through 30 — momentum reviving' },
 ];
 
+function SignalBadge({ row }) {
+  const sig = row.signal;
+  if (!sig) return <span className={styles.signalNone}>—</span>;
+  const wks = computeWeeksAgo(row.signalDate, row.lastBarDate);
+  if (wks == null) return <span className={styles.signalNone}>—</span>;
+  const cls = sig === 'BL' ? styles.badgeBL
+            : sig === 'SS' ? styles.badgeSS
+            : styles.badgeBE;   // BE + SE both orange (matches StockTable)
+  return (
+    <span className={`${styles.sigBadge} ${cls}`}>
+      {row.isNewSignal ? '★ ' : ''}{sig}+{wks}
+    </span>
+  );
+}
+
+function rsiChipClass(v) {
+  if (v >= 70) return styles.rsiHot;
+  if (v <= 30) return styles.rsiCold;
+  return styles.rsiMid;
+}
+
 function ObOsBox({ category, timeframe, rows, onTickerClick }) {
   const list = rows || [];
+  const freshCount = list.filter(r => r.fresh).length;
   return (
     <div className={`${styles.box} ${category.side === 'ob' ? styles.boxOb : styles.boxOs}`}>
       <div className={styles.boxHead}>
         <span className={styles.boxTitle}>{category.title}</span>
         <span className={styles.boxTf}>{timeframe}</span>
+        {freshCount > 0 && <span className={styles.freshHeadPill}>{freshCount} fresh</span>}
         <span className={styles.boxCount}>{list.length}</span>
       </div>
       <div className={styles.boxBlurb}>{category.blurb}</div>
@@ -39,25 +63,32 @@ function ObOsBox({ category, timeframe, rows, onTickerClick }) {
             <tr>
               <th className={styles.thTicker}>Ticker</th>
               <th className={styles.thSector}>Sector</th>
+              <th className={styles.thSignal}>Signal</th>
               <th className={styles.thRsi}>RSI</th>
+              <th className={styles.thMove}>Move</th>
               <th className={styles.thPrice}>Price</th>
             </tr>
           </thead>
           <tbody>
             {list.map((r, i) => (
-              <tr key={r.ticker}>
-                <td>
+              <tr key={r.ticker} className={r.fresh ? styles.freshRow : undefined}>
+                <td className={styles.tickerCell}>
                   <button
                     className={styles.tickerBtn}
                     onClick={() => onTickerClick(list, i)}
                     title={r.name}
                   >{r.ticker}</button>
+                  {r.fresh && <span className={styles.freshTag} title="Turned on the latest closed bar">FRESH</span>}
                 </td>
                 <td className={styles.sectorCell} title={r.sectorName || ''}>{r.sectorName || '—'}</td>
+                <td className={styles.signalCell}><SignalBadge row={r} /></td>
                 <td className={styles.rsiCell}>
-                  <span className={styles.rsiFrom}>{r.from}</span>
-                  <span className={styles.rsiArrow}>→</span>
-                  <span className={styles.rsiTo}>{r.to}</span>
+                  <span className={`${styles.rsiChip} ${rsiChipClass(r.rsi)}`}>{r.rsi}</span>
+                </td>
+                <td className={styles.moveCell}>
+                  <span className={styles.moveFrom}>{r.from}</span>
+                  <span className={styles.moveArrow}>→</span>
+                  <span className={styles.moveTo}>{r.to}</span>
                 </td>
                 <td className={styles.priceCell}>{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
               </tr>

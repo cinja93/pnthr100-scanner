@@ -1456,6 +1456,14 @@ export async function fetchAiObOs(forceRefresh = false) {
   return res.json();
 }
 
+// Live PNTHR Tree funnel/positions state (same endpoint the Tree page polls).
+// Used by the OB/OS page to flash tickers that are live Tree 42-wk-high names.
+export async function fetchPnthrTreeState() {
+  const res = await apiFetch(`${API_BASE}/api/pnthr-tree`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function fetchAmbushReconcile() {
   const res = await apiFetch(`${API_BASE}/api/ambush/live-reconcile`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,9 +1,31 @@
 import { useState, useEffect } from 'react';
 import AiTickerChartModal from './AiTickerChartModal';
 import PageHeader from './PageHeader';
-import { fetchAiObOs } from '../services/api';
+import { fetchAiObOs, fetchPnthrTreeState } from '../services/api';
 import { computeWeeksAgo } from '../utils/dateUtils';
 import styles from './AiObOsPage.module.css';
+
+// Live PNTHR Tree funnel stages we flash on OB/OS (mirrors PnthrTreePage's own
+// categorization): non-held funnel names in attack/approaching, plus held
+// positions split into protect (stop locked at/above entry) vs devour.
+const TREE_STAGE_META = {
+  attack:      { cls: 'stageAttack',      label: 'PNTHR Tree: ATTACK — new 42-week high today' },
+  approaching: { cls: 'stageApproaching', label: 'PNTHR Tree: APPROACHING — within 1% of the 42-week high' },
+  devour:      { cls: 'stageDevour',      label: 'PNTHR Tree: DEVOUR — held, profit running' },
+  protect:     { cls: 'stageProtect',     label: 'PNTHR Tree: PROTECT — held, stop locked at/above entry' },
+};
+
+function buildTreeStageMap(treeState) {
+  const map = {};
+  if (!treeState) return map;
+  for (const f of treeState.funnel || []) {
+    if (!f.held && (f.state === 'attack' || f.state === 'approaching')) map[f.ticker] = f.state;
+  }
+  for (const p of treeState.positions || []) {
+    map[p.ticker] = p.protected ? 'protect' : 'devour';   // held position wins over funnel
+  }
+  return map;
+}
 
 // PNTHR OB/OS — Overbought / Oversold tracker for the AI Elite 300.
 // Eight boxes: each of four categories gets a Daily box and a Weekly box.
@@ -43,7 +65,7 @@ function rsiChipClass(v) {
   return styles.rsiMid;
 }
 
-function ObOsBox({ category, timeframe, rows, onTickerClick }) {
+function ObOsBox({ category, timeframe, rows, onTickerClick, treeStages = {} }) {
   const list = rows || [];
   const freshCount = list.filter(r => r.fresh).length;
   return (
@@ -70,14 +92,18 @@ function ObOsBox({ category, timeframe, rows, onTickerClick }) {
             </tr>
           </thead>
           <tbody>
-            {list.map((r, i) => (
+            {list.map((r, i) => {
+              const stage = treeStages[r.ticker];
+              const treeMeta = stage ? TREE_STAGE_META[stage] : null;
+              return (
               <tr key={r.ticker} className={r.fresh ? styles.freshRow : undefined}>
                 <td className={styles.tickerCell}>
                   <button
-                    className={styles.tickerBtn}
+                    className={`${styles.tickerBtn} ${treeMeta ? `${styles.treeFlash} ${styles[treeMeta.cls]}` : ''}`}
                     onClick={() => onTickerClick(list, i)}
-                    title={r.name}
+                    title={treeMeta ? `${r.name} · ${treeMeta.label}` : r.name}
                   >{r.ticker}</button>
+                  {treeMeta && <span className={styles.treeMark} title={treeMeta.label}>🌳</span>}
                   {r.fresh && <span className={styles.freshTag} title="Turned on the latest closed bar">FRESH</span>}
                 </td>
                 <td className={styles.sectorCell} title={r.sectorName || ''}>{r.sectorName || '—'}</td>
@@ -92,7 +118,8 @@ function ObOsBox({ category, timeframe, rows, onTickerClick }) {
                 </td>
                 <td className={styles.priceCell}>{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -106,6 +133,15 @@ export default function AiObOsPage() {
   const [error, setError]     = useState(null);
   const [chartTickers, setChartTickers] = useState([]);
   const [chartIndex, setChartIndex]     = useState(0);
+  const [treeStages, setTreeStages]     = useState({});   // ticker -> live Tree stage
+
+  // Live PNTHR Tree funnel state — refreshed on the poll so the flash reflects
+  // intraday attack/approaching changes. Non-fatal: if it fails, no flash shows.
+  function loadTree() {
+    fetchPnthrTreeState()
+      .then(s => setTreeStages(buildTreeStageMap(s)))
+      .catch(() => {});
+  }
 
   function load(forceRefresh = false, { silent = false } = {}) {
     if (!silent) setLoading(true);
@@ -126,7 +162,8 @@ export default function AiObOsPage() {
   // keeps the page current if it is left open across the close.
   useEffect(() => {
     load();
-    const id = setInterval(() => load(false, { silent: true }), 60000);
+    loadTree();
+    const id = setInterval(() => { load(false, { silent: true }); loadTree(); }, 60000);
     return () => clearInterval(id);
   }, []);
 
@@ -177,8 +214,8 @@ export default function AiObOsPage() {
           <div className={styles.grid}>
             {CATEGORIES.filter(c => c.side === 'ob').map(cat => (
               <div className={styles.catRow} key={cat.key}>
-                <ObOsBox category={cat} timeframe="Daily"  rows={data.daily?.[cat.key]}  onTickerClick={handleTickerClick} />
-                <ObOsBox category={cat} timeframe="Weekly" rows={data.weekly?.[cat.key]} onTickerClick={handleTickerClick} />
+                <ObOsBox category={cat} timeframe="Daily"  rows={data.daily?.[cat.key]}  onTickerClick={handleTickerClick} treeStages={treeStages} />
+                <ObOsBox category={cat} timeframe="Weekly" rows={data.weekly?.[cat.key]} onTickerClick={handleTickerClick} treeStages={treeStages} />
               </div>
             ))}
           </div>
@@ -189,8 +226,8 @@ export default function AiObOsPage() {
           <div className={styles.grid}>
             {CATEGORIES.filter(c => c.side === 'os').map(cat => (
               <div className={styles.catRow} key={cat.key}>
-                <ObOsBox category={cat} timeframe="Daily"  rows={data.daily?.[cat.key]}  onTickerClick={handleTickerClick} />
-                <ObOsBox category={cat} timeframe="Weekly" rows={data.weekly?.[cat.key]} onTickerClick={handleTickerClick} />
+                <ObOsBox category={cat} timeframe="Daily"  rows={data.daily?.[cat.key]}  onTickerClick={handleTickerClick} treeStages={treeStages} />
+                <ObOsBox category={cat} timeframe="Weekly" rows={data.weekly?.[cat.key]} onTickerClick={handleTickerClick} treeStages={treeStages} />
               </div>
             ))}
           </div>

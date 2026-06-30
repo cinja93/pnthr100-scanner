@@ -314,6 +314,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`  $${(100000).toLocaleString()} → $${m.endingEquity.toLocaleString()}  TOTAL ${m.totalReturnPct}%  CAGR ${m.annualizedReturn}%  MaxDD ${m.maxDDPct}%  Calmar ${m.calmarAnnual}  Sharpe ${m.sharpe}  Sortino ${m.sortino}`);
   console.log(`  trades ${m.totalTrades} (${m.closedTrades} closed / ${m.activeTrades} active) · winRate ${m.winRate}% · PF ${m.profitFactor} · expectancy $${m.expectancy} · avgWin $${m.avgWinDollar} · avgLoss $${m.avgLossDollar} · avgHold ${m.avgHoldingWeeks}w`);
   console.log(`  lot1 skips ${m.lot1Skips} · add skips ${m.addSkips} · worst DD ${m.worstDrawdown?.drawdownPct}% (${m.worstDrawdown?.peakDate}→${m.worstDrawdown?.troughDate})`);
-  console.log(`  vs page +235% (non-comp) / -68.8% (wrong set) · vs TREE +774%/87.9% CAGR/-47.6% DD`);
+  console.log(`  vs page +235% (non-comp) / -68.8% (wrong set) · vs TREE (most-liquid) +840%/91.9% CAGR/-48.5% DD`);
   process.exit(0);
 }

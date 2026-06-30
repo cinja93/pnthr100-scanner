@@ -1,137 +1,137 @@
 {
  "generatedFrom": "build_tree_baseline.mjs",
- "strategy": "AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · breakeven snap (+$250 & green)",
- "disclosure": "Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.",
+ "strategy": "AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · MOST-LIQUID buy priority (20-day share volume) · breakeven snap (+$250 & green)",
+ "disclosure": "Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED, and the 2023-2026 window is a BULL market only (the AI-300 has no bear-market history). Scarce-capital entry priority = most-liquid (deterministic, order-invariant; robustness-validated in-sample + out-of-sample), matching the live engine. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.",
  "version": "tree-2026-06-11",
  "backtestStart": "2023-01-03",
  "backtestEnd": "2026-06-11",
  "backtestStartNav": 100000,
- "backtestEndNav": 1045252,
+ "backtestEndNav": 939530,
  "tradingDays": 863,
- "avgHoldDays": 11.9,
+ "avgHoldDays": 12,
  "medianHoldDays": 8,
  "inputHash": "9f0d18d0218fa6356c59ed33a5b8a82248469e0b",
  "inputNames": 313,
  "metrics": {
-  "netReturnPct": 945.3,
-  "cagrPct": 98,
-  "sharpe": 1.49,
-  "sortino": 2.21,
-  "profitFactor": 2.1,
-  "calmar": 2.15,
+  "netReturnPct": 839.5,
+  "cagrPct": 91.9,
+  "sharpe": 1.39,
+  "sortino": 2.04,
+  "profitFactor": 1.97,
+  "calmar": 1.9,
   "recoveryFactor": 2.7,
   "positiveMonthsPct": 54.8,
   "winRatePct": 28,
-  "payoff": 5.48,
-  "maxDDPct": 45.63,
-  "totalClosed": 1361,
-  "endingEquity": 1045252,
-  "alphaDollar": 851522,
-  "alphaPct": 852,
+  "payoff": 5.17,
+  "maxDDPct": 48.49,
+  "totalClosed": 1375,
+  "endingEquity": 939530,
+  "alphaDollar": 745800,
+  "alphaPct": 746,
   "spyReturnPct": 93.7,
   "startNav": 100000,
-  "maxMonthlyDDPct": -18.4,
-  "avgDownMonthPct": -8.6,
-  "avgWithinMonthDipPct": -12.2,
-  "worstRolling30Pct": -31.2,
-  "worstStretchPct": -37,
-  "bestMonthPct": 80.7,
-  "avgUpMonthPct": 21,
-  "avgMonthPct": 7.6,
-  "winnersN": 377,
-  "losersN": 984,
-  "avgWinPct": 22,
-  "avgWinDollar": 4902,
-  "winnerHoldDays": 26.3,
+  "maxMonthlyDDPct": -22.4,
+  "avgDownMonthPct": -9.2,
+  "avgWithinMonthDipPct": -13,
+  "worstRolling30Pct": -37.3,
+  "worstStretchPct": -39.5,
+  "bestMonthPct": 82.9,
+  "avgUpMonthPct": 21.1,
+  "avgMonthPct": 7.4,
+  "winnersN": 379,
+  "losersN": 996,
+  "avgWinPct": 22.9,
+  "avgWinDollar": 4606,
+  "winnerHoldDays": 26.6,
   "winnerHoldMed": 23,
   "largestWinPct": 735.7,
-  "avgLossPct": -4.1,
-  "avgLossDollar": -895,
-  "loserHoldDays": 6.4,
+  "avgLossPct": -4,
+  "avgLossDollar": -891,
+  "loserHoldDays": 6.5,
   "loserHoldMed": 5,
   "largestLossPct": -62.1
  },
  "metricsGross": {
-  "netReturnPct": 985.8,
-  "cagrPct": 100.2,
-  "sharpe": 1.55,
-  "sortino": 2.31,
-  "profitFactor": 2.14,
-  "calmar": 2.31,
+  "netReturnPct": 881.4,
+  "cagrPct": 94.4,
+  "sharpe": 1.45,
+  "sortino": 2.12,
+  "profitFactor": 2.01,
+  "calmar": 2.04,
   "recoveryFactor": 2.8,
-  "positiveMonthsPct": 57.1,
+  "positiveMonthsPct": 54.8,
   "winRatePct": 28,
-  "payoff": 5.55,
-  "maxDDPct": 43.41,
-  "totalClosed": 1361,
-  "endingEquity": 1085810,
-  "alphaDollar": 892081,
-  "alphaPct": 892,
+  "payoff": 5.24,
+  "maxDDPct": 46.31,
+  "totalClosed": 1375,
+  "endingEquity": 981434,
+  "alphaDollar": 787705,
+  "alphaPct": 788,
   "spyReturnPct": 93.7,
   "startNav": 100000,
-  "maxMonthlyDDPct": -17.2,
-  "avgDownMonthPct": -8.4,
-  "avgWithinMonthDipPct": -11.6,
-  "worstRolling30Pct": -30,
-  "worstStretchPct": -34.7,
-  "bestMonthPct": 76.7,
-  "avgUpMonthPct": 19.4,
-  "avgMonthPct": 7.5,
-  "winnersN": 379,
-  "losersN": 982,
-  "avgWinPct": 21.9,
-  "avgWinDollar": 4892,
-  "winnerHoldDays": 26.2,
+  "maxMonthlyDDPct": -21.3,
+  "avgDownMonthPct": -8.5,
+  "avgWithinMonthDipPct": -12.4,
+  "worstRolling30Pct": -36.1,
+  "worstStretchPct": -37.3,
+  "bestMonthPct": 78.8,
+  "avgUpMonthPct": 20.4,
+  "avgMonthPct": 7.3,
+  "winnersN": 381,
+  "losersN": 994,
+  "avgWinPct": 22.8,
+  "avgWinDollar": 4598,
+  "winnerHoldDays": 26.6,
   "winnerHoldMed": 23,
   "largestWinPct": 735.7,
-  "avgLossPct": -4.1,
-  "avgLossDollar": -882,
-  "loserHoldDays": 6.4,
+  "avgLossPct": -4,
+  "avgLossDollar": -877,
+  "loserHoldDays": 6.5,
   "loserHoldMed": 5,
   "largestLossPct": -62.1
  },
  "metricsNetFees": {
-  "netReturnPct": 485,
-  "cagrPct": 67.2,
-  "sharpe": 1.19,
-  "sortino": 1.7,
-  "profitFactor": 2.1,
-  "calmar": 1.26,
+  "netReturnPct": 445.2,
+  "cagrPct": 63.8,
+  "sharpe": 1.13,
+  "sortino": 1.59,
+  "profitFactor": 1.97,
+  "calmar": 1.12,
   "recoveryFactor": 2.1,
-  "positiveMonthsPct": 50,
+  "positiveMonthsPct": 52.4,
   "winRatePct": 28,
-  "payoff": 5.48,
-  "maxDDPct": 53.37,
-  "totalClosed": 1361,
-  "endingEquity": 584988,
-  "alphaDollar": 391258,
-  "alphaPct": 391,
+  "payoff": 5.17,
+  "maxDDPct": 56.8,
+  "totalClosed": 1375,
+  "endingEquity": 545227,
+  "alphaDollar": 351498,
+  "alphaPct": 351,
   "spyReturnPct": 93.7,
   "startNav": 100000,
-  "maxMonthlyDDPct": -21,
-  "avgDownMonthPct": -9.1,
-  "avgWithinMonthDipPct": -12.5,
-  "worstRolling30Pct": -40.1,
-  "worstStretchPct": -42.7,
-  "bestMonthPct": 80.4,
-  "avgUpMonthPct": 21.6,
-  "avgMonthPct": 6.2,
-  "winnersN": 377,
-  "losersN": 984,
-  "avgWinPct": 22,
-  "avgWinDollar": 4902,
-  "winnerHoldDays": 26.3,
+  "maxMonthlyDDPct": -22.5,
+  "avgDownMonthPct": -9.7,
+  "avgWithinMonthDipPct": -13.3,
+  "worstRolling30Pct": -47.1,
+  "worstStretchPct": -39.9,
+  "bestMonthPct": 82.6,
+  "avgUpMonthPct": 20.3,
+  "avgMonthPct": 6.1,
+  "winnersN": 379,
+  "losersN": 996,
+  "avgWinPct": 22.9,
+  "avgWinDollar": 4606,
+  "winnerHoldDays": 26.6,
   "winnerHoldMed": 23,
   "largestWinPct": 735.7,
-  "avgLossPct": -4.1,
-  "avgLossDollar": -895,
-  "loserHoldDays": 6.4,
+  "avgLossPct": -4,
+  "avgLossDollar": -891,
+  "loserHoldDays": 6.5,
   "loserHoldMed": 5,
   "largestLossPct": -62.1
  },
  "costs": {
-  "commission": 6943,
-  "slippage": 34700
+  "commission": 9336,
+  "slippage": 33546
  },
  "factors": [
   {
@@ -237,4217 +237,4217 @@
   {
    "i": 20,
    "date": "2023-02-01",
-   "factor": 1.051546
+   "factor": 1.051569
   },
   {
    "i": 21,
    "date": "2023-02-02",
-   "factor": 1.086706
+   "factor": 1.080485
   },
   {
    "i": 22,
    "date": "2023-02-03",
-   "factor": 1.068909
+   "factor": 1.059744
   },
   {
    "i": 23,
    "date": "2023-02-06",
-   "factor": 1.051462
+   "factor": 1.042877
   },
   {
    "i": 24,
    "date": "2023-02-07",
-   "factor": 1.097906
+   "factor": 1.091137
   },
   {
    "i": 25,
    "date": "2023-02-08",
-   "factor": 1.072761
+   "factor": 1.06709
   },
   {
    "i": 26,
    "date": "2023-02-09",
-   "factor": 1.075935
+   "factor": 1.071654
   },
   {
    "i": 27,
    "date": "2023-02-10",
-   "factor": 1.046388
+   "factor": 1.033211
   },
   {
    "i": 28,
    "date": "2023-02-13",
-   "factor": 1.080811
+   "factor": 1.072649
   },
   {
    "i": 29,
    "date": "2023-02-14",
-   "factor": 1.114528
+   "factor": 1.107393
   },
   {
    "i": 30,
    "date": "2023-02-15",
-   "factor": 1.099267
+   "factor": 1.092689
   },
   {
    "i": 31,
    "date": "2023-02-16",
-   "factor": 1.067457
+   "factor": 1.059711
   },
   {
    "i": 32,
    "date": "2023-02-17",
-   "factor": 1.04804
+   "factor": 1.114255
   },
   {
    "i": 33,
    "date": "2023-02-21",
-   "factor": 0.992592
+   "factor": 1.048128
   },
   {
    "i": 34,
    "date": "2023-02-22",
-   "factor": 0.988292
+   "factor": 1.183896
   },
   {
    "i": 35,
    "date": "2023-02-23",
-   "factor": 0.987079
+   "factor": 0.996824
   },
   {
    "i": 36,
    "date": "2023-02-24",
-   "factor": 0.976704
+   "factor": 1.002488
   },
   {
    "i": 37,
    "date": "2023-02-27",
-   "factor": 0.986817
+   "factor": 1.001494
   },
   {
    "i": 38,
    "date": "2023-02-28",
-   "factor": 0.98872
+   "factor": 1.000365
   },
   {
    "i": 39,
    "date": "2023-03-01",
-   "factor": 1.006855
+   "factor": 1.015475
   },
   {
    "i": 40,
    "date": "2023-03-02",
-   "factor": 0.997603
+   "factor": 1.001573
   },
   {
    "i": 41,
    "date": "2023-03-03",
-   "factor": 1.014756
+   "factor": 1.010866
   },
   {
    "i": 42,
    "date": "2023-03-06",
-   "factor": 1.003857
+   "factor": 1.004746
   },
   {
    "i": 43,
    "date": "2023-03-07",
-   "factor": 0.992632
+   "factor": 0.993731
   },
   {
    "i": 44,
    "date": "2023-03-08",
-   "factor": 1.005871
+   "factor": 1.007164
   },
   {
    "i": 45,
    "date": "2023-03-09",
-   "factor": 0.968066
+   "factor": 0.973876
   },
   {
    "i": 46,
    "date": "2023-03-10",
-   "factor": 0.90167
+   "factor": 0.908349
   },
   {
    "i": 47,
    "date": "2023-03-13",
-   "factor": 0.890946
+   "factor": 0.897142
   },
   {
    "i": 48,
    "date": "2023-03-14",
-   "factor": 0.910817
+   "factor": 0.917061
   },
   {
    "i": 49,
    "date": "2023-03-15",
-   "factor": 0.902934
+   "factor": 0.909356
   },
   {
    "i": 50,
    "date": "2023-03-16",
-   "factor": 0.925683
+   "factor": 0.932324
   },
   {
    "i": 51,
    "date": "2023-03-17",
-   "factor": 0.914787
+   "factor": 0.921557
   },
   {
    "i": 52,
    "date": "2023-03-20",
-   "factor": 0.927801
+   "factor": 0.934509
   },
   {
    "i": 53,
    "date": "2023-03-21",
-   "factor": 0.938087
+   "factor": 0.944921
   },
   {
    "i": 54,
    "date": "2023-03-22",
-   "factor": 0.931422
+   "factor": 0.938272
   },
   {
    "i": 55,
    "date": "2023-03-23",
-   "factor": 0.956332
+   "factor": 0.963425
   },
   {
    "i": 56,
    "date": "2023-03-24",
-   "factor": 0.929348
+   "factor": 0.936333
   },
   {
    "i": 57,
    "date": "2023-03-27",
-   "factor": 0.922456
+   "factor": 0.929381
   },
   {
    "i": 58,
    "date": "2023-03-28",
-   "factor": 0.890808
+   "factor": 0.897542
   },
   {
    "i": 59,
    "date": "2023-03-29",
-   "factor": 0.915851
+   "factor": 0.92242
   },
   {
    "i": 60,
    "date": "2023-03-30",
-   "factor": 0.934884
+   "factor": 0.941463
   },
   {
    "i": 61,
    "date": "2023-03-31",
-   "factor": 0.967437
+   "factor": 0.974263
   },
   {
    "i": 62,
    "date": "2023-04-03",
-   "factor": 0.959001
+   "factor": 0.970689
   },
   {
    "i": 63,
    "date": "2023-04-04",
-   "factor": 0.943522
+   "factor": 0.950983
   },
   {
    "i": 64,
    "date": "2023-04-05",
-   "factor": 0.907088
+   "factor": 0.918692
   },
   {
    "i": 65,
    "date": "2023-04-06",
-   "factor": 0.904066
+   "factor": 0.914693
   },
   {
    "i": 66,
    "date": "2023-04-10",
-   "factor": 0.9059
+   "factor": 0.915294
   },
   {
    "i": 67,
    "date": "2023-04-11",
-   "factor": 0.903074
+   "factor": 0.915026
   },
   {
    "i": 68,
    "date": "2023-04-12",
-   "factor": 0.893988
+   "factor": 0.90592
   },
   {
    "i": 69,
    "date": "2023-04-13",
-   "factor": 0.911589
+   "factor": 0.923439
   },
   {
    "i": 70,
    "date": "2023-04-14",
-   "factor": 0.907624
+   "factor": 0.919348
   },
   {
    "i": 71,
    "date": "2023-04-17",
-   "factor": 0.900326
+   "factor": 0.91176
   },
   {
    "i": 72,
    "date": "2023-04-18",
-   "factor": 0.901507
+   "factor": 0.912667
   },
   {
    "i": 73,
    "date": "2023-04-19",
-   "factor": 0.877439
+   "factor": 0.889355
   },
   {
    "i": 74,
    "date": "2023-04-20",
-   "factor": 0.856217
+   "factor": 0.867633
   },
   {
    "i": 75,
    "date": "2023-04-21",
-   "factor": 0.857057
+   "factor": 0.865072
   },
   {
    "i": 76,
    "date": "2023-04-24",
-   "factor": 0.834427
+   "factor": 0.843279
   },
   {
    "i": 77,
    "date": "2023-04-25",
-   "factor": 0.806278
+   "factor": 0.813186
   },
   {
    "i": 78,
    "date": "2023-04-26",
-   "factor": 0.810569
+   "factor": 0.816445
   },
   {
    "i": 79,
    "date": "2023-04-27",
-   "factor": 0.822304
+   "factor": 0.828165
   },
   {
    "i": 80,
    "date": "2023-04-28",
-   "factor": 0.825595
+   "factor": 0.831446
   },
   {
    "i": 81,
    "date": "2023-05-01",
-   "factor": 0.834083
+   "factor": 0.840013
   },
   {
    "i": 82,
    "date": "2023-05-02",
-   "factor": 0.830331
+   "factor": 0.836207
   },
   {
    "i": 83,
    "date": "2023-05-03",
-   "factor": 0.826301
+   "factor": 0.83215
   },
   {
    "i": 84,
    "date": "2023-05-04",
-   "factor": 0.827015
+   "factor": 0.832948
   },
   {
    "i": 85,
    "date": "2023-05-05",
-   "factor": 0.83847
+   "factor": 0.844476
   },
   {
    "i": 86,
    "date": "2023-05-08",
-   "factor": 0.836018
+   "factor": 0.842024
   },
   {
    "i": 87,
    "date": "2023-05-09",
-   "factor": 0.839106
+   "factor": 0.845101
   },
   {
    "i": 88,
    "date": "2023-05-10",
-   "factor": 0.863779
+   "factor": 0.869847
   },
   {
    "i": 89,
    "date": "2023-05-11",
-   "factor": 0.856194
+   "factor": 0.861996
   },
   {
    "i": 90,
    "date": "2023-05-12",
-   "factor": 0.844614
+   "factor": 0.855898
   },
   {
    "i": 91,
    "date": "2023-05-15",
-   "factor": 0.868487
+   "factor": 0.878523
   },
   {
    "i": 92,
    "date": "2023-05-16",
-   "factor": 0.867639
+   "factor": 0.878896
   },
   {
    "i": 93,
    "date": "2023-05-17",
-   "factor": 0.887503
+   "factor": 0.901965
   },
   {
    "i": 94,
    "date": "2023-05-18",
-   "factor": 0.931319
+   "factor": 0.945295
   },
   {
    "i": 95,
    "date": "2023-05-19",
-   "factor": 0.932255
+   "factor": 0.944388
   },
   {
    "i": 96,
    "date": "2023-05-22",
-   "factor": 0.941927
+   "factor": 0.957131
   },
   {
    "i": 97,
    "date": "2023-05-23",
-   "factor": 0.91347
+   "factor": 0.927536
   },
   {
    "i": 98,
    "date": "2023-05-24",
-   "factor": 0.908923
+   "factor": 0.932899
   },
   {
    "i": 99,
    "date": "2023-05-25",
-   "factor": 1.003558
+   "factor": 1.018522
   },
   {
    "i": 100,
    "date": "2023-05-26",
-   "factor": 1.058116
+   "factor": 1.0767
   },
   {
    "i": 101,
    "date": "2023-05-30",
-   "factor": 1.090555
+   "factor": 1.109422
   },
   {
    "i": 102,
    "date": "2023-05-31",
-   "factor": 1.047632
+   "factor": 1.068925
   },
   {
    "i": 103,
    "date": "2023-06-01",
-   "factor": 1.07803
+   "factor": 1.087636
   },
   {
    "i": 104,
    "date": "2023-06-02",
-   "factor": 1.082171
+   "factor": 1.095386
   },
   {
    "i": 105,
    "date": "2023-06-05",
-   "factor": 1.091693
+   "factor": 1.102762
   },
   {
    "i": 106,
    "date": "2023-06-06",
-   "factor": 1.114185
+   "factor": 1.126483
   },
   {
    "i": 107,
    "date": "2023-06-07",
-   "factor": 1.081633
+   "factor": 1.090778
   },
   {
    "i": 108,
    "date": "2023-06-08",
-   "factor": 1.114689
+   "factor": 1.120611
   },
   {
    "i": 109,
    "date": "2023-06-09",
-   "factor": 1.123879
+   "factor": 1.130937
   },
   {
    "i": 110,
    "date": "2023-06-12",
-   "factor": 1.159637
+   "factor": 1.172965
   },
   {
    "i": 111,
    "date": "2023-06-13",
-   "factor": 1.17111
+   "factor": 1.181928
   },
   {
    "i": 112,
    "date": "2023-06-14",
-   "factor": 1.185989
+   "factor": 1.193208
   },
   {
    "i": 113,
    "date": "2023-06-15",
-   "factor": 1.196956
+   "factor": 1.20325
   },
   {
    "i": 114,
    "date": "2023-06-16",
-   "factor": 1.163678
+   "factor": 1.165075
   },
   {
    "i": 115,
    "date": "2023-06-20",
-   "factor": 1.147337
+   "factor": 1.13883
   },
   {
    "i": 116,
    "date": "2023-06-21",
-   "factor": 1.09847
+   "factor": 1.074726
   },
   {
    "i": 117,
    "date": "2023-06-22",
-   "factor": 1.087403
+   "factor": 1.075575
   },
   {
    "i": 118,
    "date": "2023-06-23",
-   "factor": 1.059199
+   "factor": 1.055145
   },
   {
    "i": 119,
    "date": "2023-06-26",
-   "factor": 1.031294
+   "factor": 1.040254
   },
   {
    "i": 120,
    "date": "2023-06-27",
-   "factor": 1.064413
+   "factor": 1.085736
   },
   {
    "i": 121,
    "date": "2023-06-28",
-   "factor": 1.065463
+   "factor": 1.091374
   },
   {
    "i": 122,
    "date": "2023-06-29",
-   "factor": 1.084955
+   "factor": 1.09932
   },
   {
    "i": 123,
    "date": "2023-06-30",
-   "factor": 1.117376
+   "factor": 1.132612
   },
   {
    "i": 124,
    "date": "2023-07-03",
-   "factor": 1.123381
+   "factor": 1.147966
   },
   {
    "i": 125,
    "date": "2023-07-05",
-   "factor": 1.135596
+   "factor": 1.151233
   },
   {
    "i": 126,
    "date": "2023-07-06",
-   "factor": 1.112429
+   "factor": 1.116686
   },
   {
    "i": 127,
    "date": "2023-07-07",
-   "factor": 1.135246
+   "factor": 1.14286
   },
   {
    "i": 128,
    "date": "2023-07-10",
-   "factor": 1.206162
+   "factor": 1.213963
   },
   {
    "i": 129,
    "date": "2023-07-11",
-   "factor": 1.232488
+   "factor": 1.23883
   },
   {
    "i": 130,
    "date": "2023-07-12",
-   "factor": 1.237501
+   "factor": 1.255647
   },
   {
    "i": 131,
    "date": "2023-07-13",
-   "factor": 1.355463
+   "factor": 1.372163
   },
   {
    "i": 132,
    "date": "2023-07-14",
-   "factor": 1.29048
+   "factor": 1.300545
   },
   {
    "i": 133,
    "date": "2023-07-17",
-   "factor": 1.317473
+   "factor": 1.325036
   },
   {
    "i": 134,
    "date": "2023-07-18",
-   "factor": 1.319913
+   "factor": 1.321866
   },
   {
    "i": 135,
    "date": "2023-07-19",
-   "factor": 1.334551
+   "factor": 1.353257
   },
   {
    "i": 136,
    "date": "2023-07-20",
-   "factor": 1.25898
+   "factor": 1.277269
   },
   {
    "i": 137,
    "date": "2023-07-21",
-   "factor": 1.260369
+   "factor": 1.251706
   },
   {
    "i": 138,
    "date": "2023-07-24",
-   "factor": 1.246135
+   "factor": 1.231236
   },
   {
    "i": 139,
    "date": "2023-07-25",
-   "factor": 1.271275
+   "factor": 1.27024
   },
   {
    "i": 140,
    "date": "2023-07-26",
-   "factor": 1.255495
+   "factor": 1.281155
   },
   {
    "i": 141,
    "date": "2023-07-27",
-   "factor": 1.258803
+   "factor": 1.255758
   },
   {
    "i": 142,
    "date": "2023-07-28",
-   "factor": 1.301705
+   "factor": 1.377776
   },
   {
    "i": 143,
    "date": "2023-07-31",
-   "factor": 1.311489
+   "factor": 1.390764
   },
   {
    "i": 144,
    "date": "2023-08-01",
-   "factor": 1.307878
+   "factor": 1.396557
   },
   {
    "i": 145,
    "date": "2023-08-02",
-   "factor": 1.250238
+   "factor": 1.301493
   },
   {
    "i": 146,
    "date": "2023-08-03",
-   "factor": 1.251023
+   "factor": 1.304946
   },
   {
    "i": 147,
    "date": "2023-08-04",
-   "factor": 1.237741
+   "factor": 1.268987
   },
   {
    "i": 148,
    "date": "2023-08-07",
-   "factor": 1.262096
+   "factor": 1.266403
   },
   {
    "i": 149,
    "date": "2023-08-08",
-   "factor": 1.252938
+   "factor": 1.238826
   },
   {
    "i": 150,
    "date": "2023-08-09",
-   "factor": 1.225023
+   "factor": 1.204071
   },
   {
    "i": 151,
    "date": "2023-08-10",
-   "factor": 1.228986
+   "factor": 1.19717
   },
   {
    "i": 152,
    "date": "2023-08-11",
-   "factor": 1.208867
+   "factor": 1.184546
   },
   {
    "i": 153,
    "date": "2023-08-14",
-   "factor": 1.224119
+   "factor": 1.197772
   },
   {
    "i": 154,
    "date": "2023-08-15",
-   "factor": 1.204704
+   "factor": 1.1775
   },
   {
    "i": 155,
    "date": "2023-08-16",
-   "factor": 1.165195
+   "factor": 1.145859
   },
   {
    "i": 156,
    "date": "2023-08-17",
-   "factor": 1.139198
+   "factor": 1.131364
   },
   {
    "i": 157,
    "date": "2023-08-18",
-   "factor": 1.143482
+   "factor": 1.138645
   },
   {
    "i": 158,
    "date": "2023-08-21",
-   "factor": 1.155296
+   "factor": 1.158686
   },
   {
    "i": 159,
    "date": "2023-08-22",
-   "factor": 1.159981
+   "factor": 1.163171
   },
   {
    "i": 160,
    "date": "2023-08-23",
-   "factor": 1.183319
+   "factor": 1.18203
   },
   {
    "i": 161,
    "date": "2023-08-24",
-   "factor": 1.142741
+   "factor": 1.147331
   },
   {
    "i": 162,
    "date": "2023-08-25",
-   "factor": 1.118481
+   "factor": 1.131054
   },
   {
    "i": 163,
    "date": "2023-08-28",
-   "factor": 1.142959
+   "factor": 1.148238
   },
   {
    "i": 164,
    "date": "2023-08-29",
-   "factor": 1.195733
+   "factor": 1.191697
   },
   {
    "i": 165,
    "date": "2023-08-30",
-   "factor": 1.216728
+   "factor": 1.216655
   },
   {
    "i": 166,
    "date": "2023-08-31",
-   "factor": 1.229611
+   "factor": 1.230993
   },
   {
    "i": 167,
    "date": "2023-09-01",
-   "factor": 1.228442
+   "factor": 1.239072
   },
   {
    "i": 168,
    "date": "2023-09-05",
-   "factor": 1.214622
+   "factor": 1.216667
   },
   {
    "i": 169,
    "date": "2023-09-06",
-   "factor": 1.215405
+   "factor": 1.209811
   },
   {
    "i": 170,
    "date": "2023-09-07",
-   "factor": 1.2078
+   "factor": 1.203947
   },
   {
    "i": 171,
    "date": "2023-09-08",
-   "factor": 1.217786
+   "factor": 1.207294
   },
   {
    "i": 172,
    "date": "2023-09-11",
-   "factor": 1.232272
+   "factor": 1.213012
   },
   {
    "i": 173,
    "date": "2023-09-12",
-   "factor": 1.204188
+   "factor": 1.19517
   },
   {
    "i": 174,
    "date": "2023-09-13",
-   "factor": 1.188943
+   "factor": 1.170065
   },
   {
    "i": 175,
    "date": "2023-09-14",
-   "factor": 1.199158
+   "factor": 1.179194
   },
   {
    "i": 176,
    "date": "2023-09-15",
-   "factor": 1.163555
+   "factor": 1.14898
   },
   {
    "i": 177,
    "date": "2023-09-18",
-   "factor": 1.165029
+   "factor": 1.154274
   },
   {
    "i": 178,
    "date": "2023-09-19",
-   "factor": 1.143917
+   "factor": 1.133263
   },
   {
    "i": 179,
    "date": "2023-09-20",
-   "factor": 1.128998
+   "factor": 1.119411
   },
   {
    "i": 180,
    "date": "2023-09-21",
-   "factor": 1.109444
+   "factor": 1.103798
   },
   {
    "i": 181,
    "date": "2023-09-22",
-   "factor": 1.115351
+   "factor": 1.10976
   },
   {
    "i": 182,
    "date": "2023-09-25",
-   "factor": 1.124504
+   "factor": 1.118838
   },
   {
    "i": 183,
    "date": "2023-09-26",
-   "factor": 1.10555
+   "factor": 1.102319
   },
   {
    "i": 184,
    "date": "2023-09-27",
-   "factor": 1.107507
+   "factor": 1.104231
   },
   {
    "i": 185,
    "date": "2023-09-28",
-   "factor": 1.108414
+   "factor": 1.105171
   },
   {
    "i": 186,
    "date": "2023-09-29",
-   "factor": 1.113003
+   "factor": 1.109707
   },
   {
    "i": 187,
    "date": "2023-10-02",
-   "factor": 1.09287
+   "factor": 1.089622
   },
   {
    "i": 188,
    "date": "2023-10-03",
-   "factor": 1.073183
+   "factor": 1.070072
   },
   {
    "i": 189,
    "date": "2023-10-04",
-   "factor": 1.083351
+   "factor": 1.080205
   },
   {
    "i": 190,
    "date": "2023-10-05",
-   "factor": 1.094915
+   "factor": 1.09173
   },
   {
    "i": 191,
    "date": "2023-10-06",
-   "factor": 1.106942
+   "factor": 1.103737
   },
   {
    "i": 192,
    "date": "2023-10-09",
-   "factor": 1.124677
+   "factor": 1.12127
   },
   {
    "i": 193,
    "date": "2023-10-10",
-   "factor": 1.134568
+   "factor": 1.131063
   },
   {
    "i": 194,
    "date": "2023-10-11",
-   "factor": 1.164061
+   "factor": 1.160506
   },
   {
    "i": 195,
    "date": "2023-10-12",
-   "factor": 1.143299
+   "factor": 1.144936
   },
   {
    "i": 196,
    "date": "2023-10-13",
-   "factor": 1.099151
+   "factor": 1.108038
   },
   {
    "i": 197,
    "date": "2023-10-16",
-   "factor": 1.097685
+   "factor": 1.11646
   },
   {
    "i": 198,
    "date": "2023-10-17",
-   "factor": 1.096791
+   "factor": 1.120265
   },
   {
    "i": 199,
    "date": "2023-10-18",
-   "factor": 1.062964
+   "factor": 1.083889
   },
   {
    "i": 200,
    "date": "2023-10-19",
-   "factor": 1.033739
+   "factor": 1.048041
   },
   {
    "i": 201,
    "date": "2023-10-20",
-   "factor": 0.990489
+   "factor": 0.996815
   },
   {
    "i": 202,
    "date": "2023-10-23",
-   "factor": 0.987834
+   "factor": 0.992628
   },
   {
    "i": 203,
    "date": "2023-10-24",
-   "factor": 0.984292
+   "factor": 0.98964
   },
   {
    "i": 204,
    "date": "2023-10-25",
-   "factor": 0.970545
+   "factor": 0.974142
   },
   {
    "i": 205,
    "date": "2023-10-26",
-   "factor": 0.96791
+   "factor": 0.972534
   },
   {
    "i": 206,
    "date": "2023-10-27",
-   "factor": 0.966445
+   "factor": 0.971074
   },
   {
    "i": 207,
    "date": "2023-10-30",
-   "factor": 0.96483
+   "factor": 0.969471
   },
   {
    "i": 208,
    "date": "2023-10-31",
-   "factor": 0.966132
+   "factor": 0.97078
   },
   {
    "i": 209,
    "date": "2023-11-01",
-   "factor": 0.971341
+   "factor": 0.976012
   },
   {
    "i": 210,
    "date": "2023-11-02",
-   "factor": 0.974103
+   "factor": 0.978801
   },
   {
    "i": 211,
    "date": "2023-11-03",
-   "factor": 0.984288
+   "factor": 0.989073
   },
   {
    "i": 212,
    "date": "2023-11-06",
-   "factor": 0.974844
+   "factor": 0.979575
   },
   {
    "i": 213,
    "date": "2023-11-07",
-   "factor": 0.963824
+   "factor": 0.968476
   },
   {
    "i": 214,
    "date": "2023-11-08",
-   "factor": 0.957752
+   "factor": 0.962331
   },
   {
    "i": 215,
    "date": "2023-11-09",
-   "factor": 0.956046
+   "factor": 0.959506
   },
   {
    "i": 216,
    "date": "2023-11-10",
-   "factor": 0.984388
+   "factor": 0.977594
   },
   {
    "i": 217,
    "date": "2023-11-13",
-   "factor": 0.992514
+   "factor": 0.987581
   },
   {
    "i": 218,
    "date": "2023-11-14",
-   "factor": 1.039979
+   "factor": 1.039864
   },
   {
    "i": 219,
    "date": "2023-11-15",
-   "factor": 1.011941
+   "factor": 1.015105
   },
   {
    "i": 220,
    "date": "2023-11-16",
-   "factor": 1.008286
+   "factor": 1.011309
   },
   {
    "i": 221,
    "date": "2023-11-17",
-   "factor": 1.027841
+   "factor": 1.030114
   },
   {
    "i": 222,
    "date": "2023-11-20",
-   "factor": 1.044565
+   "factor": 1.0532
   },
   {
    "i": 223,
    "date": "2023-11-21",
-   "factor": 1.046345
+   "factor": 1.05021
   },
   {
    "i": 224,
    "date": "2023-11-22",
-   "factor": 1.05268
+   "factor": 1.050993
   },
   {
    "i": 225,
    "date": "2023-11-24",
-   "factor": 1.06147
+   "factor": 1.058578
   },
   {
    "i": 226,
    "date": "2023-11-27",
-   "factor": 1.069403
+   "factor": 1.069768
   },
   {
    "i": 227,
    "date": "2023-11-28",
-   "factor": 1.062384
+   "factor": 1.075618
   },
   {
    "i": 228,
    "date": "2023-11-29",
-   "factor": 1.096054
+   "factor": 1.102405
   },
   {
    "i": 229,
    "date": "2023-11-30",
-   "factor": 1.109717
+   "factor": 1.116563
   },
   {
    "i": 230,
    "date": "2023-12-01",
-   "factor": 1.134947
+   "factor": 1.133638
   },
   {
    "i": 231,
    "date": "2023-12-04",
-   "factor": 1.132161
+   "factor": 1.117865
   },
   {
    "i": 232,
    "date": "2023-12-05",
-   "factor": 1.122429
+   "factor": 1.108401
   },
   {
    "i": 233,
    "date": "2023-12-06",
-   "factor": 1.094917
+   "factor": 1.092366
   },
   {
    "i": 234,
    "date": "2023-12-07",
-   "factor": 1.102744
+   "factor": 1.097961
   },
   {
    "i": 235,
    "date": "2023-12-08",
-   "factor": 1.137895
+   "factor": 1.133795
   },
   {
    "i": 236,
    "date": "2023-12-11",
-   "factor": 1.145111
+   "factor": 1.135775
   },
   {
    "i": 237,
    "date": "2023-12-12",
-   "factor": 1.164424
+   "factor": 1.152498
   },
   {
    "i": 238,
    "date": "2023-12-13",
-   "factor": 1.220929
+   "factor": 1.208279
   },
   {
    "i": 239,
    "date": "2023-12-14",
-   "factor": 1.223116
+   "factor": 1.218806
   },
   {
    "i": 240,
    "date": "2023-12-15",
-   "factor": 1.222276
+   "factor": 1.208571
   },
   {
    "i": 241,
    "date": "2023-12-18",
-   "factor": 1.248798
+   "factor": 1.233007
   },
   {
    "i": 242,
    "date": "2023-12-19",
-   "factor": 1.286494
+   "factor": 1.258902
   },
   {
    "i": 243,
    "date": "2023-12-20",
-   "factor": 1.214007
+   "factor": 1.195238
   },
   {
    "i": 244,
    "date": "2023-12-21",
-   "factor": 1.266278
+   "factor": 1.241169
   },
   {
    "i": 245,
    "date": "2023-12-22",
-   "factor": 1.283683
+   "factor": 1.255421
   },
   {
    "i": 246,
    "date": "2023-12-26",
-   "factor": 1.323206
+   "factor": 1.290379
   },
   {
    "i": 247,
    "date": "2023-12-27",
-   "factor": 1.355622
+   "factor": 1.31919
   },
   {
    "i": 248,
    "date": "2023-12-28",
-   "factor": 1.328631
+   "factor": 1.296404
   },
   {
    "i": 249,
    "date": "2023-12-29",
-   "factor": 1.255537
+   "factor": 1.223664
   },
   {
    "i": 250,
    "date": "2024-01-02",
-   "factor": 1.184782
+   "factor": 1.161994
   },
   {
    "i": 251,
    "date": "2024-01-03",
-   "factor": 1.142159
+   "factor": 1.130472
   },
   {
    "i": 252,
    "date": "2024-01-04",
-   "factor": 1.143767
+   "factor": 1.130129
   },
   {
    "i": 253,
    "date": "2024-01-05",
-   "factor": 1.141402
+   "factor": 1.12761
   },
   {
    "i": 254,
    "date": "2024-01-08",
-   "factor": 1.147048
+   "factor": 1.1326
   },
   {
    "i": 255,
    "date": "2024-01-09",
-   "factor": 1.14807
+   "factor": 1.134814
   },
   {
    "i": 256,
    "date": "2024-01-10",
-   "factor": 1.148572
+   "factor": 1.135435
   },
   {
    "i": 257,
    "date": "2024-01-11",
-   "factor": 1.152892
+   "factor": 1.139564
   },
   {
    "i": 258,
    "date": "2024-01-12",
-   "factor": 1.156371
+   "factor": 1.142576
   },
   {
    "i": 259,
    "date": "2024-01-16",
-   "factor": 1.156345
+   "factor": 1.144363
   },
   {
    "i": 260,
    "date": "2024-01-17",
-   "factor": 1.132054
+   "factor": 1.117466
   },
   {
    "i": 261,
    "date": "2024-01-18",
-   "factor": 1.15613
+   "factor": 1.146306
   },
   {
    "i": 262,
    "date": "2024-01-19",
-   "factor": 1.238945
+   "factor": 1.226037
   },
   {
    "i": 263,
    "date": "2024-01-22",
-   "factor": 1.259098
+   "factor": 1.241062
   },
   {
    "i": 264,
    "date": "2024-01-23",
-   "factor": 1.258479
+   "factor": 1.248151
   },
   {
    "i": 265,
    "date": "2024-01-24",
-   "factor": 1.271353
+   "factor": 1.253445
   },
   {
    "i": 266,
    "date": "2024-01-25",
-   "factor": 1.294271
+   "factor": 1.272773
   },
   {
    "i": 267,
    "date": "2024-01-26",
-   "factor": 1.277734
+   "factor": 1.265067
   },
   {
    "i": 268,
    "date": "2024-01-29",
-   "factor": 1.324781
+   "factor": 1.308261
   },
   {
    "i": 269,
    "date": "2024-01-30",
-   "factor": 1.317015
+   "factor": 1.299424
   },
   {
    "i": 270,
    "date": "2024-01-31",
-   "factor": 1.274566
+   "factor": 1.239072
   },
   {
    "i": 271,
    "date": "2024-02-01",
-   "factor": 1.362807
+   "factor": 1.316189
   },
   {
    "i": 272,
    "date": "2024-02-02",
-   "factor": 1.414062
+   "factor": 1.361559
   },
   {
    "i": 273,
    "date": "2024-02-05",
-   "factor": 1.427512
+   "factor": 1.381727
   },
   {
    "i": 274,
    "date": "2024-02-06",
-   "factor": 1.390737
+   "factor": 1.367879
   },
   {
    "i": 275,
    "date": "2024-02-07",
-   "factor": 1.448935
+   "factor": 1.398548
   },
   {
    "i": 276,
    "date": "2024-02-08",
-   "factor": 1.50587
+   "factor": 1.426463
   },
   {
    "i": 277,
    "date": "2024-02-09",
-   "factor": 1.562452
+   "factor": 1.481153
   },
   {
    "i": 278,
    "date": "2024-02-12",
-   "factor": 1.541647
+   "factor": 1.471409
   },
   {
    "i": 279,
    "date": "2024-02-13",
-   "factor": 1.478877
+   "factor": 1.415036
   },
   {
    "i": 280,
    "date": "2024-02-14",
-   "factor": 1.569223
+   "factor": 1.494839
   },
   {
    "i": 281,
    "date": "2024-02-15",
-   "factor": 1.601731
+   "factor": 1.542913
   },
   {
    "i": 282,
    "date": "2024-02-16",
-   "factor": 1.526315
+   "factor": 1.485693
   },
   {
    "i": 283,
    "date": "2024-02-20",
-   "factor": 1.46956
+   "factor": 1.425632
   },
   {
    "i": 284,
    "date": "2024-02-21",
-   "factor": 1.421442
+   "factor": 1.374144
   },
   {
    "i": 285,
    "date": "2024-02-22",
-   "factor": 1.549878
+   "factor": 1.495054
   },
   {
    "i": 286,
    "date": "2024-02-23",
-   "factor": 1.516417
+   "factor": 1.46009
   },
   {
    "i": 287,
    "date": "2024-02-26",
-   "factor": 1.533304
+   "factor": 1.473532
   },
   {
    "i": 288,
    "date": "2024-02-27",
-   "factor": 1.539824
+   "factor": 1.494956
   },
   {
    "i": 289,
    "date": "2024-02-28",
-   "factor": 1.524933
+   "factor": 1.476852
   },
   {
    "i": 290,
    "date": "2024-02-29",
-   "factor": 1.587944
+   "factor": 1.51261
   },
   {
    "i": 291,
    "date": "2024-03-01",
-   "factor": 1.639537
+   "factor": 1.547882
   },
   {
    "i": 292,
    "date": "2024-03-04",
-   "factor": 1.731046
+   "factor": 1.626966
   },
   {
    "i": 293,
    "date": "2024-03-05",
-   "factor": 1.678991
+   "factor": 1.57808
   },
   {
    "i": 294,
    "date": "2024-03-06",
-   "factor": 1.747266
+   "factor": 1.626959
   },
   {
    "i": 295,
    "date": "2024-03-07",
-   "factor": 1.800773
+   "factor": 1.656822
   },
   {
    "i": 296,
    "date": "2024-03-08",
-   "factor": 1.722907
+   "factor": 1.60544
   },
   {
    "i": 297,
    "date": "2024-03-11",
-   "factor": 1.633618
+   "factor": 1.538029
   },
   {
    "i": 298,
    "date": "2024-03-12",
-   "factor": 1.710366
+   "factor": 1.584996
   },
   {
    "i": 299,
    "date": "2024-03-13",
-   "factor": 1.683625
+   "factor": 1.594033
   },
   {
    "i": 300,
    "date": "2024-03-14",
-   "factor": 1.623158
+   "factor": 1.559892
   },
   {
    "i": 301,
    "date": "2024-03-15",
-   "factor": 1.582376
+   "factor": 1.524883
   },
   {
    "i": 302,
    "date": "2024-03-18",
-   "factor": 1.568852
+   "factor": 1.513929
   },
   {
    "i": 303,
    "date": "2024-03-19",
-   "factor": 1.559399
+   "factor": 1.502411
   },
   {
    "i": 304,
    "date": "2024-03-20",
-   "factor": 1.607801
+   "factor": 1.542348
   },
   {
    "i": 305,
    "date": "2024-03-21",
-   "factor": 1.665054
+   "factor": 1.573617
   },
   {
    "i": 306,
    "date": "2024-03-22",
-   "factor": 1.667695
+   "factor": 1.569034
   },
   {
    "i": 307,
    "date": "2024-03-25",
-   "factor": 1.667138
+   "factor": 1.558083
   },
   {
    "i": 308,
    "date": "2024-03-26",
-   "factor": 1.65196
+   "factor": 1.542194
   },
   {
    "i": 309,
    "date": "2024-03-27",
-   "factor": 1.665063
+   "factor": 1.545623
   },
   {
    "i": 310,
    "date": "2024-03-28",
-   "factor": 1.679825
+   "factor": 1.554045
   },
   {
    "i": 311,
    "date": "2024-04-01",
-   "factor": 1.68168
+   "factor": 1.544895
   },
   {
    "i": 312,
    "date": "2024-04-02",
-   "factor": 1.658583
+   "factor": 1.528609
   },
   {
    "i": 313,
    "date": "2024-04-03",
-   "factor": 1.705923
+   "factor": 1.565507
   },
   {
    "i": 314,
    "date": "2024-04-04",
-   "factor": 1.661825
+   "factor": 1.525415
   },
   {
    "i": 315,
    "date": "2024-04-05",
-   "factor": 1.698398
+   "factor": 1.573976
   },
   {
    "i": 316,
    "date": "2024-04-08",
-   "factor": 1.682351
+   "factor": 1.562915
   },
   {
    "i": 317,
    "date": "2024-04-09",
-   "factor": 1.629246
+   "factor": 1.515498
   },
   {
    "i": 318,
    "date": "2024-04-10",
-   "factor": 1.598365
+   "factor": 1.510615
   },
   {
    "i": 319,
    "date": "2024-04-11",
-   "factor": 1.614864
+   "factor": 1.51905
   },
   {
    "i": 320,
    "date": "2024-04-12",
-   "factor": 1.542478
+   "factor": 1.468754
   },
   {
    "i": 321,
    "date": "2024-04-15",
-   "factor": 1.507845
+   "factor": 1.435698
   },
   {
    "i": 322,
    "date": "2024-04-16",
-   "factor": 1.499194
+   "factor": 1.430509
   },
   {
    "i": 323,
    "date": "2024-04-17",
-   "factor": 1.49045
+   "factor": 1.42461
   },
   {
    "i": 324,
    "date": "2024-04-18",
-   "factor": 1.453732
+   "factor": 1.393898
   },
   {
    "i": 325,
    "date": "2024-04-19",
-   "factor": 1.442701
+   "factor": 1.379547
   },
   {
    "i": 326,
    "date": "2024-04-22",
-   "factor": 1.446638
+   "factor": 1.383449
   },
   {
    "i": 327,
    "date": "2024-04-23",
-   "factor": 1.449097
+   "factor": 1.385727
   },
   {
    "i": 328,
    "date": "2024-04-24",
-   "factor": 1.480919
+   "factor": 1.416062
   },
   {
    "i": 329,
    "date": "2024-04-25",
-   "factor": 1.485759
+   "factor": 1.42106
   },
   {
    "i": 330,
    "date": "2024-04-26",
-   "factor": 1.506474
+   "factor": 1.440876
   },
   {
    "i": 331,
    "date": "2024-04-29",
-   "factor": 1.525694
+   "factor": 1.459396
   },
   {
    "i": 332,
    "date": "2024-04-30",
-   "factor": 1.480252
+   "factor": 1.409058
   },
   {
    "i": 333,
    "date": "2024-05-01",
-   "factor": 1.450705
+   "factor": 1.388923
   },
   {
    "i": 334,
    "date": "2024-05-02",
-   "factor": 1.483204
+   "factor": 1.415664
   },
   {
    "i": 335,
    "date": "2024-05-03",
-   "factor": 1.512563
+   "factor": 1.444876
   },
   {
    "i": 336,
    "date": "2024-05-06",
-   "factor": 1.552791
+   "factor": 1.480995
   },
   {
    "i": 337,
    "date": "2024-05-07",
-   "factor": 1.557001
+   "factor": 1.483441
   },
   {
    "i": 338,
    "date": "2024-05-08",
-   "factor": 1.549483
+   "factor": 1.471879
   },
   {
    "i": 339,
    "date": "2024-05-09",
-   "factor": 1.586751
+   "factor": 1.507247
   },
   {
    "i": 340,
    "date": "2024-05-10",
-   "factor": 1.601412
+   "factor": 1.509351
   },
   {
    "i": 341,
    "date": "2024-05-13",
-   "factor": 1.583635
+   "factor": 1.494198
   },
   {
    "i": 342,
    "date": "2024-05-14",
-   "factor": 1.618495
+   "factor": 1.524666
   },
   {
    "i": 343,
    "date": "2024-05-15",
-   "factor": 1.67002
+   "factor": 1.565748
   },
   {
    "i": 344,
    "date": "2024-05-16",
-   "factor": 1.631808
+   "factor": 1.539421
   },
   {
    "i": 345,
    "date": "2024-05-17",
-   "factor": 1.634064
+   "factor": 1.550074
   },
   {
    "i": 346,
    "date": "2024-05-20",
-   "factor": 1.65199
+   "factor": 1.560378
   },
   {
    "i": 347,
    "date": "2024-05-21",
-   "factor": 1.670075
+   "factor": 1.57198
   },
   {
    "i": 348,
    "date": "2024-05-22",
-   "factor": 1.682325
+   "factor": 1.562563
   },
   {
    "i": 349,
    "date": "2024-05-23",
-   "factor": 1.662619
+   "factor": 1.552632
   },
   {
    "i": 350,
    "date": "2024-05-24",
-   "factor": 1.716805
+   "factor": 1.606212
   },
   {
    "i": 351,
    "date": "2024-05-28",
-   "factor": 1.719208
+   "factor": 1.609946
   },
   {
    "i": 352,
    "date": "2024-05-29",
-   "factor": 1.679904
+   "factor": 1.581189
   },
   {
    "i": 353,
    "date": "2024-05-30",
-   "factor": 1.668907
+   "factor": 1.590103
   },
   {
    "i": 354,
    "date": "2024-05-31",
-   "factor": 1.628545
+   "factor": 1.545889
   },
   {
    "i": 355,
    "date": "2024-06-03",
-   "factor": 1.591893
+   "factor": 1.517555
   },
   {
    "i": 356,
    "date": "2024-06-04",
-   "factor": 1.567377
+   "factor": 1.482969
   },
   {
    "i": 357,
    "date": "2024-06-05",
-   "factor": 1.648262
+   "factor": 1.543425
   },
   {
    "i": 358,
    "date": "2024-06-06",
-   "factor": 1.625632
+   "factor": 1.525431
   },
   {
    "i": 359,
    "date": "2024-06-07",
-   "factor": 1.595822
+   "factor": 1.479386
   },
   {
    "i": 360,
    "date": "2024-06-10",
-   "factor": 1.625832
+   "factor": 1.49932
   },
   {
    "i": 361,
    "date": "2024-06-11",
-   "factor": 1.661465
+   "factor": 1.531811
   },
   {
    "i": 362,
    "date": "2024-06-12",
-   "factor": 1.740309
+   "factor": 1.604889
   },
   {
    "i": 363,
    "date": "2024-06-13",
-   "factor": 1.775119
+   "factor": 1.639498
   },
   {
    "i": 364,
    "date": "2024-06-14",
-   "factor": 1.753607
+   "factor": 1.618357
   },
   {
    "i": 365,
    "date": "2024-06-17",
-   "factor": 1.847391
+   "factor": 1.705356
   },
   {
    "i": 366,
    "date": "2024-06-18",
-   "factor": 1.883473
+   "factor": 1.738268
   },
   {
    "i": 367,
    "date": "2024-06-20",
-   "factor": 1.799582
+   "factor": 1.678441
   },
   {
    "i": 368,
    "date": "2024-06-21",
-   "factor": 1.732131
+   "factor": 1.623289
   },
   {
    "i": 369,
    "date": "2024-06-24",
-   "factor": 1.670197
+   "factor": 1.559999
   },
   {
    "i": 370,
    "date": "2024-06-25",
-   "factor": 1.734097
+   "factor": 1.612564
   },
   {
    "i": 371,
    "date": "2024-06-26",
-   "factor": 1.711709
+   "factor": 1.586534
   },
   {
    "i": 372,
    "date": "2024-06-27",
-   "factor": 1.719146
+   "factor": 1.580923
   },
   {
    "i": 373,
    "date": "2024-06-28",
-   "factor": 1.730543
+   "factor": 1.576606
   },
   {
    "i": 374,
    "date": "2024-07-01",
-   "factor": 1.740812
+   "factor": 1.589348
   },
   {
    "i": 375,
    "date": "2024-07-02",
-   "factor": 1.731643
+   "factor": 1.5817
   },
   {
    "i": 376,
    "date": "2024-07-03",
-   "factor": 1.796423
+   "factor": 1.634492
   },
   {
    "i": 377,
    "date": "2024-07-05",
-   "factor": 1.818833
+   "factor": 1.657627
   },
   {
    "i": 378,
    "date": "2024-07-08",
-   "factor": 1.862179
+   "factor": 1.703444
   },
   {
    "i": 379,
    "date": "2024-07-09",
-   "factor": 1.81164
+   "factor": 1.67456
   },
   {
    "i": 380,
    "date": "2024-07-10",
-   "factor": 1.847954
+   "factor": 1.712999
   },
   {
    "i": 381,
    "date": "2024-07-11",
-   "factor": 1.769448
+   "factor": 1.627567
   },
   {
    "i": 382,
    "date": "2024-07-12",
-   "factor": 1.824335
+   "factor": 1.686694
   },
   {
    "i": 383,
    "date": "2024-07-15",
-   "factor": 1.861232
+   "factor": 1.726232
   },
   {
    "i": 384,
    "date": "2024-07-16",
-   "factor": 1.912482
+   "factor": 1.766614
   },
   {
    "i": 385,
    "date": "2024-07-17",
-   "factor": 1.750449
+   "factor": 1.628217
   },
   {
    "i": 386,
    "date": "2024-07-18",
-   "factor": 1.670068
+   "factor": 1.532821
   },
   {
    "i": 387,
    "date": "2024-07-19",
-   "factor": 1.6423
+   "factor": 1.51768
   },
   {
    "i": 388,
    "date": "2024-07-22",
-   "factor": 1.699531
+   "factor": 1.551699
   },
   {
    "i": 389,
    "date": "2024-07-23",
-   "factor": 1.668085
+   "factor": 1.534959
   },
   {
    "i": 390,
    "date": "2024-07-24",
-   "factor": 1.594603
+   "factor": 1.457472
   },
   {
    "i": 391,
    "date": "2024-07-25",
-   "factor": 1.597212
+   "factor": 1.435253
   },
   {
    "i": 392,
    "date": "2024-07-26",
-   "factor": 1.643469
+   "factor": 1.496848
   },
   {
    "i": 393,
    "date": "2024-07-29",
-   "factor": 1.616703
+   "factor": 1.459895
   },
   {
    "i": 394,
    "date": "2024-07-30",
-   "factor": 1.622703
+   "factor": 1.449245
   },
   {
    "i": 395,
    "date": "2024-07-31",
-   "factor": 1.648136
+   "factor": 1.48726
   },
   {
    "i": 396,
    "date": "2024-08-01",
-   "factor": 1.628805
+   "factor": 1.467612
   },
   {
    "i": 397,
    "date": "2024-08-02",
-   "factor": 1.551532
+   "factor": 1.377759
   },
   {
    "i": 398,
    "date": "2024-08-05",
-   "factor": 1.469781
+   "factor": 1.309128
   },
   {
    "i": 399,
    "date": "2024-08-06",
-   "factor": 1.489452
+   "factor": 1.330146
   },
   {
    "i": 400,
    "date": "2024-08-07",
-   "factor": 1.497177
+   "factor": 1.331352
   },
   {
    "i": 401,
    "date": "2024-08-08",
-   "factor": 1.563434
+   "factor": 1.386034
   },
   {
    "i": 402,
    "date": "2024-08-09",
-   "factor": 1.565643
+   "factor": 1.389432
   },
   {
    "i": 403,
    "date": "2024-08-12",
-   "factor": 1.560354
+   "factor": 1.379289
   },
   {
    "i": 404,
    "date": "2024-08-13",
-   "factor": 1.59178
+   "factor": 1.407539
   },
   {
    "i": 405,
    "date": "2024-08-14",
-   "factor": 1.60602
+   "factor": 1.417724
   },
   {
    "i": 406,
    "date": "2024-08-15",
-   "factor": 1.703337
+   "factor": 1.509925
   },
   {
    "i": 407,
    "date": "2024-08-16",
-   "factor": 1.70456
+   "factor": 1.516775
   },
   {
    "i": 408,
    "date": "2024-08-19",
-   "factor": 1.787093
+   "factor": 1.593369
   },
   {
    "i": 409,
    "date": "2024-08-20",
-   "factor": 1.734811
+   "factor": 1.544815
   },
   {
    "i": 410,
    "date": "2024-08-21",
-   "factor": 1.780943
+   "factor": 1.582613
   },
   {
    "i": 411,
    "date": "2024-08-22",
-   "factor": 1.762453
+   "factor": 1.559817
   },
   {
    "i": 412,
    "date": "2024-08-23",
-   "factor": 1.773854
+   "factor": 1.566468
   },
   {
    "i": 413,
    "date": "2024-08-26",
-   "factor": 1.764496
+   "factor": 1.561202
   },
   {
    "i": 414,
    "date": "2024-08-27",
-   "factor": 1.725276
+   "factor": 1.527492
   },
   {
    "i": 415,
    "date": "2024-08-28",
-   "factor": 1.669316
+   "factor": 1.476934
   },
   {
    "i": 416,
    "date": "2024-08-29",
-   "factor": 1.707516
+   "factor": 1.522903
   },
   {
    "i": 417,
    "date": "2024-08-30",
-   "factor": 1.732419
+   "factor": 1.551147
   },
   {
    "i": 418,
    "date": "2024-09-03",
-   "factor": 1.668586
+   "factor": 1.488118
   },
   {
    "i": 419,
    "date": "2024-09-04",
-   "factor": 1.668262
+   "factor": 1.496744
   },
   {
    "i": 420,
    "date": "2024-09-05",
-   "factor": 1.611323
+   "factor": 1.440802
   },
   {
    "i": 421,
    "date": "2024-09-06",
-   "factor": 1.566646
+   "factor": 1.405289
   },
   {
    "i": 422,
    "date": "2024-09-09",
-   "factor": 1.584163
+   "factor": 1.424394
   },
   {
    "i": 423,
    "date": "2024-09-10",
-   "factor": 1.59536
+   "factor": 1.431386
   },
   {
    "i": 424,
    "date": "2024-09-11",
-   "factor": 1.606308
+   "factor": 1.438881
   },
   {
    "i": 425,
    "date": "2024-09-12",
-   "factor": 1.632921
+   "factor": 1.465806
   },
   {
    "i": 426,
    "date": "2024-09-13",
-   "factor": 1.682197
+   "factor": 1.509495
   },
   {
    "i": 427,
    "date": "2024-09-16",
-   "factor": 1.719427
+   "factor": 1.546973
   },
   {
    "i": 428,
    "date": "2024-09-17",
-   "factor": 1.716341
+   "factor": 1.544811
   },
   {
    "i": 429,
    "date": "2024-09-18",
-   "factor": 1.713903
+   "factor": 1.53693
   },
   {
    "i": 430,
    "date": "2024-09-19",
-   "factor": 1.738471
+   "factor": 1.567644
   },
   {
    "i": 431,
    "date": "2024-09-20",
-   "factor": 1.773036
+   "factor": 1.588146
   },
   {
    "i": 432,
    "date": "2024-09-23",
-   "factor": 1.79741
+   "factor": 1.613801
   },
   {
    "i": 433,
    "date": "2024-09-24",
-   "factor": 1.796362
+   "factor": 1.618865
   },
   {
    "i": 434,
    "date": "2024-09-25",
-   "factor": 1.803263
+   "factor": 1.636072
   },
   {
    "i": 435,
    "date": "2024-09-26",
-   "factor": 1.784065
+   "factor": 1.620775
   },
   {
    "i": 436,
    "date": "2024-09-27",
-   "factor": 1.786178
+   "factor": 1.647031
   },
   {
    "i": 437,
    "date": "2024-09-30",
-   "factor": 1.797738
+   "factor": 1.647941
   },
   {
    "i": 438,
    "date": "2024-10-01",
-   "factor": 1.79362
+   "factor": 1.631149
   },
   {
    "i": 439,
    "date": "2024-10-02",
-   "factor": 1.796613
+   "factor": 1.643292
   },
   {
    "i": 440,
    "date": "2024-10-03",
-   "factor": 1.84267
+   "factor": 1.667027
   },
   {
    "i": 441,
    "date": "2024-10-04",
-   "factor": 1.898013
+   "factor": 1.721597
   },
   {
    "i": 442,
    "date": "2024-10-07",
-   "factor": 1.866374
+   "factor": 1.688082
   },
   {
    "i": 443,
    "date": "2024-10-08",
-   "factor": 1.881311
+   "factor": 1.704488
   },
   {
    "i": 444,
    "date": "2024-10-09",
-   "factor": 1.904536
+   "factor": 1.724307
   },
   {
    "i": 445,
    "date": "2024-10-10",
-   "factor": 1.886947
+   "factor": 1.703817
   },
   {
    "i": 446,
    "date": "2024-10-11",
-   "factor": 1.925785
+   "factor": 1.757683
   },
   {
    "i": 447,
    "date": "2024-10-14",
-   "factor": 1.933327
+   "factor": 1.775225
   },
   {
    "i": 448,
    "date": "2024-10-15",
-   "factor": 1.867644
+   "factor": 1.72652
   },
   {
    "i": 449,
    "date": "2024-10-16",
-   "factor": 1.876897
+   "factor": 1.764008
   },
   {
    "i": 450,
    "date": "2024-10-17",
-   "factor": 1.867277
+   "factor": 1.7547
   },
   {
    "i": 451,
    "date": "2024-10-18",
-   "factor": 1.872144
+   "factor": 1.761466
   },
   {
    "i": 452,
    "date": "2024-10-21",
-   "factor": 1.895218
+   "factor": 1.792563
   },
   {
    "i": 453,
    "date": "2024-10-22",
-   "factor": 1.86208
+   "factor": 1.767422
   },
   {
    "i": 454,
    "date": "2024-10-23",
-   "factor": 1.809535
+   "factor": 1.712637
   },
   {
    "i": 455,
    "date": "2024-10-24",
-   "factor": 1.79778
+   "factor": 1.709576
   },
   {
    "i": 456,
    "date": "2024-10-25",
-   "factor": 1.839553
+   "factor": 1.744625
   },
   {
    "i": 457,
    "date": "2024-10-28",
-   "factor": 1.890887
+   "factor": 1.786739
   },
   {
    "i": 458,
    "date": "2024-10-29",
-   "factor": 1.869835
+   "factor": 1.770177
   },
   {
    "i": 459,
    "date": "2024-10-30",
-   "factor": 1.827363
+   "factor": 1.732328
   },
   {
    "i": 460,
    "date": "2024-10-31",
-   "factor": 1.740995
+   "factor": 1.617089
   },
   {
    "i": 461,
    "date": "2024-11-01",
-   "factor": 1.749997
+   "factor": 1.604379
   },
   {
    "i": 462,
    "date": "2024-11-04",
-   "factor": 1.731139
+   "factor": 1.574315
   },
   {
    "i": 463,
    "date": "2024-11-05",
-   "factor": 1.870436
+   "factor": 1.674767
   },
   {
    "i": 464,
    "date": "2024-11-06",
-   "factor": 2.050921
+   "factor": 1.82135
   },
   {
    "i": 465,
    "date": "2024-11-07",
-   "factor": 2.239028
+   "factor": 1.993562
   },
   {
    "i": 466,
    "date": "2024-11-08",
-   "factor": 2.367883
+   "factor": 2.145376
   },
   {
    "i": 467,
    "date": "2024-11-11",
-   "factor": 2.37734
+   "factor": 2.274334
   },
   {
    "i": 468,
    "date": "2024-11-12",
-   "factor": 2.321703
+   "factor": 2.222434
   },
   {
    "i": 469,
    "date": "2024-11-13",
-   "factor": 2.337004
+   "factor": 2.216946
   },
   {
    "i": 470,
    "date": "2024-11-14",
-   "factor": 2.371868
+   "factor": 2.224203
   },
   {
    "i": 471,
    "date": "2024-11-15",
-   "factor": 2.248882
+   "factor": 2.154466
   },
   {
    "i": 472,
    "date": "2024-11-18",
-   "factor": 2.313088
+   "factor": 2.197211
   },
   {
    "i": 473,
    "date": "2024-11-19",
-   "factor": 2.475976
+   "factor": 2.351953
   },
   {
    "i": 474,
    "date": "2024-11-20",
-   "factor": 2.561497
+   "factor": 2.445482
   },
   {
    "i": 475,
    "date": "2024-11-21",
-   "factor": 2.735532
+   "factor": 2.56514
   },
   {
    "i": 476,
    "date": "2024-11-22",
-   "factor": 2.905636
+   "factor": 2.749788
   },
   {
    "i": 477,
    "date": "2024-11-25",
-   "factor": 3.000724
+   "factor": 2.858497
   },
   {
    "i": 478,
    "date": "2024-11-26",
-   "factor": 2.895397
+   "factor": 2.720434
   },
   {
    "i": 479,
    "date": "2024-11-27",
-   "factor": 2.926508
+   "factor": 2.751442
   },
   {
    "i": 480,
    "date": "2024-11-29",
-   "factor": 3.146126
+   "factor": 2.95827
   },
   {
    "i": 481,
    "date": "2024-12-02",
-   "factor": 2.885059
+   "factor": 2.781544
   },
   {
    "i": 482,
    "date": "2024-12-03",
-   "factor": 2.910751
+   "factor": 2.814809
   },
   {
    "i": 483,
    "date": "2024-12-04",
-   "factor": 3.121201
+   "factor": 2.931756
   },
   {
    "i": 484,
    "date": "2024-12-05",
-   "factor": 3.095655
+   "factor": 2.916946
   },
   {
    "i": 485,
    "date": "2024-12-06",
-   "factor": 3.344733
+   "factor": 3.249294
   },
   {
    "i": 486,
    "date": "2024-12-09",
-   "factor": 3.073093
+   "factor": 2.969763
   },
   {
    "i": 487,
    "date": "2024-12-10",
-   "factor": 2.934759
+   "factor": 2.876101
   },
   {
    "i": 488,
    "date": "2024-12-11",
-   "factor": 2.956932
+   "factor": 2.876052
   },
   {
    "i": 489,
    "date": "2024-12-12",
-   "factor": 2.936653
+   "factor": 2.765408
   },
   {
    "i": 490,
    "date": "2024-12-13",
-   "factor": 3.069376
+   "factor": 2.947297
   },
   {
    "i": 491,
    "date": "2024-12-16",
-   "factor": 3.459428
+   "factor": 3.446155
   },
   {
    "i": 492,
    "date": "2024-12-17",
-   "factor": 3.757938
+   "factor": 3.785616
   },
   {
    "i": 493,
    "date": "2024-12-18",
-   "factor": 3.778871
+   "factor": 3.929428
   },
   {
    "i": 494,
    "date": "2024-12-19",
-   "factor": 3.100819
+   "factor": 3.116287
   },
   {
    "i": 495,
    "date": "2024-12-20",
-   "factor": 3.324685
+   "factor": 3.432079
   },
   {
    "i": 496,
    "date": "2024-12-23",
-   "factor": 3.393455
+   "factor": 3.563718
   },
   {
    "i": 497,
    "date": "2024-12-24",
-   "factor": 3.465743
+   "factor": 3.628542
   },
   {
    "i": 498,
    "date": "2024-12-26",
-   "factor": 3.832814
+   "factor": 4.172577
   },
   {
    "i": 499,
    "date": "2024-12-27",
-   "factor": 3.76774
+   "factor": 4.126654
   },
   {
    "i": 500,
    "date": "2024-12-30",
-   "factor": 3.705873
+   "factor": 4.036673
   },
   {
    "i": 501,
    "date": "2024-12-31",
-   "factor": 3.344794
+   "factor": 3.617591
   },
   {
    "i": 502,
    "date": "2025-01-02",
-   "factor": 3.655897
+   "factor": 4.000261
   },
   {
    "i": 503,
    "date": "2025-01-03",
-   "factor": 3.696732
+   "factor": 4.044437
   },
   {
    "i": 504,
    "date": "2025-01-06",
-   "factor": 3.836115
+   "factor": 4.204954
   },
   {
    "i": 505,
    "date": "2025-01-07",
-   "factor": 3.637616
+   "factor": 3.962272
   },
   {
    "i": 506,
    "date": "2025-01-08",
-   "factor": 2.918673
+   "factor": 2.953226
   },
   {
    "i": 507,
    "date": "2025-01-10",
-   "factor": 2.8715
+   "factor": 2.873968
   },
   {
    "i": 508,
    "date": "2025-01-13",
-   "factor": 2.660105
+   "factor": 2.636246
   },
   {
    "i": 509,
    "date": "2025-01-14",
-   "factor": 2.780761
+   "factor": 2.744653
   },
   {
    "i": 510,
    "date": "2025-01-15",
-   "factor": 2.905262
+   "factor": 2.869421
   },
   {
    "i": 511,
    "date": "2025-01-16",
-   "factor": 2.965043
+   "factor": 2.940179
   },
   {
    "i": 512,
    "date": "2025-01-17",
-   "factor": 2.94374
+   "factor": 2.924969
   },
   {
    "i": 513,
    "date": "2025-01-21",
-   "factor": 3.140451
+   "factor": 3.111184
   },
   {
    "i": 514,
    "date": "2025-01-22",
-   "factor": 3.152112
+   "factor": 3.144799
   },
   {
    "i": 515,
    "date": "2025-01-23",
-   "factor": 3.148301
+   "factor": 3.156039
   },
   {
    "i": 516,
    "date": "2025-01-24",
-   "factor": 3.122547
+   "factor": 3.144644
   },
   {
    "i": 517,
    "date": "2025-01-27",
-   "factor": 2.63753
+   "factor": 2.673493
   },
   {
    "i": 518,
    "date": "2025-01-28",
-   "factor": 2.7534
+   "factor": 2.796708
   },
   {
    "i": 519,
    "date": "2025-01-29",
-   "factor": 2.733791
+   "factor": 2.788818
   },
   {
    "i": 520,
    "date": "2025-01-30",
-   "factor": 2.75388
+   "factor": 2.826693
   },
   {
    "i": 521,
    "date": "2025-01-31",
-   "factor": 2.73405
+   "factor": 2.806863
   },
   {
    "i": 522,
    "date": "2025-02-03",
-   "factor": 2.66853
+   "factor": 2.745009
   },
   {
    "i": 523,
    "date": "2025-02-04",
-   "factor": 2.761801
+   "factor": 2.843383
   },
   {
    "i": 524,
    "date": "2025-02-05",
-   "factor": 2.730286
+   "factor": 2.814853
   },
   {
    "i": 525,
    "date": "2025-02-06",
-   "factor": 2.670304
+   "factor": 2.755511
   },
   {
    "i": 526,
    "date": "2025-02-07",
-   "factor": 2.638422
+   "factor": 2.849063
   },
   {
    "i": 527,
    "date": "2025-02-10",
-   "factor": 2.720589
+   "factor": 2.924466
   },
   {
    "i": 528,
    "date": "2025-02-11",
-   "factor": 2.669783
+   "factor": 2.834949
   },
   {
    "i": 529,
    "date": "2025-02-12",
-   "factor": 2.660352
+   "factor": 2.887346
   },
   {
    "i": 530,
    "date": "2025-02-13",
-   "factor": 2.78065
+   "factor": 3.035982
   },
   {
    "i": 531,
    "date": "2025-02-14",
-   "factor": 2.78157
+   "factor": 3.048896
   },
   {
    "i": 532,
    "date": "2025-02-18",
-   "factor": 2.809679
+   "factor": 3.00661
   },
   {
    "i": 533,
    "date": "2025-02-19",
-   "factor": 2.682945
+   "factor": 2.867656
   },
   {
    "i": 534,
    "date": "2025-02-20",
-   "factor": 2.619514
+   "factor": 2.772939
   },
   {
    "i": 535,
    "date": "2025-02-21",
-   "factor": 2.584527
+   "factor": 2.668732
   },
   {
    "i": 536,
    "date": "2025-02-24",
-   "factor": 2.422466
+   "factor": 2.511621
   },
   {
    "i": 537,
    "date": "2025-02-25",
-   "factor": 2.389424
+   "factor": 2.49962
   },
   {
    "i": 538,
    "date": "2025-02-26",
-   "factor": 2.417541
+   "factor": 2.536283
   },
   {
    "i": 539,
    "date": "2025-02-27",
-   "factor": 2.384104
+   "factor": 2.488127
   },
   {
    "i": 540,
    "date": "2025-02-28",
-   "factor": 2.35894
+   "factor": 2.451215
   },
   {
    "i": 541,
    "date": "2025-03-03",
-   "factor": 2.285673
+   "factor": 2.373869
   },
   {
    "i": 542,
    "date": "2025-03-04",
-   "factor": 2.241596
+   "factor": 2.327646
   },
   {
    "i": 543,
    "date": "2025-03-05",
-   "factor": 2.344625
+   "factor": 2.436674
   },
   {
    "i": 544,
    "date": "2025-03-06",
-   "factor": 2.302337
+   "factor": 2.392683
   },
   {
    "i": 545,
    "date": "2025-03-07",
-   "factor": 2.339164
+   "factor": 2.431739
   },
   {
    "i": 546,
    "date": "2025-03-10",
-   "factor": 2.237947
+   "factor": 2.325152
   },
   {
    "i": 547,
    "date": "2025-03-11",
-   "factor": 2.293233
+   "factor": 2.385009
   },
   {
    "i": 548,
    "date": "2025-03-12",
-   "factor": 2.292909
+   "factor": 2.383758
   },
   {
    "i": 549,
    "date": "2025-03-13",
-   "factor": 2.272173
+   "factor": 2.362571
   },
   {
    "i": 550,
    "date": "2025-03-14",
-   "factor": 2.262262
+   "factor": 2.351745
   },
   {
    "i": 551,
    "date": "2025-03-17",
-   "factor": 2.302778
+   "factor": 2.394881
   },
   {
    "i": 552,
    "date": "2025-03-18",
-   "factor": 2.256998
+   "factor": 2.345917
   },
   {
    "i": 553,
    "date": "2025-03-19",
-   "factor": 2.278453
+   "factor": 2.368775
   },
   {
    "i": 554,
    "date": "2025-03-20",
-   "factor": 2.215531
+   "factor": 2.30189
   },
   {
    "i": 555,
    "date": "2025-03-21",
-   "factor": 2.190026
+   "factor": 2.274742
   },
   {
    "i": 556,
    "date": "2025-03-24",
-   "factor": 2.197311
+   "factor": 2.282232
   },
   {
    "i": 557,
    "date": "2025-03-25",
-   "factor": 2.192693
+   "factor": 2.277253
   },
   {
    "i": 558,
    "date": "2025-03-26",
-   "factor": 2.174708
+   "factor": 2.258574
   },
   {
    "i": 559,
    "date": "2025-03-27",
-   "factor": 2.17259
+   "factor": 2.256369
   },
   {
    "i": 560,
    "date": "2025-03-28",
-   "factor": 2.161161
+   "factor": 2.244496
   },
   {
    "i": 561,
    "date": "2025-03-31",
-   "factor": 2.161235
+   "factor": 2.244558
   },
   {
    "i": 562,
    "date": "2025-04-01",
-   "factor": 2.168613
+   "factor": 2.252221
   },
   {
    "i": 563,
    "date": "2025-04-02",
-   "factor": 2.171437
+   "factor": 2.255156
   },
   {
    "i": 564,
    "date": "2025-04-03",
-   "factor": 2.158118
+   "factor": 2.241322
   },
   {
    "i": 565,
    "date": "2025-04-04",
-   "factor": 2.123084
+   "factor": 2.204873
   },
   {
    "i": 566,
    "date": "2025-04-07",
-   "factor": 2.118854
+   "factor": 2.200478
   },
   {
    "i": 567,
    "date": "2025-04-08",
-   "factor": 2.112473
+   "factor": 2.193851
   },
   {
    "i": 568,
    "date": "2025-04-09",
-   "factor": 2.132952
+   "factor": 2.215117
   },
   {
    "i": 569,
    "date": "2025-04-10",
-   "factor": 2.136217
+   "factor": 2.218507
   },
   {
    "i": 570,
    "date": "2025-04-11",
-   "factor": 2.133546
+   "factor": 2.215734
   },
   {
    "i": 571,
    "date": "2025-04-14",
-   "factor": 2.13119
+   "factor": 2.213288
   },
   {
    "i": 572,
    "date": "2025-04-15",
-   "factor": 2.124937
+   "factor": 2.206808
   },
   {
    "i": 573,
    "date": "2025-04-16",
-   "factor": 2.132982
+   "factor": 2.215147
   },
   {
    "i": 574,
    "date": "2025-04-17",
-   "factor": 2.126239
+   "factor": 2.208153
   },
   {
    "i": 575,
    "date": "2025-04-21",
-   "factor": 2.089649
+   "factor": 2.170176
   },
   {
    "i": 576,
    "date": "2025-04-22",
-   "factor": 2.085512
+   "factor": 2.165882
   },
   {
    "i": 577,
    "date": "2025-04-23",
-   "factor": 2.093982
+   "factor": 2.174678
   },
   {
    "i": 578,
    "date": "2025-04-24",
-   "factor": 2.127071
+   "factor": 2.209019
   },
   {
    "i": 579,
    "date": "2025-04-25",
-   "factor": 2.116715
+   "factor": 2.198247
   },
   {
    "i": 580,
    "date": "2025-04-28",
-   "factor": 2.115013
+   "factor": 2.196483
   },
   {
    "i": 581,
    "date": "2025-04-29",
-   "factor": 2.126922
+   "factor": 2.208823
   },
   {
    "i": 582,
    "date": "2025-04-30",
-   "factor": 2.105817
+   "factor": 2.186914
   },
   {
    "i": 583,
    "date": "2025-05-01",
-   "factor": 2.1096
+   "factor": 2.190841
   },
   {
    "i": 584,
    "date": "2025-05-02",
-   "factor": 2.086278
+   "factor": 2.166798
   },
   {
    "i": 585,
    "date": "2025-05-05",
-   "factor": 2.100043
+   "factor": 2.180888
   },
   {
    "i": 586,
    "date": "2025-05-06",
-   "factor": 2.10014
+   "factor": 2.181294
   },
   {
    "i": 587,
    "date": "2025-05-07",
-   "factor": 2.090553
+   "factor": 2.171332
   },
   {
    "i": 588,
    "date": "2025-05-08",
-   "factor": 2.104847
+   "factor": 2.186168
   },
   {
    "i": 589,
    "date": "2025-05-09",
-   "factor": 2.116102
+   "factor": 2.197891
   },
   {
    "i": 590,
    "date": "2025-05-12",
-   "factor": 2.179888
+   "factor": 2.264061
   },
   {
    "i": 591,
    "date": "2025-05-13",
-   "factor": 2.204568
+   "factor": 2.289654
   },
   {
    "i": 592,
    "date": "2025-05-14",
-   "factor": 2.282662
+   "factor": 2.370953
   },
   {
    "i": 593,
    "date": "2025-05-15",
-   "factor": 2.332245
+   "factor": 2.422979
   },
   {
    "i": 594,
    "date": "2025-05-16",
-   "factor": 2.380925
+   "factor": 2.479304
   },
   {
    "i": 595,
    "date": "2025-05-19",
-   "factor": 2.333554
+   "factor": 2.423594
   },
   {
    "i": 596,
    "date": "2025-05-20",
-   "factor": 2.328175
+   "factor": 2.449322
   },
   {
    "i": 597,
    "date": "2025-05-21",
-   "factor": 2.270341
+   "factor": 2.37265
   },
   {
    "i": 598,
    "date": "2025-05-22",
-   "factor": 2.319318
+   "factor": 2.446804
   },
   {
    "i": 599,
    "date": "2025-05-23",
-   "factor": 2.305579
+   "factor": 2.454025
   },
   {
    "i": 600,
    "date": "2025-05-27",
-   "factor": 2.421739
+   "factor": 2.572916
   },
   {
    "i": 601,
    "date": "2025-05-28",
-   "factor": 2.405005
+   "factor": 2.554587
   },
   {
    "i": 602,
    "date": "2025-05-29",
-   "factor": 2.365678
+   "factor": 2.499764
   },
   {
    "i": 603,
    "date": "2025-05-30",
-   "factor": 2.38287
+   "factor": 2.540857
   },
   {
    "i": 604,
    "date": "2025-06-02",
-   "factor": 2.453682
+   "factor": 2.620104
   },
   {
    "i": 605,
    "date": "2025-06-03",
-   "factor": 2.543893
+   "factor": 2.698362
   },
   {
    "i": 606,
    "date": "2025-06-04",
-   "factor": 2.61488
+   "factor": 2.7648
   },
   {
    "i": 607,
    "date": "2025-06-05",
-   "factor": 2.598341
+   "factor": 2.731687
   },
   {
    "i": 608,
    "date": "2025-06-06",
-   "factor": 2.637775
+   "factor": 2.785911
   },
   {
    "i": 609,
    "date": "2025-06-09",
-   "factor": 2.649872
+   "factor": 2.780564
   },
   {
    "i": 610,
    "date": "2025-06-10",
-   "factor": 2.617878
+   "factor": 2.721349
   },
   {
    "i": 611,
    "date": "2025-06-11",
-   "factor": 2.76598
+   "factor": 2.856521
   },
   {
    "i": 612,
    "date": "2025-06-12",
-   "factor": 2.755516
+   "factor": 2.869235
   },
   {
    "i": 613,
    "date": "2025-06-13",
-   "factor": 2.668926
+   "factor": 2.816551
   },
   {
    "i": 614,
    "date": "2025-06-16",
-   "factor": 2.844992
+   "factor": 2.975543
   },
   {
    "i": 615,
    "date": "2025-06-17",
-   "factor": 2.831869
+   "factor": 2.907874
   },
   {
    "i": 616,
    "date": "2025-06-18",
-   "factor": 2.89817
+   "factor": 2.948941
   },
   {
    "i": 617,
    "date": "2025-06-20",
-   "factor": 2.809081
+   "factor": 2.85663
   },
   {
    "i": 618,
    "date": "2025-06-23",
-   "factor": 2.859323
+   "factor": 2.949238
   },
   {
    "i": 619,
    "date": "2025-06-24",
-   "factor": 2.990636
+   "factor": 3.098344
   },
   {
    "i": 620,
    "date": "2025-06-25",
-   "factor": 2.954964
+   "factor": 3.072783
   },
   {
    "i": 621,
    "date": "2025-06-26",
-   "factor": 3.071123
+   "factor": 3.211775
   },
   {
    "i": 622,
    "date": "2025-06-27",
-   "factor": 3.098504
+   "factor": 3.211787
   },
   {
    "i": 623,
    "date": "2025-06-30",
-   "factor": 3.095115
+   "factor": 3.310505
   },
   {
    "i": 624,
    "date": "2025-07-01",
-   "factor": 2.79199
+   "factor": 2.983904
   },
   {
    "i": 625,
    "date": "2025-07-02",
-   "factor": 2.878028
+   "factor": 3.040915
   },
   {
    "i": 626,
    "date": "2025-07-03",
-   "factor": 2.993305
+   "factor": 3.16557
   },
   {
    "i": 627,
    "date": "2025-07-07",
-   "factor": 2.954725
+   "factor": 3.149288
   },
   {
    "i": 628,
    "date": "2025-07-08",
-   "factor": 2.875742
+   "factor": 3.091013
   },
   {
    "i": 629,
    "date": "2025-07-09",
-   "factor": 2.934512
+   "factor": 3.157995
   },
   {
    "i": 630,
    "date": "2025-07-10",
-   "factor": 2.867312
+   "factor": 3.108859
   },
   {
    "i": 631,
    "date": "2025-07-11",
-   "factor": 2.815827
+   "factor": 2.973818
   },
   {
    "i": 632,
    "date": "2025-07-14",
-   "factor": 2.847472
+   "factor": 3.061219
   },
   {
    "i": 633,
    "date": "2025-07-15",
-   "factor": 2.92094
+   "factor": 3.164939
   },
   {
    "i": 634,
    "date": "2025-07-16",
-   "factor": 2.994017
+   "factor": 3.304142
   },
   {
    "i": 635,
    "date": "2025-07-17",
-   "factor": 3.104083
+   "factor": 3.433513
   },
   {
    "i": 636,
    "date": "2025-07-18",
-   "factor": 3.156421
+   "factor": 3.546862
   },
   {
    "i": 637,
    "date": "2025-07-21",
-   "factor": 3.066247
+   "factor": 3.459574
   },
   {
    "i": 638,
    "date": "2025-07-22",
-   "factor": 2.945753
+   "factor": 3.284568
   },
   {
    "i": 639,
    "date": "2025-07-23",
-   "factor": 3.048785
+   "factor": 3.388232
   },
   {
    "i": 640,
    "date": "2025-07-24",
-   "factor": 2.990626
+   "factor": 3.34168
   },
   {
    "i": 641,
    "date": "2025-07-25",
-   "factor": 2.972541
+   "factor": 3.334769
   },
   {
    "i": 642,
    "date": "2025-07-28",
-   "factor": 2.949355
+   "factor": 3.299488
   },
   {
    "i": 643,
    "date": "2025-07-29",
-   "factor": 3.008881
+   "factor": 3.181251
   },
   {
    "i": 644,
    "date": "2025-07-30",
-   "factor": 3.023119
+   "factor": 3.225815
   },
   {
    "i": 645,
    "date": "2025-07-31",
-   "factor": 3.004938
+   "factor": 3.264711
   },
   {
    "i": 646,
    "date": "2025-08-01",
-   "factor": 2.839935
+   "factor": 3.014572
   },
   {
    "i": 647,
    "date": "2025-08-04",
-   "factor": 3.029076
+   "factor": 3.224142
   },
   {
    "i": 648,
    "date": "2025-08-05",
-   "factor": 2.967216
+   "factor": 3.156932
   },
   {
    "i": 649,
    "date": "2025-08-06",
-   "factor": 2.891573
+   "factor": 3.083511
   },
   {
    "i": 650,
    "date": "2025-08-07",
-   "factor": 2.860681
+   "factor": 3.040296
   },
   {
    "i": 651,
    "date": "2025-08-08",
-   "factor": 2.950358
+   "factor": 3.084751
   },
   {
    "i": 652,
    "date": "2025-08-11",
-   "factor": 2.922457
+   "factor": 3.063109
   },
   {
    "i": 653,
    "date": "2025-08-12",
-   "factor": 3.065367
+   "factor": 3.182112
   },
   {
    "i": 654,
    "date": "2025-08-13",
-   "factor": 3.050545
+   "factor": 3.153452
   },
   {
    "i": 655,
    "date": "2025-08-14",
-   "factor": 2.913179
+   "factor": 3.111158
   },
   {
    "i": 656,
    "date": "2025-08-15",
-   "factor": 2.861585
+   "factor": 3.010147
   },
   {
    "i": 657,
    "date": "2025-08-18",
-   "factor": 2.903649
+   "factor": 3.031016
   },
   {
    "i": 658,
    "date": "2025-08-19",
-   "factor": 2.721224
+   "factor": 2.785196
   },
   {
    "i": 659,
    "date": "2025-08-20",
-   "factor": 2.667982
+   "factor": 2.71535
   },
   {
    "i": 660,
    "date": "2025-08-21",
-   "factor": 2.689999
+   "factor": 2.719681
   },
   {
    "i": 661,
    "date": "2025-08-22",
-   "factor": 2.80249
+   "factor": 2.805818
   },
   {
    "i": 662,
    "date": "2025-08-25",
-   "factor": 2.881
+   "factor": 2.893453
   },
   {
    "i": 663,
    "date": "2025-08-26",
-   "factor": 2.944978
+   "factor": 3.002101
   },
   {
    "i": 664,
    "date": "2025-08-27",
-   "factor": 2.916181
+   "factor": 2.945422
   },
   {
    "i": 665,
    "date": "2025-08-28",
-   "factor": 3.053462
+   "factor": 3.101501
   },
   {
    "i": 666,
    "date": "2025-08-29",
-   "factor": 3.001631
+   "factor": 3.063693
   },
   {
    "i": 667,
    "date": "2025-09-02",
-   "factor": 2.981011
+   "factor": 3.002959
   },
   {
    "i": 668,
    "date": "2025-09-03",
-   "factor": 2.915351
+   "factor": 2.958441
   },
   {
    "i": 669,
    "date": "2025-09-04",
-   "factor": 2.981667
+   "factor": 3.007765
   },
   {
    "i": 670,
    "date": "2025-09-05",
-   "factor": 3.103286
+   "factor": 3.078106
   },
   {
    "i": 671,
    "date": "2025-09-08",
-   "factor": 3.142137
+   "factor": 3.129789
   },
   {
    "i": 672,
    "date": "2025-09-09",
-   "factor": 3.229872
+   "factor": 3.238445
   },
   {
    "i": 673,
    "date": "2025-09-10",
-   "factor": 3.47431
+   "factor": 3.465827
   },
   {
    "i": 674,
    "date": "2025-09-11",
-   "factor": 3.544547
+   "factor": 3.523292
   },
   {
    "i": 675,
    "date": "2025-09-12",
-   "factor": 3.537265
+   "factor": 3.561717
   },
   {
    "i": 676,
    "date": "2025-09-15",
-   "factor": 3.715785
+   "factor": 3.710208
   },
   {
    "i": 677,
    "date": "2025-09-16",
-   "factor": 3.750282
+   "factor": 3.751839
   },
   {
    "i": 678,
    "date": "2025-09-17",
-   "factor": 3.745048
+   "factor": 3.865062
   },
   {
    "i": 679,
    "date": "2025-09-18",
-   "factor": 3.972162
+   "factor": 4.017898
   },
   {
    "i": 680,
    "date": "2025-09-19",
-   "factor": 4.01179
+   "factor": 4.182335
   },
   {
    "i": 681,
    "date": "2025-09-22",
-   "factor": 4.242413
+   "factor": 4.293963
   },
   {
    "i": 682,
    "date": "2025-09-23",
-   "factor": 4.22605
+   "factor": 4.312433
   },
   {
    "i": 683,
    "date": "2025-09-24",
-   "factor": 4.09285
+   "factor": 4.264277
   },
   {
    "i": 684,
    "date": "2025-09-25",
-   "factor": 3.899731
+   "factor": 4.045788
   },
   {
    "i": 685,
    "date": "2025-09-26",
-   "factor": 3.797326
+   "factor": 3.962865
   },
   {
    "i": 686,
    "date": "2025-09-29",
-   "factor": 3.986425
+   "factor": 4.174613
   },
   {
    "i": 687,
    "date": "2025-09-30",
-   "factor": 4.045005
+   "factor": 4.196417
   },
   {
    "i": 688,
    "date": "2025-10-01",
-   "factor": 4.258524
+   "factor": 4.401773
   },
   {
    "i": 689,
    "date": "2025-10-02",
-   "factor": 4.494334
+   "factor": 4.760047
   },
   {
    "i": 690,
    "date": "2025-10-03",
-   "factor": 4.564759
+   "factor": 4.980202
   },
   {
    "i": 691,
    "date": "2025-10-06",
-   "factor": 4.784895
+   "factor": 5.186049
   },
   {
    "i": 692,
    "date": "2025-10-07",
-   "factor": 4.607264
+   "factor": 5.198286
   },
   {
    "i": 693,
    "date": "2025-10-08",
-   "factor": 4.717038
+   "factor": 5.433939
   },
   {
    "i": 694,
    "date": "2025-10-09",
-   "factor": 4.747743
+   "factor": 5.567297
   },
   {
    "i": 695,
    "date": "2025-10-10",
-   "factor": 4.310946
+   "factor": 5.117688
   },
   {
    "i": 696,
    "date": "2025-10-13",
-   "factor": 4.794706
+   "factor": 5.931536
   },
   {
    "i": 697,
    "date": "2025-10-14",
-   "factor": 4.849774
+   "factor": 5.994655
   },
   {
    "i": 698,
    "date": "2025-10-15",
-   "factor": 5.110809
+   "factor": 6.116583
   },
   {
    "i": 699,
    "date": "2025-10-16",
-   "factor": 4.860816
+   "factor": 5.426869
   },
   {
    "i": 700,
    "date": "2025-10-17",
-   "factor": 4.651881
+   "factor": 5.131821
   },
   {
    "i": 701,
    "date": "2025-10-20",
-   "factor": 4.831318
+   "factor": 5.240188
   },
   {
    "i": 702,
    "date": "2025-10-21",
-   "factor": 4.553505
+   "factor": 4.82955
   },
   {
    "i": 703,
    "date": "2025-10-22",
-   "factor": 4.146682
+   "factor": 4.484949
   },
   {
    "i": 704,
    "date": "2025-10-23",
-   "factor": 4.371333
+   "factor": 4.696374
   },
   {
    "i": 705,
    "date": "2025-10-24",
-   "factor": 4.510033
+   "factor": 4.869354
   },
   {
    "i": 706,
    "date": "2025-10-27",
-   "factor": 4.609173
+   "factor": 4.976852
   },
   {
    "i": 707,
    "date": "2025-10-28",
-   "factor": 4.520784
+   "factor": 5.066335
   },
   {
    "i": 708,
    "date": "2025-10-29",
-   "factor": 4.740077
+   "factor": 5.186833
   },
   {
    "i": 709,
    "date": "2025-10-30",
-   "factor": 4.658429
+   "factor": 5.125077
   },
   {
    "i": 710,
    "date": "2025-10-31",
-   "factor": 4.685546
+   "factor": 5.201373
   },
   {
    "i": 711,
    "date": "2025-11-03",
-   "factor": 4.721144
+   "factor": 5.322907
   },
   {
    "i": 712,
    "date": "2025-11-04",
-   "factor": 4.302652
+   "factor": 4.903779
   },
   {
    "i": 713,
    "date": "2025-11-05",
-   "factor": 4.630575
+   "factor": 5.092294
   },
   {
    "i": 714,
    "date": "2025-11-06",
-   "factor": 4.39644
+   "factor": 4.895867
   },
   {
    "i": 715,
    "date": "2025-11-07",
-   "factor": 4.224948
+   "factor": 4.761099
   },
   {
    "i": 716,
    "date": "2025-11-10",
-   "factor": 4.401177
+   "factor": 5.032882
   },
   {
    "i": 717,
    "date": "2025-11-11",
-   "factor": 4.146117
+   "factor": 4.806053
   },
   {
    "i": 718,
    "date": "2025-11-12",
-   "factor": 4.103254
+   "factor": 4.774305
   },
   {
    "i": 719,
    "date": "2025-11-13",
-   "factor": 3.801627
+   "factor": 4.413284
   },
   {
    "i": 720,
    "date": "2025-11-14",
-   "factor": 3.738805
+   "factor": 4.315675
   },
   {
    "i": 721,
    "date": "2025-11-17",
-   "factor": 3.692255
+   "factor": 4.235483
   },
   {
    "i": 722,
    "date": "2025-11-18",
-   "factor": 3.62963
+   "factor": 4.155589
   },
   {
    "i": 723,
    "date": "2025-11-19",
-   "factor": 3.676948
+   "factor": 4.205889
   },
   {
    "i": 724,
    "date": "2025-11-20",
-   "factor": 3.559629
+   "factor": 4.067891
   },
   {
    "i": 725,
    "date": "2025-11-21",
-   "factor": 3.661382
+   "factor": 4.130869
   },
   {
    "i": 726,
    "date": "2025-11-24",
-   "factor": 3.82693
+   "factor": 4.31443
   },
   {
    "i": 727,
    "date": "2025-11-25",
-   "factor": 3.82637
+   "factor": 4.314774
   },
   {
    "i": 728,
    "date": "2025-11-26",
-   "factor": 3.82314
+   "factor": 4.311426
   },
   {
    "i": 729,
    "date": "2025-11-28",
-   "factor": 3.881585
+   "factor": 4.378532
   },
   {
    "i": 730,
    "date": "2025-12-01",
-   "factor": 3.796941
+   "factor": 4.28398
   },
   {
    "i": 731,
    "date": "2025-12-02",
-   "factor": 3.838895
+   "factor": 4.327951
   },
   {
    "i": 732,
    "date": "2025-12-03",
-   "factor": 3.914068
+   "factor": 4.4048
   },
   {
    "i": 733,
    "date": "2025-12-04",
-   "factor": 3.968698
+   "factor": 4.455262
   },
   {
    "i": 734,
    "date": "2025-12-05",
-   "factor": 3.959511
+   "factor": 4.460256
   },
   {
    "i": 735,
    "date": "2025-12-08",
-   "factor": 3.968337
+   "factor": 4.486217
   },
   {
    "i": 736,
    "date": "2025-12-09",
-   "factor": 3.998892
+   "factor": 4.503907
   },
   {
    "i": 737,
    "date": "2025-12-10",
-   "factor": 4.106791
+   "factor": 4.584663
   },
   {
    "i": 738,
    "date": "2025-12-11",
-   "factor": 4.105372
+   "factor": 4.585496
   },
   {
    "i": 739,
    "date": "2025-12-12",
-   "factor": 3.758943
+   "factor": 4.290779
   },
   {
    "i": 740,
    "date": "2025-12-15",
-   "factor": 3.661992
+   "factor": 4.178105
   },
   {
    "i": 741,
    "date": "2025-12-16",
-   "factor": 3.502756
+   "factor": 4.005154
   },
   {
    "i": 742,
    "date": "2025-12-17",
-   "factor": 3.445837
+   "factor": 3.909036
   },
   {
    "i": 743,
    "date": "2025-12-18",
-   "factor": 3.522021
+   "factor": 3.98877
   },
   {
    "i": 744,
    "date": "2025-12-19",
-   "factor": 3.651701
+   "factor": 4.129839
   },
   {
    "i": 745,
    "date": "2025-12-22",
-   "factor": 3.783904
+   "factor": 4.246568
   },
   {
    "i": 746,
    "date": "2025-12-23",
-   "factor": 3.77699
+   "factor": 4.202464
   },
   {
    "i": 747,
    "date": "2025-12-24",
-   "factor": 3.808288
+   "factor": 4.257506
   },
   {
    "i": 748,
    "date": "2025-12-26",
-   "factor": 3.717737
+   "factor": 4.158107
   },
   {
    "i": 749,
    "date": "2025-12-29",
-   "factor": 3.652577
+   "factor": 4.088715
   },
   {
    "i": 750,
    "date": "2025-12-30",
-   "factor": 3.632243
+   "factor": 4.06329
   },
   {
    "i": 751,
    "date": "2025-12-31",
-   "factor": 3.543471
+   "factor": 3.987552
   },
   {
    "i": 752,
    "date": "2026-01-02",
-   "factor": 3.768349
+   "factor": 4.198102
   },
   {
    "i": 753,
    "date": "2026-01-05",
-   "factor": 3.888853
+   "factor": 4.24501
   },
   {
    "i": 754,
    "date": "2026-01-06",
-   "factor": 4.244092
+   "factor": 4.584429
   },
   {
    "i": 755,
    "date": "2026-01-07",
-   "factor": 4.189444
+   "factor": 4.511002
   },
   {
    "i": 756,
    "date": "2026-01-08",
-   "factor": 4.032855
+   "factor": 4.396791
   },
   {
    "i": 757,
    "date": "2026-01-09",
-   "factor": 4.347618
+   "factor": 4.632382
   },
   {
    "i": 758,
    "date": "2026-01-12",
-   "factor": 4.50218
+   "factor": 4.828163
   },
   {
    "i": 759,
    "date": "2026-01-13",
-   "factor": 4.526799
+   "factor": 4.863131
   },
   {
    "i": 760,
    "date": "2026-01-14",
-   "factor": 4.581759
+   "factor": 4.896903
   },
   {
    "i": 761,
    "date": "2026-01-15",
-   "factor": 4.857224
+   "factor": 4.989673
   },
   {
    "i": 762,
    "date": "2026-01-16",
-   "factor": 4.970278
+   "factor": 5.052233
   },
   {
    "i": 763,
    "date": "2026-01-20",
-   "factor": 4.958669
+   "factor": 5.084709
   },
   {
    "i": 764,
    "date": "2026-01-21",
-   "factor": 5.205313
+   "factor": 5.306881
   },
   {
    "i": 765,
    "date": "2026-01-22",
-   "factor": 5.181504
+   "factor": 5.25243
   },
   {
    "i": 766,
    "date": "2026-01-23",
-   "factor": 4.887956
+   "factor": 5.099855
   },
   {
    "i": 767,
    "date": "2026-01-26",
-   "factor": 4.899289
+   "factor": 5.019279
   },
   {
    "i": 768,
    "date": "2026-01-27",
-   "factor": 5.222968
+   "factor": 5.349638
   },
   {
    "i": 769,
    "date": "2026-01-28",
-   "factor": 5.516968
+   "factor": 5.472934
   },
   {
    "i": 770,
    "date": "2026-01-29",
-   "factor": 5.616135
+   "factor": 5.380198
   },
   {
    "i": 771,
    "date": "2026-01-30",
-   "factor": 5.10461
+   "factor": 4.899873
   },
   {
    "i": 772,
    "date": "2026-02-02",
-   "factor": 5.385207
+   "factor": 5.069693
   },
   {
    "i": 773,
    "date": "2026-02-03",
-   "factor": 5.51174
+   "factor": 5.261453
   },
   {
    "i": 774,
    "date": "2026-02-04",
-   "factor": 5.016162
+   "factor": 4.587915
   },
   {
    "i": 775,
    "date": "2026-02-05",
-   "factor": 4.823418
+   "factor": 4.294338
   },
   {
    "i": 776,
    "date": "2026-02-06",
-   "factor": 5.400787
+   "factor": 4.709445
   },
   {
    "i": 777,
    "date": "2026-02-09",
-   "factor": 5.519849
+   "factor": 4.919181
   },
   {
    "i": 778,
    "date": "2026-02-10",
-   "factor": 5.410695
+   "factor": 4.802181
   },
   {
    "i": 779,
    "date": "2026-02-11",
-   "factor": 5.765197
+   "factor": 4.985599
   },
   {
    "i": 780,
    "date": "2026-02-12",
-   "factor": 5.880514
+   "factor": 4.867354
   },
   {
    "i": 781,
    "date": "2026-02-13",
-   "factor": 5.914916
+   "factor": 4.915546
   },
   {
    "i": 782,
    "date": "2026-02-17",
-   "factor": 5.685829
+   "factor": 4.829084
   },
   {
    "i": 783,
    "date": "2026-02-18",
-   "factor": 5.651611
+   "factor": 4.826785
   },
   {
    "i": 784,
    "date": "2026-02-19",
-   "factor": 5.594653
+   "factor": 4.912981
   },
   {
    "i": 785,
    "date": "2026-02-20",
-   "factor": 5.831414
+   "factor": 5.091148
   },
   {
    "i": 786,
    "date": "2026-02-23",
-   "factor": 5.799182
+   "factor": 5.098259
   },
   {
    "i": 787,
    "date": "2026-02-24",
-   "factor": 6.0341
+   "factor": 5.278543
   },
   {
    "i": 788,
    "date": "2026-02-25",
-   "factor": 6.23822
+   "factor": 5.416392
   },
   {
    "i": 789,
    "date": "2026-02-26",
-   "factor": 5.924037
+   "factor": 5.241879
   },
   {
    "i": 790,
    "date": "2026-02-27",
-   "factor": 5.73697
+   "factor": 5.114325
   },
   {
    "i": 791,
    "date": "2026-03-02",
-   "factor": 6.075262
+   "factor": 5.470278
   },
   {
    "i": 792,
    "date": "2026-03-03",
-   "factor": 5.504509
+   "factor": 4.981474
   },
   {
    "i": 793,
    "date": "2026-03-04",
-   "factor": 5.481193
+   "factor": 4.943064
   },
   {
    "i": 794,
    "date": "2026-03-05",
-   "factor": 5.231189
+   "factor": 4.69762
   },
   {
    "i": 795,
    "date": "2026-03-06",
-   "factor": 4.972727
+   "factor": 4.546437
   },
   {
    "i": 796,
    "date": "2026-03-09",
-   "factor": 5.049507
+   "factor": 4.60022
   },
   {
    "i": 797,
    "date": "2026-03-10",
-   "factor": 5.142982
+   "factor": 4.669949
   },
   {
    "i": 798,
    "date": "2026-03-11",
-   "factor": 5.212899
+   "factor": 4.736873
   },
   {
    "i": 799,
    "date": "2026-03-12",
-   "factor": 5.020536
+   "factor": 4.558924
   },
   {
    "i": 800,
    "date": "2026-03-13",
-   "factor": 4.949997
+   "factor": 4.493074
   },
   {
    "i": 801,
    "date": "2026-03-16",
-   "factor": 5.022493
+   "factor": 4.541006
   },
   {
    "i": 802,
    "date": "2026-03-17",
-   "factor": 4.986983
+   "factor": 4.526176
   },
   {
    "i": 803,
    "date": "2026-03-18",
-   "factor": 5.027481
+   "factor": 4.546361
   },
   {
    "i": 804,
    "date": "2026-03-19",
-   "factor": 5.075821
+   "factor": 4.56586
   },
   {
    "i": 805,
    "date": "2026-03-20",
-   "factor": 4.901607
+   "factor": 4.445117
   },
   {
    "i": 806,
    "date": "2026-03-23",
-   "factor": 4.988121
+   "factor": 4.476512
   },
   {
    "i": 807,
    "date": "2026-03-24",
-   "factor": 5.232
+   "factor": 4.675568
   },
   {
    "i": 808,
    "date": "2026-03-25",
-   "factor": 5.320147
+   "factor": 4.757933
   },
   {
    "i": 809,
    "date": "2026-03-26",
-   "factor": 4.874994
+   "factor": 4.300601
   },
   {
    "i": 810,
    "date": "2026-03-27",
-   "factor": 4.833582
+   "factor": 4.264424
   },
   {
    "i": 811,
    "date": "2026-03-30",
-   "factor": 4.619224
+   "factor": 4.072826
   },
   {
    "i": 812,
    "date": "2026-03-31",
-   "factor": 4.683326
+   "factor": 4.130184
   },
   {
    "i": 813,
    "date": "2026-04-01",
-   "factor": 4.737107
+   "factor": 4.178362
   },
   {
    "i": 814,
    "date": "2026-04-02",
-   "factor": 4.859619
+   "factor": 4.288262
   },
   {
    "i": 815,
    "date": "2026-04-06",
-   "factor": 4.805203
+   "factor": 4.239734
   },
   {
    "i": 816,
    "date": "2026-04-07",
-   "factor": 4.838468
+   "factor": 4.268977
   },
   {
    "i": 817,
    "date": "2026-04-08",
-   "factor": 5.097127
+   "factor": 4.496789
   },
   {
    "i": 818,
    "date": "2026-04-09",
-   "factor": 5.326097
+   "factor": 4.648811
   },
   {
    "i": 819,
    "date": "2026-04-10",
-   "factor": 5.339862
+   "factor": 4.705368
   },
   {
    "i": 820,
    "date": "2026-04-13",
-   "factor": 5.550876
+   "factor": 4.922654
   },
   {
    "i": 821,
    "date": "2026-04-14",
-   "factor": 5.578001
+   "factor": 4.956744
   },
   {
    "i": 822,
    "date": "2026-04-15",
-   "factor": 5.444461
+   "factor": 4.831241
   },
   {
    "i": 823,
    "date": "2026-04-16",
-   "factor": 5.688006
+   "factor": 5.059926
   },
   {
    "i": 824,
    "date": "2026-04-17",
-   "factor": 6.013757
+   "factor": 5.298249
   },
   {
    "i": 825,
    "date": "2026-04-20",
-   "factor": 6.294152
+   "factor": 5.401945
   },
   {
    "i": 826,
    "date": "2026-04-21",
-   "factor": 6.437809
+   "factor": 5.420534
   },
   {
    "i": 827,
    "date": "2026-04-22",
-   "factor": 6.598281
+   "factor": 5.70123
   },
   {
    "i": 828,
    "date": "2026-04-23",
-   "factor": 6.939013
+   "factor": 5.755535
   },
   {
    "i": 829,
    "date": "2026-04-24",
-   "factor": 7.839972
+   "factor": 6.24153
   },
   {
    "i": 830,
    "date": "2026-04-27",
-   "factor": 7.456083
+   "factor": 5.972762
   },
   {
    "i": 831,
    "date": "2026-04-28",
-   "factor": 6.828314
+   "factor": 5.547394
   },
   {
    "i": 832,
    "date": "2026-04-29",
-   "factor": 7.364445
+   "factor": 5.803212
   },
   {
    "i": 833,
    "date": "2026-04-30",
-   "factor": 7.921386
+   "factor": 6.253383
   },
   {
    "i": 834,
    "date": "2026-05-01",
-   "factor": 8.233905
+   "factor": 6.500378
   },
   {
    "i": 835,
    "date": "2026-05-04",
-   "factor": 8.152534
+   "factor": 6.468134
   },
   {
    "i": 836,
    "date": "2026-05-05",
-   "factor": 8.732969
+   "factor": 7.020267
   },
   {
    "i": 837,
    "date": "2026-05-06",
-   "factor": 9.540326
+   "factor": 7.989268
   },
   {
    "i": 838,
    "date": "2026-05-07",
-   "factor": 8.788264
+   "factor": 7.44877
   },
   {
    "i": 839,
    "date": "2026-05-08",
-   "factor": 9.962626
+   "factor": 8.365987
   },
   {
    "i": 840,
    "date": "2026-05-11",
-   "factor": 10.565947
+   "factor": 8.763508
   },
   {
    "i": 841,
    "date": "2026-05-12",
-   "factor": 9.729327
+   "factor": 8.232763
   },
   {
    "i": 842,
    "date": "2026-05-13",
-   "factor": 10.143733
+   "factor": 8.816506
   },
   {
    "i": 843,
    "date": "2026-05-14",
-   "factor": 10.295126
+   "factor": 9.086136
   },
   {
    "i": 844,
    "date": "2026-05-15",
-   "factor": 9.535421
+   "factor": 8.451243
   },
   {
    "i": 845,
    "date": "2026-05-18",
-   "factor": 8.841707
+   "factor": 7.730479
   },
   {
    "i": 846,
    "date": "2026-05-19",
-   "factor": 8.940674
+   "factor": 7.65961
   },
   {
    "i": 847,
    "date": "2026-05-20",
-   "factor": 9.366518
+   "factor": 8.012131
   },
   {
    "i": 848,
    "date": "2026-05-21",
-   "factor": 9.877557
+   "factor": 8.503473
   },
   {
    "i": 849,
    "date": "2026-05-22",
-   "factor": 10.320135
+   "factor": 8.982231
   },
   {
    "i": 850,
    "date": "2026-05-26",
-   "factor": 11.117264
+   "factor": 9.890183
   },
   {
    "i": 851,
    "date": "2026-05-27",
-   "factor": 10.936068
+   "factor": 9.752239
   },
   {
    "i": 852,
    "date": "2026-05-28",
-   "factor": 10.891008
+   "factor": 9.975297
   },
   {
    "i": 853,
    "date": "2026-05-29",
-   "factor": 10.989023
+   "factor": 10.119244
   },
   {
    "i": 854,
    "date": "2026-06-01",
-   "factor": 11.21774
+   "factor": 10.34058
   },
   {
    "i": 855,
    "date": "2026-06-02",
-   "factor": 12.215869
+   "factor": 11.285124
   },
   {
    "i": 856,
    "date": "2026-06-03",
-   "factor": 12.540384
+   "factor": 11.08806
   },
   {
    "i": 857,
    "date": "2026-06-04",
-   "factor": 12.067354
+   "factor": 10.783687
   },
   {
    "i": 858,
    "date": "2026-06-05",
-   "factor": 9.763572
+   "factor": 8.712745
   },
   {
    "i": 859,
    "date": "2026-06-08",
-   "factor": 10.273785
+   "factor": 9.376527
   },
   {
    "i": 860,
    "date": "2026-06-09",
-   "factor": 9.809655
+   "factor": 8.730732
   },
   {
    "i": 861,
    "date": "2026-06-10",
-   "factor": 9.056479
+   "factor": 8.14746
   },
   {
    "i": 862,
    "date": "2026-06-11",
-   "factor": 10.452517
+   "factor": 9.395297
   }
  ]
 }

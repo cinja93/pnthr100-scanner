@@ -5,39 +5,39 @@
     "rows": [
       [
         "Net return",
-        "+945%"
+        "+840%"
       ],
       [
         "CAGR",
-        "98%"
+        "91.9%"
       ],
       [
         "Sharpe",
-        "1.49"
+        "1.39"
       ],
       [
         "Sortino",
-        "2.21"
+        "2.04"
       ],
       [
         "Profit factor",
-        "2.10x"
+        "1.97x"
       ],
       [
         "Calmar",
-        "2.15"
+        "1.90"
       ],
       [
         "Max drawdown",
-        "45.6%"
+        "48.5%"
       ],
       [
         "Win rate",
-        "28% (5.48x payoff)"
+        "28% (5.17x payoff)"
       ],
       [
         "Trades",
-        "1,361"
+        "1,375"
       ],
       [
         "S&P 500 (same window)",
@@ -45,7 +45,7 @@
       ],
       [
         "Outperformance vs S&P",
-        "+852%"
+        "+746%"
       ]
     ],
     "asOf": "2026-06-11",

@@ -16,7 +16,7 @@ dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
 import fs from 'fs';
 import { connectToDatabase } from '../database.js';
 import { computeInputHash } from '../treeBaselineGuard.js';   // single shared fingerprint of the backtest inputs
-import { loadTreeData, simulateTree, ENTRY_HIGH_LOOKBACK, BE_SNAP_PROFIT, DEFAULT_START, DEFAULT_END } from './treeSim.js';
+import { loadTreeData, simulateTree, MOST_LIQUID, ENTRY_HIGH_LOOKBACK, BE_SNAP_PROFIT, DEFAULT_START, DEFAULT_END } from './treeSim.js';
 import { applyFeeEngine } from './ai300FeeOverlay.js';   // PPM fee schedule (mgmt + perf + hurdle + HWM)
 
 // Sweep knobs (env overrides; production runs use the LOCKED defaults from treeSim.js).
@@ -32,7 +32,7 @@ const db = await connectToDatabase();
 // Load candles + run the shared LOCKED simulation (identical engine to the live dashboard + the IR).
 const data = await loadTreeData(db, { end: END, universe: UNIVERSE, lookback: LOOKBACK });
 const { spyAt, lastDate } = data;
-const sim = simulateTree(data, { nav0: NAV0, start: START, beSnap: BE_SNAP });
+const sim = simulateTree(data, { nav0: NAV0, start: START, beSnap: BE_SNAP, entrySort: MOST_LIQUID });   // most-liquid buy priority = live engine since 2026-06-30
 const { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip } = sim;
 
 // ── metrics — computed identically for NET (after costs) and GROSS (before costs) ───
@@ -132,8 +132,8 @@ const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs
 
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
-  strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · breakeven snap (+$${BE_SNAP} & green)`,
-  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
+  strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · MOST-LIQUID buy priority (20-day share volume) · breakeven snap (+$${BE_SNAP} & green)`,
+  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED, and the 2023-2026 window is a BULL market only (the AI-300 has no bear-market history). Scarce-capital entry priority = most-liquid (deterministic, order-invariant; robustness-validated in-sample + out-of-sample), matching the live engine. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
   backtestStart: equity[0].date,        // first session traded (frozen)
   backtestEnd: lastDate,                // last session before go-live (frozen at 2026-06-11)

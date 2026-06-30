@@ -14,7 +14,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
-import { loadTreeData, simulateTree, DEFAULT_START, DEFAULT_END } from './backtest/treeSim.js';
+import { loadTreeData, simulateTree, MOST_LIQUID, DEFAULT_START, DEFAULT_END } from './backtest/treeSim.js';
 
 // MUST match build_tree_baseline.mjs: same universe (current AI-300 members), freeze date,
 // and min-history filter (ENTRY_HIGH_LOOKBACK+5). Lookback is the 42-week high (210 trading days).
@@ -52,7 +52,7 @@ const CAGR_TOL = 0.3;   // pts of CAGR %
 // committed baseline to the dollar.
 async function recomputeHeadline(db) {
   const data = await loadTreeData(db, { end: DEFAULT_END, universe: 'ai' });
-  const sim = simulateTree(data, { nav0: 100000, start: DEFAULT_START });
+  const sim = simulateTree(data, { nav0: 100000, start: DEFAULT_START, entrySort: MOST_LIQUID });   // must match build_tree_baseline's order
   const endEq = sim.equity[sim.equity.length - 1].eq;
   const years = (Date.parse(data.lastDate) - Date.parse(sim.equity[0].date)) / (365.25 * 86400000);
   return {

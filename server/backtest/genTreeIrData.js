@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { connectToDatabase } from '../database.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
-import { loadTreeData, simulateTree } from './treeSim.js';
+import { loadTreeData, simulateTree, MOST_LIQUID } from './treeSim.js';
 import { applyFeeEngine } from './ai300FeeOverlay.js';
 import { computeTradeStats } from '../irLiveService.js';
 
@@ -55,7 +55,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 for (const t of TIERS) {
   process.stdout.write(`  ${t.key} ($${(t.seedNav / 1000).toFixed(0)}K)...`);
-  const sim = simulateTree(data, { nav0: t.seedNav });
+  const sim = simulateTree(data, { nav0: t.seedNav, entrySort: MOST_LIQUID });   // most-liquid buy priority = live engine
   // GROSS = strategy NAV after trading costs (commission+slippage already in sim.equity).
   const grossDaily = sim.equity.map(e => ({ date: e.date, equity: +(+e.eq).toFixed(2) }));
   // NET = GROSS minus the full PPM fee schedule (quarterly crystallization = real fee economics).

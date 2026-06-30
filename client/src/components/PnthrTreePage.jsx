@@ -374,6 +374,19 @@ export default function PnthrTreePage() {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  // Reset the PAPER book to a clean slate: wipes paper positions, trades, exits,
+  // every NO BUYBACK lock, and the NEW/attack-seen history so every name falls
+  // back to Approaching/Attack. PAPER-ONLY — never touches live/IBKR.
+  const resetPaper = async () => {
+    if (!window.confirm('Reset the PAPER book? This clears ALL paper positions, trades, NO BUYBACK locks, and NEW badges so every stock starts fresh at Approaching/Attack.\n\nThis does NOT touch your live/IBKR positions. It cannot be undone.')) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/reset`, { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   // Toggle the per-ticker "no buyback" lock — block (or re-allow) the engine re-entering
   // a name. Optimistically reflect it, then reload from the server.
   const toggleBuyback = async (ticker, currentlyBlocked) => {
@@ -485,6 +498,22 @@ export default function PnthrTreePage() {
               <ModeButton label="OFF" active={mode === 'off'} color="#666" onClick={() => setMode('off')} />
               <ModeButton label="PAPER TRADE" active={mode === 'paper'} color="#3b82f6" onClick={() => setMode('paper')} />
               <ModeButton label="AUTO-EXECUTE" active={mode === 'live'} color="#22c55e" onClick={() => setMode('live')} />
+              {mode === 'paper' && (
+                <button
+                  onClick={resetPaper}
+                  disabled={busy}
+                  title="Reset the paper book — clears all paper positions, trades, NO BUYBACK locks and NEW badges so every stock starts fresh. Does NOT touch live/IBKR."
+                  style={{
+                    marginLeft: 4, padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 13,
+                    letterSpacing: '0.04em', background: 'transparent', border: '1px solid #b45309',
+                    color: '#f59e0b', cursor: busy ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = '#b45309'; e.currentTarget.style.color = '#000'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#f59e0b'; }}
+                >
+                  ↺ Reset Paper Book
+                </button>
+              )}
             </>
           )}
         </div>

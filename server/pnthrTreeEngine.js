@@ -933,11 +933,27 @@ export async function runPnthrTreeTick(db) {
   return { mode: cfg.mode, actions };
 }
 
-// ── Reset paper book ─────────────────────────────────────────────────────────
+// ── Reset paper book (FULL fresh start) ──────────────────────────────────────
+// Wipes everything that makes a paper name look "in progress" so every stock
+// falls back to Approaching/Attack with nothing blocked. PAPER-ONLY and
+// ticker-state — never touches live positions/trades (mode:'paper' scoped where
+// the collection carries a mode; the seen/attack-seen/no-buyback collections are
+// ticker-keyed funnel state with no live counterpart while flat).
 export async function resetPnthrTreePaper(db) {
-  const a = await db.collection(POS).deleteMany({ mode: 'paper' });
-  const b = await db.collection(TRADES).deleteMany({ mode: 'paper' });
-  return { positions: a.deletedCount, trades: b.deletedCount };
+  const a = await db.collection(POS).deleteMany({ mode: 'paper' });          // held paper cards
+  const b = await db.collection(TRADES).deleteMany({ mode: 'paper' });       // paper trade log
+  const c = await db.collection(EXITS).deleteMany({ mode: 'paper' });        // 24h "recently stopped" paper cards
+  const d = await db.collection(NO_BUYBACK).deleteMany({});                  // un-block every NO BUYBACK toggle
+  const e = await db.collection('pnthr_tree_seen').deleteMany({});           // clear NEW-badge history
+  const f = await db.collection('pnthr_tree_attack_seen').deleteMany({});    // clear attack-since timestamps
+  return {
+    positions:  a.deletedCount,
+    trades:     b.deletedCount,
+    exits:      c.deletedCount,
+    noBuyback:  d.deletedCount,
+    seen:       e.deletedCount,
+    attackSeen: f.deletedCount,
+  };
 }
 
 // ── Projected vs Actual AUM (Tree's OWN backtest baseline, NOT Ambush's) ──────

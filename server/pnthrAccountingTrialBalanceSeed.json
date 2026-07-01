@@ -1,0 +1,308 @@
+{
+  "tab": "Trial Balance",
+  "sourceAsOf": "05/31/2026",
+  "accounts": [
+    {
+      "row": 8,
+      "category": "Assets - Cash",
+      "gl": 13004,
+      "broker": "Axos Bank-890000204895",
+      "financial": "Bank Balance",
+      "mayEnding": 2996.93
+    },
+    {
+      "row": 9,
+      "category": "Assets - Cash",
+      "gl": 13004,
+      "broker": "Interactive-U18248579",
+      "financial": "Broker Cash Balance",
+      "mayEnding": 1077.414367
+    },
+    {
+      "row": 12,
+      "category": "Assets - Long Portfolio Value",
+      "gl": 13501,
+      "broker": "Interactive-U18248579",
+      "financial": "Long Portfolio Value- Cost",
+      "mayEnding": 80138.229014
+    },
+    {
+      "row": 13,
+      "category": "Assets - Long Portfolio Value",
+      "gl": 13503,
+      "broker": "Interactive-U18248579",
+      "financial": "Long Portfolio Value-Unrealized Gain/Loss",
+      "mayEnding": 2401.650986
+    },
+    {
+      "row": 14,
+      "category": "Assets - Interest Receivables",
+      "gl": 10002,
+      "broker": "Interactive-U18248579",
+      "financial": "Broker Interest Receivable",
+      "mayEnding": 61.39
+    },
+    {
+      "row": 15,
+      "category": "Assets - Dividend Receivables",
+      "gl": 10502,
+      "broker": "Interactive-U18248579",
+      "financial": "Dividend Receivable - US Stock",
+      "mayEnding": 62.98
+    },
+    {
+      "row": 16,
+      "category": "Liabilities - Interest Payables",
+      "gl": 20004,
+      "broker": "Interactive-U18248579",
+      "financial": "Broker Interest Payable",
+      "mayEnding": -65.08
+    },
+    {
+      "row": 17,
+      "category": "Liabilities - Expense Payables",
+      "gl": 22004,
+      "broker": "Fund Account",
+      "financial": "Administration Expenses Payable",
+      "mayEnding": -3533.33333343
+    },
+    {
+      "row": 18,
+      "category": "Liabilities - Expense Payables",
+      "gl": 22005,
+      "broker": "Fund Account",
+      "financial": "Professional Expenses Payable",
+      "mayEnding": -23020.83767873
+    },
+    {
+      "row": 19,
+      "category": "Liabilities - Expense Payables",
+      "gl": 22002,
+      "broker": "Fund Account",
+      "financial": "Operating Expenses Payable",
+      "mayEnding": -19242.65476158
+    },
+    {
+      "row": 20,
+      "category": "Assets - Advance Paid",
+      "gl": 12005,
+      "broker": "Fund Account",
+      "financial": "Organization Cost Prepaid",
+      "mayEnding": 26088.39833255
+    },
+    {
+      "row": 21,
+      "category": "Assets - Advance Paid",
+      "gl": 12007,
+      "broker": "Fund Account",
+      "financial": "Due from Affiliates",
+      "mayEnding": 16281.46
+    },
+    {
+      "row": 24,
+      "category": "Income - Realized and Unrealized Gain/Loss",
+      "gl": 34003,
+      "broker": "Interactive-U18248579",
+      "financial": "Realized P&L - Short Term",
+      "mayEnding": 578.77755
+    },
+    {
+      "row": 25,
+      "category": "Income - Realized and Unrealized Gain/Loss",
+      "gl": 34006,
+      "broker": "Interactive-U18248579",
+      "financial": "Change In Unrealized P&L",
+      "mayEnding": -1806.39031
+    },
+    {
+      "row": 26,
+      "category": "Expenses - Trading Expense",
+      "gl": 42503,
+      "broker": "Interactive-U18248579",
+      "financial": "Commission Expenses",
+      "mayEnding": 9191.49264
+    },
+    {
+      "row": 27,
+      "category": "Expenses - Trading Expense",
+      "gl": 42506,
+      "broker": "Interactive-U18248579",
+      "financial": "Other Trading Cost",
+      "mayEnding": 146.1591
+    },
+    {
+      "row": 28,
+      "category": "Income - Interest Income",
+      "gl": 30001,
+      "broker": "Interactive-U18248579",
+      "financial": "Broker Interest Income",
+      "mayEnding": -436.98
+    },
+    {
+      "row": 29,
+      "category": "Income - Dividend Income",
+      "gl": 30505,
+      "broker": "Interactive-U18248579",
+      "financial": "Dividend Income - US Stock",
+      "mayEnding": -196.58
+    },
+    {
+      "row": 30,
+      "category": "Income - Dividend Income",
+      "gl": 30504,
+      "broker": "Interactive-U18248579",
+      "financial": "Dividend Income - Foreign Stock",
+      "mayEnding": -9.4
+    },
+    {
+      "row": 31,
+      "category": "Expenses - Interest Expenses",
+      "gl": 40005,
+      "broker": "Interactive-U18248579",
+      "financial": "Broker Interest Expense",
+      "mayEnding": 469.22
+    },
+    {
+      "row": 32,
+      "category": "Expenses - Dividend Expenses",
+      "gl": 40504,
+      "broker": "Interactive-U18248579",
+      "financial": "Dividend Expense - US Stock",
+      "mayEnding": 56.95
+    },
+    {
+      "row": 33,
+      "category": "Expenses - Dividend Expenses",
+      "gl": 40503,
+      "broker": "Interactive-U18248579",
+      "financial": "Dividend Expense - Foreign Stock",
+      "mayEnding": 3.9
+    },
+    {
+      "row": 34,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42005,
+      "broker": "Fund Account",
+      "financial": "Administration Expenses",
+      "mayEnding": 2583.33333358
+    },
+    {
+      "row": 35,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42004,
+      "broker": "Fund Account",
+      "financial": "Legal Expenses",
+      "mayEnding": 174
+    },
+    {
+      "row": 36,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42006,
+      "broker": "Fund Account",
+      "financial": "Professional Expenses",
+      "mayEnding": 8020.83625027
+    },
+    {
+      "row": 37,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42003,
+      "broker": "Fund Account",
+      "financial": "Operating Expenses",
+      "mayEnding": 7169.02333294
+    },
+    {
+      "row": 38,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42002,
+      "broker": "Fund Account",
+      "financial": "Organization Cost",
+      "mayEnding": 2733.58333365
+    },
+    {
+      "row": 39,
+      "category": "Expenses - Operating and Org. Exp.",
+      "gl": 42007,
+      "broker": "Fund Account",
+      "financial": "Reimbursement to/from Affiliates",
+      "mayEnding": -20479.64
+    },
+    {
+      "row": 42,
+      "category": "Capital",
+      "gl": 70001,
+      "broker": "Fund Account",
+      "financial": "Beginning Capital",
+      "mayEnding": -91444.83215625
+    },
+    {
+      "row": 43,
+      "category": "Capital",
+      "gl": 70002,
+      "broker": "Fund Account",
+      "financial": "Begin Of Period Additions",
+      "mayEnding": 0
+    }
+  ],
+  "subtotals": [
+    {
+      "row": 10,
+      "label": null,
+      "gl": null,
+      "sumRows": [
+        8,
+        9
+      ]
+    },
+    {
+      "row": 22,
+      "label": "Net Assets / Liabilities:",
+      "gl": "70031",
+      "sumRows": [
+        8,
+        9,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "row": 40,
+      "label": "Net (Income)/ Loss:",
+      "gl": "70013",
+      "sumRows": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ]
+    },
+    {
+      "row": 44,
+      "label": "Capital:",
+      "gl": "70008",
+      "sumRows": [
+        42,
+        43
+      ]
+    }
+  ]
+}

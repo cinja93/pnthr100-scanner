@@ -1,0 +1,233 @@
+{
+  "sourceAsOf": "2026-05-31",
+  "quarter": "2026-Q2",
+  "navBeginning": {
+    "qtd": 81579.13898202,
+    "ytd": 91444.83215625
+  },
+  "isAnchors": {
+    "realizedPL": {
+      "qtd": 1937.254454,
+      "ytd": -578.77755
+    },
+    "unrealizedPL": {
+      "qtd": 2328.667646,
+      "ytd": 1806.39031
+    },
+    "commission": {
+      "qtd": -2574.047906,
+      "ytd": -9191.49264
+    },
+    "otherTradingCost": {
+      "qtd": -54.86,
+      "ytd": -146.1591
+    },
+    "brokerIntIncome": {
+      "qtd": 148.8,
+      "ytd": 436.98
+    },
+    "divIncomeUS": {
+      "qtd": 75.21,
+      "ytd": 196.58
+    },
+    "divIncomeForeign": {
+      "qtd": 0,
+      "ytd": 9.4
+    },
+    "brokerIntExpense": {
+      "qtd": -107.26,
+      "ytd": -469.22
+    },
+    "divExpenseUS": {
+      "qtd": -10.81,
+      "ytd": -56.95
+    },
+    "divExpenseForeign": {
+      "qtd": 0,
+      "ytd": -3.9
+    },
+    "admin": {
+      "qtd": -1033.33333352,
+      "ytd": -2583.33333358
+    },
+    "legal": {
+      "qtd": 0,
+      "ytd": -174
+    },
+    "professional": {
+      "qtd": -4270.83625011,
+      "ytd": -8020.83625027
+    },
+    "operating": {
+      "qtd": -3066.10333313,
+      "ytd": -7169.02333294
+    },
+    "orgCost": {
+      "qtd": -1093.43333345,
+      "ytd": -2733.58333365
+    },
+    "reimbursement": {
+      "qtd": 9388.16,
+      "ytd": 20479.64
+    }
+  },
+  "incentive": {
+    "cumProfitEnding": -66753.45307419,
+    "cumHurdleProfitEnding": 4720.79836883,
+    "hurdleBase": 92490.54037474,
+    "hurdleRate": 0.0347,
+    "hurdleAmtMay": 263.29019137
+  },
+  "opexLines": [
+    {
+      "row": 8,
+      "gl": "42005",
+      "category": "Administration Expenses",
+      "description": "Admin Fee",
+      "endingMay": 700.00000006,
+      "monthlyAccrual": 349.99999998,
+      "ytdAccrualMay": 1750,
+      "ytdPaidMay": -1450
+    },
+    {
+      "row": 9,
+      "gl": "42005",
+      "category": "Administration Expenses",
+      "description": "FS Preparation Fee - 2025",
+      "endingMay": 1999.99999979,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 0,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 10,
+      "gl": "42005",
+      "category": "Administration Expenses",
+      "description": "FS Preparation Fee - 2026",
+      "endingMay": 833.33333358,
+      "monthlyAccrual": 166.66666673,
+      "ytdAccrualMay": 833.33333358,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 11,
+      "gl": "42004",
+      "category": "Legal Expenses",
+      "description": "Legal Expenses",
+      "endingMay": 0,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 174,
+      "ytdPaidMay": -174
+    },
+    {
+      "row": 12,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "Bank Charges",
+      "endingMay": 0,
+      "monthlyAccrual": 46.82,
+      "ytdAccrualMay": 201.14,
+      "ytdPaidMay": -201.14
+    },
+    {
+      "row": 13,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "Compliance Expenses",
+      "endingMay": 4613.76999964,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 0,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 14,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "Compliance Expenses",
+      "endingMay": 3295.54999983,
+      "monthlyAccrual": 659.10999995,
+      "ytdAccrualMay": 3295.54999983,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 15,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "Insurance Expenses",
+      "endingMay": 8000.001429,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 0,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 16,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "Insurance Expenses",
+      "endingMay": 3333.33333311,
+      "monthlyAccrual": 666.6666666,
+      "ytdAccrualMay": 3333.33333311,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 17,
+      "gl": "42003",
+      "category": "Operating Expenses",
+      "description": "State Tax Fee",
+      "endingMay": 0,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 339,
+      "ytdPaidMay": -339
+    },
+    {
+      "row": 18,
+      "gl": "42006",
+      "category": "Professional Expenses",
+      "description": "Audit Fees - 2025",
+      "endingMay": 15000.00142846,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 0,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 19,
+      "gl": "42006",
+      "category": "Professional Expenses",
+      "description": "Audit Fees - 2026",
+      "endingMay": 6250.00000031,
+      "monthlyAccrual": 1250.00000009,
+      "ytdAccrualMay": 6250.00000031,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 20,
+      "gl": "42006",
+      "category": "Professional Expenses",
+      "description": "Taxation Fees - 2025",
+      "endingMay": 1250,
+      "monthlyAccrual": 0,
+      "ytdAccrualMay": 1250,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 21,
+      "gl": "42006",
+      "category": "Professional Expenses",
+      "description": "Taxation Fees - 2026",
+      "endingMay": 520.83624996,
+      "monthlyAccrual": 520.83624996,
+      "ytdAccrualMay": 520.83624996,
+      "ytdPaidMay": 0
+    },
+    {
+      "row": 22,
+      "gl": "42007",
+      "category": "Reimbursement to/from Affiliates",
+      "description": "Receivable/Payable (From)/To GP/IM",
+      "endingMay": -16281.46,
+      "monthlyAccrual": -4160,
+      "ytdAccrualMay": -20479.64,
+      "ytdPaidMay": 0
+    }
+  ]
+}

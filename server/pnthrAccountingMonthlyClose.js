@@ -18,6 +18,8 @@ import { buildAccountStatement } from './pnthrAccountingClose.js';
 import { renderAccountStatement, renderIndividualAccountStatement } from './pnthrAccountingRenderPdf.js';
 import { saveDocument } from './pnthrAccountingService.js';
 import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
+import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialBalance.js';
+import { buildWorkbookFundamentals, buildFundAccountingWorkbook } from './pnthrAccountingWorkbook.js';
 import { connectToDatabase } from './database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -93,12 +95,43 @@ export async function stageClose(period) {
   const { parsed } = await pullFlexStatement();
   const income = mapFlexToIncome(parsed);
   const db = await connectToDatabase();
+  // Stash the Flex sections the Trial Balance engine + Doc-3 workbook need at finalize time, from the
+  // SAME pull that produced the reconciled income (so the workbook can't drift from a second API call).
+  const S = parsed.sections || {};
+  const tbSections = {
+    ChangeInNAV: S.ChangeInNAV, CashReport: S.CashReport, EquitySummaryInBase: S.EquitySummaryInBase,
+    FIFOPerformanceSummaryInBase: S.FIFOPerformanceSummaryInBase, TierInterestDetails: S.TierInterestDetails,
+  };
   await db.collection(CLOSE_COLL).updateOne(
     { period },
-    { $set: { period, status: 'awaiting_bank_balance', income, accountId: parsed.accountId, flexFrom: parsed.fromDate, flexTo: parsed.toDate, stagedAt: new Date() } },
+    { $set: { period, status: 'awaiting_bank_balance', income, tbSections, accountId: parsed.accountId, flexFrom: parsed.fromDate, flexTo: parsed.toDate, stagedAt: new Date() } },
     { upsert: true },
   );
   return { period, status: 'awaiting_bank_balance', brokerNAV: income.brokerNAV };
+}
+
+// ── Account Summary cash flows from Flex (gross receipts/payments) ────────────────
+// Built from the Flex CashReport's OWN components, whose sum equals (endingCash - startingCash) by
+// construction — so beginning cash + these flows ties to the ending cash (= the Trial Balance cash)
+// exactly. Presentational residuals (flagged, do NOT affect the tie): the sales/purchases long-vs-
+// short split isn't separable from this query (lumped into the "Long" lines), broker interest is
+// shown on a single net line (received/paid net rather than gross), and dividend cash receipts fold
+// payment-in-lieu into the Dividend Received line.
+function cashflowFromFlex({ cashReport, priorBank, priorBrokerCash, bankCharge }) {
+  const n = (v) => +(+v || 0);
+  const c = cashReport || {};
+  const brokerBegin = c.startingCash != null ? n(c.startingCash) : n(priorBrokerCash);
+  const brokerInt = n(c.brokerInterest);
+  return {
+    beginningCash: { total: n(priorBank) + brokerBegin, fund: 0, bank: n(priorBank), broker: brokerBegin },
+    salesLong: n(c.netTradesSales), salesShort: 0,
+    brokerIntReceived: brokerInt > 0 ? brokerInt : 0,
+    divReceived: n(c.dividends) + n(c.paymentInLieu),           // cash dividend receipts (incl. payment-in-lieu)
+    purchasesLong: n(c.netTradesPurchases), purchasesBuyToCover: 0,
+    commissionPaid: n(c.commissions), otherTradingCostPaid: n(c.otherFees),
+    brokerIntPaid: brokerInt < 0 ? brokerInt : 0,
+    operatingExpPaid: -Math.abs(n(bankCharge)),
+  };
 }
 
 // ── Finalize: GP entered the bank balance -> roll ledger, run engine, gate, render, store ──
@@ -164,6 +197,26 @@ export async function finalizeClose(period, bankBalance) {
   // seed history and re-render the inception-to-date roll. Same gate status as the statements.
   const { buffer: rollBuf } = await generateCapitalRoll(period, { totalIncome: eng.netIncome[0] });
   await saveDocument({ period, docType: 'capital_roll_history', investorNo: null, label: 'Capital Roll History', filename: `PNTHR Capital Roll History ${period}.xlsx`, contentType: XLSX, data: rollBuf, status, generatedBy: 'pnthr-engine' });
+
+  // Doc 3: Fund Accounting Workbook (10 tabs). Built from the validated Trial Balance engine + the
+  // income mapping + the NAV roll + the Fund Ledger, on NAV's exact template. Wrapped so a workbook
+  // failure never breaks the core close (PDFs + reconciliation are already stored). Same gate status.
+  try {
+    const bankCharge = r2(prior.bank - bankBalance);
+    const parsed = { accountId: close.accountId, sections: close.tbSections || {} };
+    const inputs = trialBalanceInputs({ parsed, ledger: { ...balances, expenseLines }, bankBalance });
+    const tb = computeTrialBalance(period, inputs);
+    const cashflow = cashflowFromFlex({ cashReport: (close.tbSections?.CashReport || [])[0], priorBank: prior.bank, priorBrokerCash: inputs.brokerCash, bankCharge });
+    const genTs = `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (ET)`;
+    const f = buildWorkbookFundamentals({
+      period, tbAccounts: tb.accounts, income, expenseLines, beginning, engEnding: r2(tb.checks.navEnding),
+      netIncome: eng.netIncome[0], bankCharge, cashflow, genTs,
+    });
+    const wbBuf = await buildFundAccountingWorkbook(f);
+    await saveDocument({ period, docType: 'fund_accounting_workbook', investorNo: null, label: 'Fund Accounting Workbook', filename: `PNTHR Fund Accounting Workbook ${period}.xlsx`, contentType: XLSX, data: wbBuf, status, generatedBy: 'pnthr-engine' });
+  } catch (e) {
+    console.error(`[close ${period}] Doc 3 workbook generation failed (core close unaffected):`, e.message);
+  }
 
   // Persist the rolled ledger + the close result.
   await db.collection(LEDGER_COLL).updateOne({ period }, { $set: { period, balances, expenseLines, bucketBNet: bNet, endingNAV: engEnding, updatedAt: new Date() } }, { upsert: true });

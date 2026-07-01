@@ -1,0 +1,6101 @@
+{
+"sheets": [
+{
+"name": "ReportLinks",
+"cells": [
+{
+"ref": "A1",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "For the Period 05/01/2026 to 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "B6",
+"value": "Account Statement",
+"numFmt": "General"
+},
+{
+"ref": "F6",
+"value": "Trial Balance",
+"numFmt": "General"
+},
+{
+"ref": "J6",
+"value": "Balance Sheet",
+"numFmt": "General"
+},
+{
+"ref": "N6",
+"value": "Account Summary",
+"numFmt": "General"
+},
+{
+"ref": "R6",
+"value": "\nSummary Equity\nSchedule",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": "\nDetailed Equity\nSchedule",
+"numFmt": "General"
+},
+{
+"ref": "F9",
+"value": "\nOperating Expense\nSchedule",
+"numFmt": "General"
+},
+{
+"ref": "J9",
+"value": "Incentive Fee",
+"numFmt": "General"
+},
+{
+"ref": "N9",
+"value": "Management Fee",
+"numFmt": "General"
+},
+{
+"ref": "A12",
+"value": "Disclaimer:\n\nThese statements are prepared and provided by PNTHR Funds, LLC, the General Partner of the Fund, solely for informational purposes. The figures are unaudited estimates as of the reporting date and are subject to change; they are superseded by the Fund\u2019s audited annual financial statements. This information is confidential, intended only for the named investor, and may not be redistributed. It does not constitute an offer, solicitation, or tax, legal, or investment advice. Past performance is not necessarily indicative of future results.",
+"numFmt": "General"
+}
+],
+"merges": [
+"A1:U1",
+"A12:U12",
+"A4:U4",
+"A3:U3"
+],
+"colWidths": {
+"A": 3.15,
+"B": 29.48,
+"C": 0.43,
+"D": 0.43,
+"E": 2.14,
+"F": 29.48,
+"G": 0.43,
+"H": 0.43,
+"I": 2.14,
+"J": 29.48,
+"K": 0.43,
+"L": 0.43,
+"M": 2.14,
+"N": 29.48,
+"O": 0.43,
+"P": 0.43,
+"Q": 2.14,
+"R": 29.48,
+"S": 0.43,
+"T": 0.43,
+"U": 36.56
+}
+},
+{
+"name": "Account Statement",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Account Statement (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period Ended May 31, 2026",
+"numFmt": "General"
+},
+{
+"ref": "C4",
+"value": "Start Of Period : 05/01/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "C5",
+"value": "End Of Period  : 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A6",
+"value": "Statement of Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Period to Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Month to Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Quarter to Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Year to Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A7",
+"value": "Trading Income (Expenses):",
+"numFmt": "General"
+},
+{
+"ref": "A8",
+"value": "Realized P&L - Short Term",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C8",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D8",
+"value": 1937.254454,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E8",
+"value": -578.77755,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A9",
+"value": "Change In Unrealized P&L",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": 597.211613,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C9",
+"value": 597.211613,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D9",
+"value": 2328.667646,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E9",
+"value": 1806.39031,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A10",
+"value": "Commission Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B10",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C10",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D10",
+"value": -2574.047906,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E10",
+"value": -9191.49264,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A11",
+"value": "Other Trading Cost",
+"numFmt": "General"
+},
+{
+"ref": "B11",
+"value": -30,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C11",
+"value": -30,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D11",
+"value": -54.86,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E11",
+"value": -146.1591,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "B12",
+"value": -2636.230978,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C12",
+"value": -2636.230978,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D12",
+"value": 1637.014194,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E12",
+"value": -8110.03898,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A13",
+"value": "Other Incomes:",
+"numFmt": "General"
+},
+{
+"ref": "A14",
+"value": "Broker Interest Income",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": 61.39,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C14",
+"value": 61.39,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D14",
+"value": 148.8,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E14",
+"value": 436.98,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A15",
+"value": "Dividend Income - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "B15",
+"value": 68.66,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C15",
+"value": 68.66,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D15",
+"value": 75.21,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E15",
+"value": 196.58,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A16",
+"value": "Dividend Income - Foreign Stock",
+"numFmt": "General"
+},
+{
+"ref": "E16",
+"value": 9.4,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A17",
+"value": "Total Income (Loss):",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B17",
+"value": -2506.180978,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C17",
+"value": -2506.180978,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D17",
+"value": 1861.024194,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E17",
+"value": -7467.07898,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A18",
+"value": "Expenses:",
+"numFmt": "General"
+},
+{
+"ref": "A19",
+"value": "Broker Interest Expense",
+"numFmt": "General"
+},
+{
+"ref": "B19",
+"value": -70.64,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C19",
+"value": -70.64,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D19",
+"value": -107.26,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E19",
+"value": -469.22,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A20",
+"value": "Dividend Expense - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "D20",
+"value": -10.81,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E20",
+"value": -56.95,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A21",
+"value": "Dividend Expense - Foreign Stock",
+"numFmt": "General"
+},
+{
+"ref": "E21",
+"value": -3.9,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A22",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B22",
+"value": -516.66666671,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C22",
+"value": -516.66666671,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D22",
+"value": -1033.33333352,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E22",
+"value": -2583.33333358,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A23",
+"value": "Legal Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E23",
+"value": -174,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A24",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B24",
+"value": -1770.83625005,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C24",
+"value": -1770.83625005,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D24",
+"value": -4270.83625011,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E24",
+"value": -8020.83625027,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A25",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B25",
+"value": -1372.59666655,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C25",
+"value": -1372.59666655,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D25",
+"value": -3066.10333313,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E25",
+"value": -7169.02333294,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A26",
+"value": "Organization Cost",
+"numFmt": "General"
+},
+{
+"ref": "B26",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C26",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D26",
+"value": -1093.43333345,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E26",
+"value": -2733.58333365,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A27",
+"value": "Reimbursement to/from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "B27",
+"value": 4160,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C27",
+"value": 4160,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D27",
+"value": 9388.16,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E27",
+"value": 20479.64,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A28",
+"value": "Total Expenses:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B28",
+"value": -117.45625006,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C28",
+"value": -117.45625006,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D28",
+"value": -193.61625021,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E28",
+"value": -731.20625044,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A29",
+"value": "Net Income (Loss) :",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B29",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C29",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D29",
+"value": 1667.40794379,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E29",
+"value": -8198.28523044,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A30",
+"value": "Statement of Changes in Net Asset Value",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A31",
+"value": "Beginning Balance",
+"numFmt": "General"
+},
+{
+"ref": "B31",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C31",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D31",
+"value": 81579.13898202,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E31",
+"value": 91444.83215625,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A32",
+"value": "Additions ",
+"numFmt": "General"
+},
+{
+"ref": "A33",
+"value": "Net Income (Loss) ",
+"numFmt": "General"
+},
+{
+"ref": "B33",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C33",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D33",
+"value": 1667.40794379,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E33",
+"value": -8198.28523044,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A34",
+"value": "Redemptions ",
+"numFmt": "General"
+},
+{
+"ref": "A35",
+"value": "Ending Balance:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B35",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "C35",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "D35",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "E35",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A36",
+"value": "NET ROR:",
+"numFmt": "General"
+},
+{
+"ref": "B36",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%"
+},
+{
+"ref": "C36",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%"
+},
+{
+"ref": "D36",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%"
+},
+{
+"ref": "E36",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%"
+},
+{
+"ref": "A37",
+"value": "TO THE BEST OF MY KNOWLEDGE AND BELIEF THE INFORMATION CONTAINED HEREIN IS ACCURATE AND COMPLETE.",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A39",
+"value": "For PNTHR Funds, LLC\nGeneral Partner of PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A40",
+"value": "Report generated on: 06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A4:B4",
+"A39:E39",
+"A38:E38",
+"A2:E2",
+"C5:E5",
+"A5:B5",
+"C4:E4",
+"A1:E1",
+"A37:E37",
+"A40:E40",
+"A3:E3"
+],
+"colWidths": {
+"A": 41.14,
+"B": 17.14,
+"C": 17.14,
+"D": 17.14,
+"E": 17.14
+}
+},
+{
+"name": "Trial Balance",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Trial Balance (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "As of 04/30/2026 and 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Account Category",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "GL Number",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Financial Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Begin Balances",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Debit/(Credit) \nDuring \nthe Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Ending Balances",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "Assets - Cash",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": 13004,
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Axos Bank-890000204895",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": "Bank Balance",
+"numFmt": "General"
+},
+{
+"ref": "E8",
+"value": 3043.75,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F8",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G8",
+"value": 2996.93,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A9",
+"value": "Assets - Cash",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": 13004,
+"numFmt": "General"
+},
+{
+"ref": "C9",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D9",
+"value": "Broker Cash Balance",
+"numFmt": "General"
+},
+{
+"ref": "E9",
+"value": -21196.573455,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F9",
+"value": 22273.987822,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G9",
+"value": 1077.414367,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E10",
+"value": -18152.823455,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F10",
+"value": 22227.167822,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G10",
+"value": 4074.344367,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A12",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B12",
+"value": 13501,
+"numFmt": "General"
+},
+{
+"ref": "C12",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D12",
+"value": "Long Portfolio Value- Cost",
+"numFmt": "General"
+},
+{
+"ref": "E12",
+"value": 105593.679427,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F12",
+"value": -25455.450413,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G12",
+"value": 80138.229014,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A13",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B13",
+"value": 13503,
+"numFmt": "General"
+},
+{
+"ref": "C13",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D13",
+"value": "Long Portfolio Value-Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "E13",
+"value": 1804.439373,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F13",
+"value": 597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G13",
+"value": 2401.650986,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A14",
+"value": "Assets - Interest Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": 10002,
+"numFmt": "General"
+},
+{
+"ref": "C14",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D14",
+"value": "Broker Interest Receivable",
+"numFmt": "General"
+},
+{
+"ref": "E14",
+"value": 83.23,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F14",
+"value": -21.84,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G14",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A15",
+"value": "Assets - Dividend Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B15",
+"value": 10502,
+"numFmt": "General"
+},
+{
+"ref": "C15",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D15",
+"value": "Dividend Receivable - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "E15",
+"value": 4.95,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F15",
+"value": 58.03,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G15",
+"value": 62.98,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A16",
+"value": "Liabilities - Interest Payables",
+"numFmt": "General"
+},
+{
+"ref": "B16",
+"value": 20004,
+"numFmt": "General"
+},
+{
+"ref": "C16",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D16",
+"value": "Broker Interest Payable",
+"numFmt": "General"
+},
+{
+"ref": "E16",
+"value": -36.32,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F16",
+"value": -28.76,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G16",
+"value": -65.08,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A17",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B17",
+"value": 22004,
+"numFmt": "General"
+},
+{
+"ref": "C17",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D17",
+"value": "Administration Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "E17",
+"value": -3016.66666672,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F17",
+"value": -516.66666671,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G17",
+"value": -3533.33333343,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A18",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B18",
+"value": 22005,
+"numFmt": "General"
+},
+{
+"ref": "C18",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D18",
+"value": "Professional Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "E18",
+"value": -21250.00142868,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F18",
+"value": -1770.83625005,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G18",
+"value": -23020.83767873,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A19",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B19",
+"value": 22002,
+"numFmt": "General"
+},
+{
+"ref": "C19",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D19",
+"value": "Operating Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "E19",
+"value": -17916.87809503,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F19",
+"value": -1325.77666655,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G19",
+"value": -19242.65476158,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A20",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B20",
+"value": 12005,
+"numFmt": "General"
+},
+{
+"ref": "C20",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D20",
+"value": "Organization Cost Prepaid",
+"numFmt": "General"
+},
+{
+"ref": "E20",
+"value": 26635.1149993,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F20",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G20",
+"value": 26088.39833255,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A21",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B21",
+"value": 12007,
+"numFmt": "General"
+},
+{
+"ref": "C21",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D21",
+"value": "Due from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "E21",
+"value": 12121.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F21",
+"value": 4160,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G21",
+"value": 16281.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A22",
+"value": "Net Assets / Liabilities:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B22",
+"value": "70031",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E22",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F22",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G22",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A24",
+"value": "Income - Realized and Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "B24",
+"value": 34003,
+"numFmt": "General"
+},
+{
+"ref": "C24",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D24",
+"value": "Realized P&L - Short Term",
+"numFmt": "General"
+},
+{
+"ref": "E24",
+"value": -926.393163,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F24",
+"value": 1505.170713,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G24",
+"value": 578.77755,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A25",
+"value": "Income - Realized and Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "B25",
+"value": 34006,
+"numFmt": "General"
+},
+{
+"ref": "C25",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D25",
+"value": "Change In Unrealized P&L",
+"numFmt": "General"
+},
+{
+"ref": "E25",
+"value": -1209.178697,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F25",
+"value": -597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G25",
+"value": -1806.39031,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A26",
+"value": "Expenses - Trading Expense",
+"numFmt": "General"
+},
+{
+"ref": "B26",
+"value": 42503,
+"numFmt": "General"
+},
+{
+"ref": "C26",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D26",
+"value": "Commission Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E26",
+"value": 7493.220762,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F26",
+"value": 1698.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G26",
+"value": 9191.49264,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A27",
+"value": "Expenses - Trading Expense",
+"numFmt": "General"
+},
+{
+"ref": "B27",
+"value": 42506,
+"numFmt": "General"
+},
+{
+"ref": "C27",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D27",
+"value": "Other Trading Cost",
+"numFmt": "General"
+},
+{
+"ref": "E27",
+"value": 116.1591,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F27",
+"value": 30,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G27",
+"value": 146.1591,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A28",
+"value": "Income - Interest Income",
+"numFmt": "General"
+},
+{
+"ref": "B28",
+"value": 30001,
+"numFmt": "General"
+},
+{
+"ref": "C28",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D28",
+"value": "Broker Interest Income",
+"numFmt": "General"
+},
+{
+"ref": "E28",
+"value": -375.59,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F28",
+"value": -61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G28",
+"value": -436.98,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A29",
+"value": "Income - Dividend Income",
+"numFmt": "General"
+},
+{
+"ref": "B29",
+"value": 30505,
+"numFmt": "General"
+},
+{
+"ref": "C29",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D29",
+"value": "Dividend Income - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "E29",
+"value": -127.92,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F29",
+"value": -68.66,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G29",
+"value": -196.58,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A30",
+"value": "Income - Dividend Income",
+"numFmt": "General"
+},
+{
+"ref": "B30",
+"value": 30504,
+"numFmt": "General"
+},
+{
+"ref": "C30",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D30",
+"value": "Dividend Income - Foreign Stock",
+"numFmt": "General"
+},
+{
+"ref": "E30",
+"value": -9.4,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F30",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G30",
+"value": -9.4,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A31",
+"value": "Expenses - Interest Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B31",
+"value": 40005,
+"numFmt": "General"
+},
+{
+"ref": "C31",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D31",
+"value": "Broker Interest Expense",
+"numFmt": "General"
+},
+{
+"ref": "E31",
+"value": 398.58,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F31",
+"value": 70.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G31",
+"value": 469.22,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A32",
+"value": "Expenses - Dividend Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B32",
+"value": 40504,
+"numFmt": "General"
+},
+{
+"ref": "C32",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D32",
+"value": "Dividend Expense - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "E32",
+"value": 56.95,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F32",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G32",
+"value": 56.95,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A33",
+"value": "Expenses - Dividend Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B33",
+"value": 40503,
+"numFmt": "General"
+},
+{
+"ref": "C33",
+"value": "Interactive-U18248579",
+"numFmt": "General"
+},
+{
+"ref": "D33",
+"value": "Dividend Expense - Foreign Stock",
+"numFmt": "General"
+},
+{
+"ref": "E33",
+"value": 3.9,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F33",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G33",
+"value": 3.9,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A34",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B34",
+"value": 42005,
+"numFmt": "General"
+},
+{
+"ref": "C34",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D34",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E34",
+"value": 2066.66666687,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F34",
+"value": 516.66666671,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G34",
+"value": 2583.33333358,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A35",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B35",
+"value": 42004,
+"numFmt": "General"
+},
+{
+"ref": "C35",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D35",
+"value": "Legal Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E35",
+"value": 174,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F35",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G35",
+"value": 174,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A36",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B36",
+"value": 42006,
+"numFmt": "General"
+},
+{
+"ref": "C36",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D36",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E36",
+"value": 6250.00000022,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F36",
+"value": 1770.83625005,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G36",
+"value": 8020.83625027,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A37",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B37",
+"value": 42003,
+"numFmt": "General"
+},
+{
+"ref": "C37",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D37",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "E37",
+"value": 5796.42666639,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F37",
+"value": 1372.59666655,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G37",
+"value": 7169.02333294,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A38",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B38",
+"value": 42002,
+"numFmt": "General"
+},
+{
+"ref": "C38",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D38",
+"value": "Organization Cost",
+"numFmt": "General"
+},
+{
+"ref": "E38",
+"value": 2186.8666669,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F38",
+"value": 546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G38",
+"value": 2733.58333365,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A39",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B39",
+"value": 42007,
+"numFmt": "General"
+},
+{
+"ref": "C39",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D39",
+"value": "Reimbursement to/from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "E39",
+"value": -16319.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F39",
+"value": -4160,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G39",
+"value": -20479.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A40",
+"value": "Net (Income)/ Loss:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B40",
+"value": "70013",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E40",
+"value": 5574.64800238,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F40",
+"value": 2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G40",
+"value": 8198.28523044,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A42",
+"value": "Capital",
+"numFmt": "General"
+},
+{
+"ref": "B42",
+"value": 70001,
+"numFmt": "General"
+},
+{
+"ref": "C42",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D42",
+"value": "Beginning Capital",
+"numFmt": "General"
+},
+{
+"ref": "E42",
+"value": -91444.83215625,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F42",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G42",
+"value": -91444.83215625,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A43",
+"value": "Capital",
+"numFmt": "General"
+},
+{
+"ref": "B43",
+"value": 70002,
+"numFmt": "General"
+},
+{
+"ref": "C43",
+"value": "Fund Account",
+"numFmt": "General"
+},
+{
+"ref": "D43",
+"value": "Begin Of Period Additions",
+"numFmt": "General"
+},
+{
+"ref": "E43",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F43",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G43",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A44",
+"value": "Capital:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B44",
+"value": "70008",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E44",
+"value": -91444.83215625,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F44",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G44",
+"value": -91444.83215625,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A46",
+"value": "Report generated on:-",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B46",
+"value": "06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A1:G1",
+"A3:G3",
+"A6:G6",
+"A4:G4",
+"A2:G2",
+"A5:G5"
+],
+"colWidths": {
+"A": 28.8,
+"B": 17.82,
+"C": 24.68,
+"D": 34.28,
+"E": 27.42,
+"F": 27.42,
+"G": 27.42
+}
+},
+{
+"name": "Balance Sheet",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Statement of Assets and Liabilities (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "As of 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A6",
+"value": "Account Category",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "GL Number",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Financial Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Amount",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A7",
+"value": "Assets - Cash",
+"numFmt": "General"
+},
+{
+"ref": "B7",
+"value": 13004,
+"numFmt": "General"
+},
+{
+"ref": "C7",
+"value": "Broker Cash Balance",
+"numFmt": "General"
+},
+{
+"ref": "D7",
+"value": 1077.414367,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A8",
+"value": "Assets - Cash",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": 13004,
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Bank Balance",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 2996.93,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A9",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": 13501,
+"numFmt": "General"
+},
+{
+"ref": "C9",
+"value": "Long Portfolio Value- Cost",
+"numFmt": "General"
+},
+{
+"ref": "D9",
+"value": 80138.229014,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A10",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B10",
+"value": 13503,
+"numFmt": "General"
+},
+{
+"ref": "C10",
+"value": "Long Portfolio Value-Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "D10",
+"value": 2401.650986,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A11",
+"value": "Assets - Interest Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B11",
+"value": 10002,
+"numFmt": "General"
+},
+{
+"ref": "C11",
+"value": "Broker Interest Receivable",
+"numFmt": "General"
+},
+{
+"ref": "D11",
+"value": 61.39,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A12",
+"value": "Assets - Dividend Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B12",
+"value": 10502,
+"numFmt": "General"
+},
+{
+"ref": "C12",
+"value": "Dividend Receivable - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "D12",
+"value": 62.98,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A13",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B13",
+"value": 12005,
+"numFmt": "General"
+},
+{
+"ref": "C13",
+"value": "Organization Cost Prepaid",
+"numFmt": "General"
+},
+{
+"ref": "D13",
+"value": 26088.398333,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A14",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": 12007,
+"numFmt": "General"
+},
+{
+"ref": "C14",
+"value": "Due from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "D14",
+"value": 16281.46,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A15",
+"value": "Total Assets:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D15",
+"value": 129108.4527,
+"numFmt": "[$-010409]#,0.00;(#,0.00)",
+"bold": true
+},
+{
+"ref": "A17",
+"value": "Liabilities - Interest Payables",
+"numFmt": "General"
+},
+{
+"ref": "B17",
+"value": 20004,
+"numFmt": "General"
+},
+{
+"ref": "C17",
+"value": "Broker Interest Payable",
+"numFmt": "General"
+},
+{
+"ref": "D17",
+"value": 65.08,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A18",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B18",
+"value": 22004,
+"numFmt": "General"
+},
+{
+"ref": "C18",
+"value": "Administration Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D18",
+"value": 3533.333333,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A19",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B19",
+"value": 22005,
+"numFmt": "General"
+},
+{
+"ref": "C19",
+"value": "Professional Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D19",
+"value": 23020.837679,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A20",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B20",
+"value": 22002,
+"numFmt": "General"
+},
+{
+"ref": "C20",
+"value": "Operating Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D20",
+"value": 19242.654762,
+"numFmt": "[$-010409]#,0.00;(#,0.00)"
+},
+{
+"ref": "A21",
+"value": "Total Liabilities:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D21",
+"value": 45861.905774,
+"numFmt": "[$-010409]#,0.00;(#,0.00)",
+"bold": true
+},
+{
+"ref": "A23",
+"value": "Capital:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B23",
+"value": 70031,
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C23",
+"value": "Ending Net Asset Value",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D23",
+"value": 83246.546926,
+"numFmt": "[$-010409]#,0.00;(#,0.00)",
+"bold": true
+},
+{
+"ref": "A25",
+"value": "Report generated on: 06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A1:D1",
+"A5:D5",
+"A4:D4",
+"A3:D3",
+"A2:D2"
+],
+"colWidths": {
+"A": 41.14,
+"B": 16.45,
+"C": 41.14,
+"D": 24.68
+}
+},
+{
+"name": "Account Summary",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Statement of Net Assets by Account (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026 To 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Account Category",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "GL Number",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Financial Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Total",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Fund Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Axos Bank-890000204895",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Interactive-U18248579",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "Assets - Cash",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B8",
+"value": 13005,
+"numFmt": "[$-010409]0;(0)",
+"bold": true
+},
+{
+"ref": "C8",
+"value": "Beginning Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D8",
+"value": -18152.823455,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F8",
+"value": 3043.75,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G8",
+"value": -21196.573455,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A9",
+"value": "Receipts - Trading Receipts",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": 54501,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C9",
+"value": "Sales-Long",
+"numFmt": "General"
+},
+{
+"ref": "D9",
+"value": 2310878.4151,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G9",
+"value": 2310878.4151,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A10",
+"value": "Receipts - Trading Receipts",
+"numFmt": "General"
+},
+{
+"ref": "B10",
+"value": 54502,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C10",
+"value": "Sales-Short",
+"numFmt": "General"
+},
+{
+"ref": "D10",
+"value": 919678.7413,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E10",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F10",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G10",
+"value": 919678.7413,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A11",
+"value": "Receipts - Interest Receipts",
+"numFmt": "General"
+},
+{
+"ref": "B11",
+"value": 50004,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C11",
+"value": "Broker Interest Received",
+"numFmt": "General"
+},
+{
+"ref": "D11",
+"value": 83.23,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G11",
+"value": 83.23,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A12",
+"value": "Receipts - Dividend Receipts",
+"numFmt": "General"
+},
+{
+"ref": "B12",
+"value": 50505,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C12",
+"value": "Dividend Received - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "D12",
+"value": 10.63,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E12",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F12",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G12",
+"value": 10.63,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A13",
+"value": "Payments - Trading Payments",
+"numFmt": "General"
+},
+{
+"ref": "B13",
+"value": 64503,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C13",
+"value": "Purchases-Long",
+"numFmt": "General"
+},
+{
+"ref": "D13",
+"value": -2283072.7041,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G13",
+"value": -2283072.7041,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A14",
+"value": "Payments - Trading Payments",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": 64502,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C14",
+"value": "Purchases-Buy To Cover",
+"numFmt": "General"
+},
+{
+"ref": "D14",
+"value": -923534.1726,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E14",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F14",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G14",
+"value": -923534.1726,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A15",
+"value": "Payments - Commissions",
+"numFmt": "General"
+},
+{
+"ref": "B15",
+"value": 62502,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C15",
+"value": "Commission Paid",
+"numFmt": "General"
+},
+{
+"ref": "D15",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G15",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A16",
+"value": "Payments - Commissions",
+"numFmt": "General"
+},
+{
+"ref": "B16",
+"value": 62505,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C16",
+"value": "Other Trading Cost Paid",
+"numFmt": "General"
+},
+{
+"ref": "D16",
+"value": -30,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E16",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F16",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G16",
+"value": -30,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A17",
+"value": "Payments - Interest Payments",
+"numFmt": "General"
+},
+{
+"ref": "B17",
+"value": 60005,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C17",
+"value": "Broker Interest Paid",
+"numFmt": "General"
+},
+{
+"ref": "D17",
+"value": -41.88,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G17",
+"value": -41.88,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A18",
+"value": "Payments - Expenses Paid",
+"numFmt": "General"
+},
+{
+"ref": "B18",
+"value": 62002,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C18",
+"value": "Operating Expenses Paid",
+"numFmt": "General"
+},
+{
+"ref": "D18",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F18",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A19",
+"value": "Assets - Cash",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B19",
+"value": 13004,
+"numFmt": "[$-010409]0;(0)",
+"bold": true
+},
+{
+"ref": "C19",
+"value": "Ending Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D19",
+"value": 4074.344367,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E19",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F19",
+"value": 2996.93,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G19",
+"value": 1077.414367,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A21",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B21",
+"value": 13501,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C21",
+"value": "Long Portfolio Value- Cost",
+"numFmt": "General"
+},
+{
+"ref": "D21",
+"value": 80138.229014,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E21",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F21",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G21",
+"value": 80138.229014,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A22",
+"value": "Assets - Long Portfolio Value",
+"numFmt": "General"
+},
+{
+"ref": "B22",
+"value": 13503,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C22",
+"value": "Long Portfolio Value-Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "D22",
+"value": 2401.650986,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E22",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F22",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G22",
+"value": 2401.650986,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A23",
+"value": "Assets - Interest Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B23",
+"value": 10002,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C23",
+"value": "Broker Interest Receivable",
+"numFmt": "General"
+},
+{
+"ref": "D23",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E23",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F23",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G23",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A24",
+"value": "Assets - Dividend Receivables",
+"numFmt": "General"
+},
+{
+"ref": "B24",
+"value": 10502,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C24",
+"value": "Dividend Receivable - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "D24",
+"value": 62.98,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E24",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F24",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G24",
+"value": 62.98,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A25",
+"value": "Liabilities - Interest Payables",
+"numFmt": "General"
+},
+{
+"ref": "B25",
+"value": 20004,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C25",
+"value": "Broker Interest Payable",
+"numFmt": "General"
+},
+{
+"ref": "D25",
+"value": -65.08,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E25",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F25",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G25",
+"value": -65.08,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A26",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B26",
+"value": 22004,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C26",
+"value": "Administration Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D26",
+"value": -3533.33333343,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E26",
+"value": -3533.33333343,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F26",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G26",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A27",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B27",
+"value": 22005,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C27",
+"value": "Professional Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D27",
+"value": -23020.83767873,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E27",
+"value": -23020.83767873,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F27",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G27",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A28",
+"value": "Liabilities - Expense Payables",
+"numFmt": "General"
+},
+{
+"ref": "B28",
+"value": 22002,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C28",
+"value": "Operating Expenses Payable",
+"numFmt": "General"
+},
+{
+"ref": "D28",
+"value": -19242.65476158,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E28",
+"value": -19242.65476158,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F28",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G28",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A29",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B29",
+"value": 12005,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C29",
+"value": "Organization Cost Prepaid",
+"numFmt": "General"
+},
+{
+"ref": "D29",
+"value": 26088.39833255,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E29",
+"value": 26088.39833255,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F29",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G29",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A30",
+"value": "Assets - Advance Paid",
+"numFmt": "General"
+},
+{
+"ref": "B30",
+"value": 12007,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C30",
+"value": "Due from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "D30",
+"value": 16281.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E30",
+"value": 16281.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F30",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G30",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A31",
+"value": "Net Assets/Liabilities:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B31",
+"value": 70031,
+"numFmt": "[$-010409]0;(0)",
+"bold": true
+},
+{
+"ref": "C31",
+"value": "Ending Net Asset Value",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D31",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E31",
+"value": -3426.96744119,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F31",
+"value": 2996.93,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G31",
+"value": 83676.584367,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A33",
+"value": "Income - Realized and Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "B33",
+"value": 34003,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C33",
+"value": "Realized P&L - Short Term",
+"numFmt": "General"
+},
+{
+"ref": "D33",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E33",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F33",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G33",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A34",
+"value": "Income - Realized and Unrealized Gain/Loss",
+"numFmt": "General"
+},
+{
+"ref": "B34",
+"value": 34006,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C34",
+"value": "Change In Unrealized P&L",
+"numFmt": "General"
+},
+{
+"ref": "D34",
+"value": 597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E34",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F34",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G34",
+"value": 597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A35",
+"value": "Expenses - Trading Expense",
+"numFmt": "General"
+},
+{
+"ref": "B35",
+"value": 42503,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C35",
+"value": "Commission Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D35",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E35",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F35",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G35",
+"value": -1698.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A36",
+"value": "Expenses - Trading Expense",
+"numFmt": "General"
+},
+{
+"ref": "B36",
+"value": 42506,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C36",
+"value": "Other Trading Cost",
+"numFmt": "General"
+},
+{
+"ref": "D36",
+"value": -30,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E36",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F36",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G36",
+"value": -30,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A37",
+"value": "Income - Interest Income",
+"numFmt": "General"
+},
+{
+"ref": "B37",
+"value": 30001,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C37",
+"value": "Broker Interest Income",
+"numFmt": "General"
+},
+{
+"ref": "D37",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E37",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F37",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G37",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A38",
+"value": "Income - Dividend Income",
+"numFmt": "General"
+},
+{
+"ref": "B38",
+"value": 30505,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C38",
+"value": "Dividend Income - US Stock",
+"numFmt": "General"
+},
+{
+"ref": "D38",
+"value": 68.66,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E38",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F38",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G38",
+"value": 68.66,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A39",
+"value": "Expenses - Interest Expenses",
+"numFmt": "General"
+},
+{
+"ref": "B39",
+"value": 40005,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C39",
+"value": "Broker Interest Expense",
+"numFmt": "General"
+},
+{
+"ref": "D39",
+"value": -70.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E39",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F39",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G39",
+"value": -70.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A40",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B40",
+"value": 42005,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C40",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D40",
+"value": -516.66666671,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E40",
+"value": -516.66666671,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F40",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G40",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A41",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B41",
+"value": 42006,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C41",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D41",
+"value": -1770.83625005,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E41",
+"value": -1770.83625005,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F41",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G41",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A42",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B42",
+"value": 42003,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C42",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D42",
+"value": -1372.59666655,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E42",
+"value": -1372.59666655,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F42",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G42",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A43",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B43",
+"value": 42002,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C43",
+"value": "Organization Cost",
+"numFmt": "General"
+},
+{
+"ref": "D43",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E43",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F43",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G43",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A44",
+"value": "Expenses - Operating and Org. Exp.",
+"numFmt": "General"
+},
+{
+"ref": "B44",
+"value": 42007,
+"numFmt": "[$-010409]0;(0)"
+},
+{
+"ref": "C44",
+"value": "Reimbursement to/from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "D44",
+"value": 4160,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E44",
+"value": 4160,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F44",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G44",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A45",
+"value": "Net Income/ (Loss):",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B45",
+"value": 70013,
+"numFmt": "[$-010409]0;(0)",
+"bold": true
+},
+{
+"ref": "C45",
+"value": "Net Income (Loss)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D45",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E45",
+"value": -46.81625006,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F45",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G45",
+"value": -2576.820978,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A47",
+"value": "NET ROR:",
+"numFmt": "General"
+},
+{
+"ref": "D47",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00%);-"
+},
+{
+"ref": "E47",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F47",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G47",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A52",
+"value": "Report generated on: 06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A1:D1",
+"A5:D5",
+"A4:D4",
+"A3:D3",
+"A52:D52",
+"A2:D2"
+],
+"colWidths": {
+"A": 48.0,
+"B": 16.45,
+"C": 48.0,
+"D": 21.94,
+"E": 21.94,
+"F": 21.94,
+"G": 21.94
+}
+},
+{
+"name": "Summary Equity Schedule",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Summary Investors Allocation Schedule (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026 To 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Investor No",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "Investor Name",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Class",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Beginning Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Period Begin Capital Changes",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Allocation Base",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Gross Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H7",
+"value": "Incentive Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I7",
+"value": "Net Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J7",
+"value": "Period End Capital Changes",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K7",
+"value": "Ending Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L7",
+"value": "PTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M7",
+"value": "MTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N7",
+"value": "QTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O7",
+"value": "YTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "1001",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": "Cindy Eagar",
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Filet Interests",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F8",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G8",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I8",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "J8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "K8",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "L8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "M8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "N8",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "O8",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "B9",
+"value": "Total :",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D9",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F9",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G9",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "H9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "I9",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "J9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "K9",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "L9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "M9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "N9",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "O9",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "A11",
+"value": "Report generated on:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B11",
+"value": "06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A2:O2",
+"A1:O1",
+"A5:O5",
+"A6:O6",
+"A4:O4",
+"A3:O3"
+],
+"colWidths": {
+"A": 20.57,
+"B": 48.0,
+"C": 17.82,
+"D": 17.82,
+"E": 17.82,
+"F": 17.82,
+"G": 17.82,
+"H": 17.82,
+"I": 17.82,
+"J": 17.82,
+"K": 17.82,
+"L": 17.82,
+"M": 17.82,
+"N": 17.82,
+"O": 17.82
+}
+},
+{
+"name": "Detailed Equity Schedule",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Detailed Investors Allocation Schedule (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026  To  05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Investor No",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "Investor Name",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Class",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Beginning Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Period Begin Additions",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Adjusted Begin Capital",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Standard Allocation Base",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H7",
+"value": "Realized Short Term PL",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I7",
+"value": "Broker Commission",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J7",
+"value": "Change In UnReal",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K7",
+"value": "Broker Interest Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L7",
+"value": "US Dividend Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M7",
+"value": "Interest Expense On Broker Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N7",
+"value": "Operating Expenses",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O7",
+"value": "Organization Cost",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P7",
+"value": "Gross Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q7",
+"value": "Management Fee Base",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R7",
+"value": "Management Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S7",
+"value": "Cumulative Profit",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T7",
+"value": "Incentive Fee For The Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U7",
+"value": "Net Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V7",
+"value": "Period End Redemption",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W7",
+"value": "Ending Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X7",
+"value": "Redemption Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y7",
+"value": "PTD GROSS ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z7",
+"value": "PTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA7",
+"value": "MTD GROSS ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AB7",
+"value": "MTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AC7",
+"value": "QTD GROSS ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AD7",
+"value": "QTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AE7",
+"value": "YTD GROSS ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AF7",
+"value": "YTD NET ROR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "1001",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": "Cindy Eagar",
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Filet Interests",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F8",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G8",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H8",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I8",
+"value": -1728.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "J8",
+"value": 597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "K8",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "L8",
+"value": 68.66,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "M8",
+"value": -70.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "N8",
+"value": 499.90041669,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "O8",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "P8",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "Q8",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "R8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "S8",
+"value": -66753.45307419,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "T8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "U8",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "V8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "W8",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "X8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "Y8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "Z8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AA8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AB8",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AC8",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AD8",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AE8",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "AF8",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-"
+},
+{
+"ref": "B9",
+"value": "Total :",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D9",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F9",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G9",
+"value": 85870.18415387,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "H9",
+"value": -1505.170713,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "I9",
+"value": -1728.271878,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "J9",
+"value": 597.211613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "K9",
+"value": 61.39,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "L9",
+"value": 68.66,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "M9",
+"value": -70.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "N9",
+"value": 499.90041669,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "O9",
+"value": -546.71666675,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "P9",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "Q9",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "R9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "S9",
+"value": -66753.45307419,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "T9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "U9",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "V9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "W9",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "X9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "Y9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "Z9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AA9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AB9",
+"value": -0.03055352,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AC9",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AD9",
+"value": 0.0204392,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AE9",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "AF9",
+"value": -0.08965275,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;-",
+"bold": true
+},
+{
+"ref": "A11",
+"value": "Report generated on:-",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B11",
+"value": "06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A1:AF1",
+"A5:AF5",
+"A6:AF6",
+"A4:AF4",
+"A3:AF3",
+"A2:AF2"
+],
+"colWidths": {
+"A": 20.57,
+"B": 48.0,
+"C": 17.82,
+"D": 17.82,
+"E": 17.82,
+"F": 17.82,
+"G": 17.82,
+"H": 17.82,
+"I": 17.82,
+"J": 17.82,
+"K": 17.82,
+"L": 17.82,
+"M": 17.82,
+"N": 17.82,
+"O": 17.82,
+"P": 17.82,
+"Q": 17.82,
+"R": 17.82,
+"S": 17.82,
+"T": 17.82,
+"U": 17.82,
+"V": 17.82,
+"W": 17.82,
+"X": 17.82,
+"Y": 17.82,
+"Z": 17.82,
+"AA": 17.82,
+"AB": 17.82,
+"AC": 17.82,
+"AD": 17.82,
+"AE": 17.82,
+"AF": 17.81,
+"AG": 0.02
+}
+},
+{
+"name": "Operating Expense Schedule",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Schedule of Operating Expenses (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026 To 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "GL Number",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "Account Category",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Accrual Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Begin Balances",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Accrual for the Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Paid During the Period ",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Ending Balances",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H7",
+"value": "YTD Accrual ",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I7",
+"value": "YTD Paid ",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "42005",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Admin Fee",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 350.00000008,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E8",
+"value": 349.99999998,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G8",
+"value": 700.00000006,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H8",
+"value": 1750,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I8",
+"value": -1450,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A9",
+"value": "42005",
+"numFmt": "General"
+},
+{
+"ref": "B9",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C9",
+"value": "FS Preparation Fee - 2025",
+"numFmt": "General"
+},
+{
+"ref": "D9",
+"value": 1999.99999979,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G9",
+"value": 1999.99999979,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A10",
+"value": "42005",
+"numFmt": "General"
+},
+{
+"ref": "B10",
+"value": "Administration Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C10",
+"value": "FS Preparation Fee - 2026",
+"numFmt": "General"
+},
+{
+"ref": "D10",
+"value": 666.66666685,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E10",
+"value": 166.66666673,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F10",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G10",
+"value": 833.33333358,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H10",
+"value": 833.33333358,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I10",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A11",
+"value": "42004",
+"numFmt": "General"
+},
+{
+"ref": "B11",
+"value": "Legal Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C11",
+"value": "Legal Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G11",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H11",
+"value": 174,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I11",
+"value": -174,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A12",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B12",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C12",
+"value": "Bank Charges",
+"numFmt": "General"
+},
+{
+"ref": "D12",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E12",
+"value": 46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F12",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G12",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H12",
+"value": 201.14,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I12",
+"value": -201.14,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A13",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B13",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C13",
+"value": "Compliance Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D13",
+"value": 4613.76999964,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G13",
+"value": 4613.76999964,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I13",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A14",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C14",
+"value": "Compliance Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D14",
+"value": 2636.43999988,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E14",
+"value": 659.10999995,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F14",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G14",
+"value": 3295.54999983,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H14",
+"value": 3295.54999983,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I14",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A15",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B15",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C15",
+"value": "Insurance Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D15",
+"value": 8000.001429,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G15",
+"value": 8000.001429,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I15",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A16",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B16",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C16",
+"value": "Insurance Expenses",
+"numFmt": "General"
+},
+{
+"ref": "D16",
+"value": 2666.66666651,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E16",
+"value": 666.6666666,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F16",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G16",
+"value": 3333.33333311,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H16",
+"value": 3333.33333311,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I16",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A17",
+"value": "42003",
+"numFmt": "General"
+},
+{
+"ref": "B17",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C17",
+"value": "State Tax Fee",
+"numFmt": "General"
+},
+{
+"ref": "D17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G17",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H17",
+"value": 339,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I17",
+"value": -339,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A18",
+"value": "42006",
+"numFmt": "General"
+},
+{
+"ref": "B18",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C18",
+"value": "Audit Fees - 2025",
+"numFmt": "General"
+},
+{
+"ref": "D18",
+"value": 15000.00142846,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G18",
+"value": 15000.00142846,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I18",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A19",
+"value": "42006",
+"numFmt": "General"
+},
+{
+"ref": "B19",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C19",
+"value": "Audit Fees - 2026",
+"numFmt": "General"
+},
+{
+"ref": "D19",
+"value": 5000.00000022,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E19",
+"value": 1250.00000009,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F19",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G19",
+"value": 6250.00000031,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H19",
+"value": 6250.00000031,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I19",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A20",
+"value": "42006",
+"numFmt": "General"
+},
+{
+"ref": "B20",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C20",
+"value": "Taxation Fees - 2025",
+"numFmt": "General"
+},
+{
+"ref": "D20",
+"value": 1250,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E20",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F20",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G20",
+"value": 1250,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H20",
+"value": 1250,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I20",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A21",
+"value": "42006",
+"numFmt": "General"
+},
+{
+"ref": "B21",
+"value": "Professional Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C21",
+"value": "Taxation Fees - 2026",
+"numFmt": "General"
+},
+{
+"ref": "D21",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E21",
+"value": 520.83624996,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F21",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G21",
+"value": 520.83624996,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H21",
+"value": 520.83624996,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I21",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A22",
+"value": "42007",
+"numFmt": "General"
+},
+{
+"ref": "B22",
+"value": "Reimbursement to/from Affiliates",
+"numFmt": "General"
+},
+{
+"ref": "C22",
+"value": "Receivable/Payable (From)/To GP/IM",
+"numFmt": "General"
+},
+{
+"ref": "D22",
+"value": -12121.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E22",
+"value": -4160,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "F22",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G22",
+"value": -16281.46,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H22",
+"value": -20479.64,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I22",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "B23",
+"value": "Total:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D23",
+"value": 30062.08619043,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "E23",
+"value": -499.90041669,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F23",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G23",
+"value": 29515.36577374,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "H23",
+"value": -2532.44708321,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "I23",
+"value": -2164.14,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A26",
+"value": "Record Date",
+"numFmt": "General"
+},
+{
+"ref": "B26",
+"value": "Account Category",
+"numFmt": "General"
+},
+{
+"ref": "C26",
+"value": "Accrual Description",
+"numFmt": "General"
+},
+{
+"ref": "D26",
+"value": "Amount",
+"numFmt": "General"
+},
+{
+"ref": "A27",
+"value": "05/15/2026",
+"numFmt": "General"
+},
+{
+"ref": "B27",
+"value": "Operating Expenses",
+"numFmt": "General"
+},
+{
+"ref": "C27",
+"value": "Bank Charges",
+"numFmt": "General"
+},
+{
+"ref": "D27",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "A28",
+"value": "Total:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D28",
+"value": -46.82,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A30",
+"value": "Report generated on: 06/02/2026 16:45:23 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A2:I2",
+"A5:I5",
+"A1:I1",
+"A3:I3",
+"A6:I6",
+"A30:C30",
+"A4:I4"
+],
+"colWidths": {
+"A": 16.45,
+"B": 27.42,
+"C": 34.28,
+"D": 17.82,
+"E": 17.82,
+"F": 17.82,
+"G": 17.82,
+"H": 17.82,
+"I": 17.82
+}
+},
+{
+"name": "Incentive Fee",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Incentive Fee Calculation (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026 To 05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Investor No",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "Investor Name",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Class",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Hurdle Base",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Hurdle Rate",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Hurdle Amount for the Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G7",
+"value": "Cumulative Hurdle Profit",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H7",
+"value": "Reduction In Cumulative Profit",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I7",
+"value": "Cumulative Profit Carry Forward",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J7",
+"value": "Gain (Loss) for the Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K7",
+"value": "Cumulative Profit",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L7",
+"value": "Out Performance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M7",
+"value": "Incentive Fee Rate",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N7",
+"value": "Cumulative Incentive Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O7",
+"value": "Prior Period Incentive Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P7",
+"value": "Incentive Fee for the Period",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q7",
+"value": "Crystallized Incentive Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R7",
+"value": "Ending Capital Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "1001",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": "Cindy Eagar",
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Filet Interests",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 92490.54037474,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E8",
+"value": 0.0347,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;\"-\""
+},
+{
+"ref": "F8",
+"value": 263.29019137,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "G8",
+"value": 4720.79836883,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "H8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "I8",
+"value": -64129.81584613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "J8",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "K8",
+"value": -66753.45307419,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "L8",
+"value": -71474.25144302,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "M8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;\"-\""
+},
+{
+"ref": "N8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "O8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "P8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "Q8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "R8",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "B9",
+"value": "Total:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D9",
+"value": 92490.54037474,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "F9",
+"value": 263.29019137,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "G9",
+"value": 4720.79836883,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "H9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "I9",
+"value": -64129.81584613,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "J9",
+"value": -2623.63722806,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "K9",
+"value": -66753.45307419,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "L9",
+"value": -71474.25144302,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "N9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "O9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "P9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "Q9",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "R9",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-",
+"bold": true
+},
+{
+"ref": "A11",
+"value": "Report generated on 06/02/2026 16:45:39 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A3:R3",
+"A2:R2",
+"A5:R5",
+"A1:R1",
+"A6:R6",
+"A4:R4"
+],
+"colWidths": {
+"A": 20.57,
+"B": 48.0,
+"C": 17.82,
+"D": 17.82,
+"E": 17.82,
+"F": 20.57,
+"G": 20.57,
+"H": 20.57,
+"I": 20.57,
+"J": 20.57,
+"K": 20.57,
+"L": 20.57,
+"M": 17.82,
+"N": 20.57,
+"O": 20.57,
+"P": 20.57,
+"Q": 20.57,
+"R": 20.57
+}
+},
+{
+"name": "Management Fee",
+"cells": [
+{
+"ref": "A1",
+"value": "Home",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "Management Fee Calculation (Unaudited)",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "For the Period 05/01/2026  To  05/31/2026",
+"numFmt": "General"
+},
+{
+"ref": "A5",
+"value": "Reporting Currency : USD                                                                                                 ",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "Investor No",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B7",
+"value": "Investor Name",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C7",
+"value": "Class",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D7",
+"value": "Management Fee Base",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E7",
+"value": "Management Fee Rate %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F7",
+"value": "Management Fee",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A8",
+"value": "1001",
+"numFmt": "General"
+},
+{
+"ref": "B8",
+"value": "Cindy Eagar",
+"numFmt": "General"
+},
+{
+"ref": "C8",
+"value": "Filet Interests",
+"numFmt": "General"
+},
+{
+"ref": "D8",
+"value": 83246.54692581,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "E8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00%;(#,##0.00)%;\"-\""
+},
+{
+"ref": "F8",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);-"
+},
+{
+"ref": "B9",
+"value": "Total:",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D9",
+"value": "=SubTotal(9,D$8:D8)",
+"numFmt": "#,0.00;[Black](#,0.00)",
+"bold": true,
+"formula": true
+},
+{
+"ref": "F9",
+"value": "=SubTotal(9,F$8:F8)",
+"numFmt": "#,0.00;[Black](#,0.00)",
+"bold": true,
+"formula": true
+},
+{
+"ref": "A11",
+"value": "Report generated on 06/02/2026 16:45:39 (IST)",
+"numFmt": "General",
+"bold": true
+}
+],
+"merges": [
+"A2:F2",
+"A1:F1",
+"A5:F5",
+"A6:F6",
+"A4:F4",
+"A3:F3"
+],
+"colWidths": {
+"A": 20.57,
+"B": 48.0,
+"C": 17.82,
+"D": 21.94,
+"E": 24.68,
+"F": 19.2
+}
+}
+]
+}

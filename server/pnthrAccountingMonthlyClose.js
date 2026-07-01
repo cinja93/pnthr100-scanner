@@ -17,6 +17,7 @@ import { postMonth, bucketBNet, SEED_2026_05, LEDGER_SCHEDULE } from './pnthrAcc
 import { buildAccountStatement } from './pnthrAccountingClose.js';
 import { renderAccountStatement, renderIndividualAccountStatement } from './pnthrAccountingRenderPdf.js';
 import { saveDocument } from './pnthrAccountingService.js';
+import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
 import { connectToDatabase } from './database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,6 +27,7 @@ const CLOSE_COLL = 'pnthr_acct_monthly_close';   // per-period close workflow st
 const LEDGER_COLL = 'pnthr_acct_fund_ledger';    // per-period rolled Bucket-B balances
 const PANTHER = path.resolve(__dirname, '../client/src/assets/panther-head-sm.png');
 const PDF = 'application/pdf';
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const r2 = (n) => +(+(n || 0)).toFixed(2);
 
 const FUND = { name: 'PNTHR Funds, Carnivore Quant Fund, LP', address: ['15150 W PARK PLACE', 'SUITE 215', 'GOODYEAR, AZ 85395'] };
@@ -157,6 +159,11 @@ export async function finalizeClose(period, bankBalance) {
   });
   await saveDocument({ period, docType: 'account_statement', investorNo: null, label: 'Account Statement', filename: `PNTHR_Account_Statement_${period}.pdf`, contentType: PDF, data: acctPdf, status, generatedBy: 'pnthr-engine' });
   await saveDocument({ period, docType: 'individual_account_statement', investorNo: '1001', label: 'Individual Account Statement', filename: `PNTHR_Individual_Account_Statement_${period}.pdf`, contentType: PDF, data: indPdf, status, generatedBy: 'pnthr-engine' });
+
+  // Doc 5: Capital Roll History — append this month's row (fees waived, official books) to the
+  // seed history and re-render the inception-to-date roll. Same gate status as the statements.
+  const { buffer: rollBuf } = await generateCapitalRoll(period, { totalIncome: eng.netIncome[0] });
+  await saveDocument({ period, docType: 'capital_roll_history', investorNo: null, label: 'Capital Roll History', filename: `PNTHR Capital Roll History ${period}.xlsx`, contentType: XLSX, data: rollBuf, status, generatedBy: 'pnthr-engine' });
 
   // Persist the rolled ledger + the close result.
   await db.collection(LEDGER_COLL).updateOne({ period }, { $set: { period, balances, expenseLines, bucketBNet: bNet, endingNAV: engEnding, updatedAt: new Date() } }, { upsert: true });

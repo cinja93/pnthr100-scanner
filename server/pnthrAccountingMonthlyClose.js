@@ -7,9 +7,10 @@
 // investor PDFs, and stores them. If it doesn't tie, the statement is stored as a flagged
 // DRAFT — never a finalized audited doc — until the income mapping is reconciled.
 //
-// NOTE: the Flex->income line mapping is validated for commissions/dividends/other-fees but
-// realized P&L + interest are not yet penny-exact (see code), so the gate keeps the Account
-// Statement a draft for now. The fund NAV (broker + Bucket-B) itself ties exactly.
+// NOTE: the Flex->income mapping sources every Bucket-A line from IBKR's ChangeInNAV bridge, so
+// the income lines sum to the broker's NAV change to the penny by construction (see mapFlexToIncome).
+// The interest income/expense split is still shown NET (exact gross split would sum TierInterestDetails)
+// — cosmetic only; it does not affect the reconciliation, which ties on the net.
 
 import { pullFlexStatement } from './pnthrAccountingIbkrFlex.js';
 import { postMonth, bucketBNet, SEED_2026_05, LEDGER_SCHEDULE } from './pnthrAccountingFundLedger.js';
@@ -32,30 +33,35 @@ const INVESTOR = { no: 1001, name: 'CINDY EAGAR', address: ['12014 W LUXTON LN',
 const PRODUCER = { name: 'PNTHR Funds, LLC', role: 'General Partner & Administrator', website: 'www.pnthrfunds.com', copyright: '© PNTHR Funds, LLC', logoPath: PANTHER };
 
 // ── Flex -> Bucket-A income lines (period/PTD) ───────────────────────────────
-// Sourced from the ChangeInNAV element (NAV's own mark-to-market framework). The combined
-// trading P&L (mtm) ties exactly; realized/unrealized split + the interest income/expense
-// split populate when the query's "Realized & Unrealized" Change-in-NAV option is added.
+// EVERY line is sourced from the ChangeInNAV element — IBKR's authoritative NAV bridge, whose
+// components sum to (endingValue - startingValue) to the penny. Sourcing here makes Bucket-A
+// income tie to the broker's actual NAV change BY CONSTRUCTION, every month, regardless of the
+// query's realized/unrealized-vs-mark-to-market option.
+//
+// History: earlier code sourced dividends/interest from the CashReport + per-position accrual
+// DETAIL rows. In a month with position closures (which reverse accrued dividends) that double-
+// counted the reversal — the June-2026 close broke by -$46.86, entirely on the dividend line
+// (mapped -25.15 vs the bridge's +21.71). Routing through ChangeInNAV removes that class of bug.
+// If a future month carries a ChangeInNAV component we don't yet map (e.g. withholdingTax,
+// broker/advisor fees), the mapped sum will no longer equal the NAV change and the reconciliation
+// GATE flags the close a draft — surfacing the new line for an explicit (non-guessed) mapping.
 export function mapFlexToIncome(parsed) {
   const S = parsed.sections || {};
   const n = (v) => +(+v || 0);
   const c = (S.ChangeInNAV || [])[0] || {};
-  const cash = (S.CashReport || [])[0] || {};
   // Trading P&L: realized/changeInUnrealized split (R&U option) else combined mtm (MTM option).
   const realized = n(c.realized), changeUnreal = n(c.changeInUnrealized), mtm = n(c.mtm);
   const split = realized !== 0 || changeUnreal !== 0;
-  // Dividends/interest/commissions from their DEDICATED sections so they tie regardless of the
-  // Change-in-NAV option: dividends = cash + change in dividend accruals; interest = cash + change
-  // in the interest accrual balance (ending - starting).
-  const divAccrChange = (S.ChangeInDividendAccruals || []).reduce((a, r) => a + n(r.netAmount), 0);
-  const ia = (S.InterestAccruals || [])[0] || {};
-  const intAccrChange = ia.endingAccrualBalance != null ? (n(ia.endingAccrualBalance) - n(ia.startingAccrualBalance)) : n(c.changeInInterestAccruals);
-  const netInterest = r2(n(cash.brokerInterest) + intAccrChange);
+  // Dividend income = gross dividends + change in dividend accruals (net of reversals).
+  const divIncome = r2(n(c.dividends) + n(c.changeInDividendAccruals));
+  // Net interest = cash interest + change in interest accruals.
+  const netInterest = r2(n(c.interest) + n(c.changeInInterestAccruals));
   return {
     realizedPL: r2(split ? realized : mtm),          // combined into realized only if R&U option is off
     unrealizedPL: r2(split ? changeUnreal : 0),
-    commission: r2(n(cash.commissions) || n(c.commissions)),
-    otherTradingCost: r2(n(cash.otherFees) || n(c.otherFees)),
-    divIncomeUS: r2(n(cash.dividends) + divAccrChange),
+    commission: r2(n(c.commissions)),
+    otherTradingCost: r2(n(c.otherFees)),
+    divIncomeUS: divIncome,
     brokerInterestIncome: r2(netInterest >= 0 ? netInterest : 0),
     brokerInterestExpense: r2(netInterest < 0 ? netInterest : 0),
     brokerNAV: c.endingValue != null ? r2(n(c.endingValue)) : brokerNAVfromFlex(S),

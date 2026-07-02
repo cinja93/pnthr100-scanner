@@ -107,6 +107,22 @@ export function parseFlexStatement(flexQueryResponse) {
     }
   }
 
+  // ADDITIVE: some wrappers hold MULTIPLE row-bearing children (e.g. <Trades> wraps Trade, Lot,
+  // WashSale, Order, SymbolSummary). The loop above keeps only the first child under the container
+  // key — fine for the single-child sections the close/Trial-Balance path reads, but it drops the
+  // trade/tax-lot detail Doc 4 needs. Expose each such child under its own element name WITHOUT
+  // touching any key already set above (never overwrite a working section).
+  for (const val of Object.values(stmt)) {
+    if (!val || typeof val !== 'object') continue;
+    const childKeys = Object.keys(val).filter(k => k !== 'count' && val[k] && typeof val[k] === 'object');
+    if (childKeys.length < 2) continue;   // single-child wrappers already handled above
+    for (const ck of childKeys) {
+      if (sections[ck] != null) continue; // never clobber an existing section
+      const rows = val[ck];
+      sections[ck] = Array.isArray(rows) ? rows : [rows];
+    }
+  }
+
   return {
     accountId: stmt.accountId ? String(stmt.accountId) : null,
     fromDate: stmt.fromDate ? String(stmt.fromDate) : null,

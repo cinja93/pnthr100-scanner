@@ -116,6 +116,7 @@ export async function stageClose(period) {
     ChangeInNAV: S.ChangeInNAV, CashReport: S.CashReport, EquitySummaryInBase: S.EquitySummaryInBase,
     FIFOPerformanceSummaryInBase: S.FIFOPerformanceSummaryInBase, TierInterestDetails: S.TierInterestDetails,
     Lot: S.Lot,   // closed-lot detail for Doc 4 (Portfolio Notebook — Realized Tax Lot / per-symbol P&L)
+    OpenPositions: S.OpenPositions,   // month-end open positions/lots for Doc 4 (Portfolio Valuation / Open Tax Lot); empty when flat
     divRows: dividendRowsFromFlex(S),   // per-security dividend rows for Doc 4 Dividend Detail (small)
   };
   await db.collection(CLOSE_COLL).updateOne(
@@ -241,7 +242,9 @@ export async function finalizeClose(period, bankBalance) {
     // tax-lot method is not reproducible from our data). Realized Tax Lot / Trading Gain Loss / Top
     // Movers / Reconciliation built from IBKR closed-lot detail; Dividend Detail + Attribution pending.
     const lots = close.tbSections?.Lot || [];
-    const secId = await resolveSecurityIds(lots.map((l) => l.isin).filter(Boolean));
+    const openPos = close.tbSections?.OpenPositions || [];
+    // Resolve NAV/PNTHR Security IDs for both traded (closed-lot) and still-held (open-position) ISINs.
+    const secId = await resolveSecurityIds([...lots, ...openPos].map((l) => l.isin).filter(Boolean));
     // Attribution needs a sector/industry/country per holding — from FMP (the app's market-data
     // source; IBKR Flex has none). Non-fatal: if FMP is unavailable the Attribution tab renders
     // header-only rather than failing the notebook.
@@ -249,6 +252,8 @@ export async function finalizeClose(period, bankBalance) {
     const nbBuf = await buildPortfolioNotebook({
       period,
       lots, otherTradingCost: income.otherTradingCost, secId, divRows: close.tbSections?.divRows || [],
+      openPositions: close.tbSections?.OpenPositions || [],   // month-end holdings/lots (empty when flat)
+      navTotal: engEnding,                                    // for Portfolio Valuation "% of AUM"
       bankCash: bankBalance, brokerCash: r2(inputs.brokerCash), portfolioMV: r2(inputs.stockMarket),
       profileBySym, beginningNAV: beginning,
     });

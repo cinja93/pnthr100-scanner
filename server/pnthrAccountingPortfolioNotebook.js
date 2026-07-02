@@ -145,6 +145,87 @@ function buildRealizedTaxLot(sheet, { lots, otherTradingCost, secId }) {
   return { grandTotalRealized: tK, grandTotalQty: tF };
 }
 
+// ── Open positions → Portfolio Valuation + Open Tax Lot ────────────────────────
+// PROVISIONAL FIELD MAPPING (built against IBKR's documented OpenPosition schema; June was flat so
+// there were no rows to map against — MUST be reconciled against the first positions-held close).
+// IBKR Flex returns OpenPositions with levelOfDetail SUMMARY (one row per symbol) and/or LOT (one row
+// per open lot). Portfolio Valuation aggregates to one row per symbol; Open Tax Lot is one row per lot.
+// Custodian-authoritative: NAV columns = Broker columns = IBKR; the Difference block is 0.
+const opNum = (p, ...keys) => { for (const k of keys) if (p[k] != null && p[k] !== '') return N(p[k]); return 0; };
+const opLevel = (p) => String(p.levelOfDetail || '').toUpperCase();
+const daysBetween = (flexOpen, isoVal) => {
+  const o = ymd(flexOpen); if (!o || !isoVal) return null;
+  return Math.round((new Date(isoVal + 'Z') - new Date(o + 'Z')) / 86400000);
+};
+
+function buildPortfolioValuation(sheet, { positions, secId, navTotal }) {
+  // One row per symbol. Prefer SUMMARY rows; else aggregate LOT rows by ISIN (never mix — would double).
+  const summary = positions.filter((p) => opLevel(p) === 'SUMMARY');
+  const src = summary.length ? summary : positions.filter((p) => opLevel(p) !== 'LOT' || !summary.length);
+  const bySym = {};
+  for (const p of (summary.length ? summary : positions)) {
+    const k = p.isin || p.symbol; if (!k) continue;
+    // If both levels present we already restricted to summary; if only LOT rows, aggregate them.
+    if (!summary.length && opLevel(p) === 'SUMMARY') continue;
+    const e = bySym[k] || (bySym[k] = { isin: p.isin, symbol: p.symbol, description: p.description,
+      currency: p.currency || 'USD', assetCategory: p.assetCategory, qty: 0, mv: 0, markPrice: N(p.markPrice) });
+    e.qty += opNum(p, 'position');
+    e.mv += opNum(p, 'positionValue') || (opNum(p, 'position') * N(p.markPrice));
+    if (N(p.markPrice)) e.markPrice = N(p.markPrice);
+  }
+  const rows = Object.values(bySym).sort((a, b) => (secId[a.isin] ?? 9e15) - (secId[b.isin] ?? 9e15));
+  let r = sheet._sk.dataStart;   // 7
+  let tMV = 0;
+  for (const e of rows) {
+    const mv = e.mv, price = e.markPrice, pct = navTotal ? mv / navTotal : 0;
+    put(sheet, 'A', r, e.description, { text: true }); put(sheet, 'B', r, e.currency, { text: true });
+    put(sheet, 'C', r, `${e.symbol} US`, { text: true }); put(sheet, 'D', r, e.assetCategory === 'STK' ? 'EQUITIES' : String(e.assetCategory || ''), { text: true });
+    // NAV block (E-H) = Broker block (I-L) = IBKR; native == base (USD).
+    put(sheet, 'E', r, e.qty); put(sheet, 'F', r, price); put(sheet, 'G', r, mv); put(sheet, 'H', r, mv);
+    put(sheet, 'I', r, e.qty); put(sheet, 'J', r, price); put(sheet, 'K', r, mv); put(sheet, 'L', r, mv);
+    put(sheet, 'M', r, pct, { numFmt: sheet._sk.colFmt?.M });
+    put(sheet, 'N', r, 0); put(sheet, 'O', r, 0); put(sheet, 'P', r, 0); put(sheet, 'Q', r, 0);   // Difference = 0
+    put(sheet, 'U', r, secId[e.isin] ?? null, { numFmt: 'General' });
+    put(sheet, 'V', r, e.isin, { text: true }); put(sheet, 'W', r, BROKER_ACCT, { text: true });
+    r++; tMV += mv;
+  }
+  put(sheet, 'A', r, 'GRAND TOTAL', { text: true, bold: true });
+  put(sheet, 'H', r, tMV); put(sheet, 'L', r, tMV); put(sheet, 'M', r, navTotal ? tMV / navTotal : 0, { numFmt: sheet._sk.colFmt?.M });
+  return { grandTotalMV: tMV, count: rows.length };
+}
+
+function buildOpenTaxLot(sheet, { positions, secId, valuationDate }) {
+  // One row per OPEN lot. Prefer LOT-level rows; if none, fall back to summary rows (one "lot" per symbol).
+  const lotRows = positions.filter((p) => opLevel(p) === 'LOT' || p.openDateTime);
+  const src = lotRows.length ? lotRows : positions.filter((p) => opLevel(p) !== 'LOT');
+  const ordered = [...src].sort((a, b) => (secId[a.isin] ?? 9e15) - (secId[b.isin] ?? 9e15));
+  let r = sheet._sk.dataStart;   // 6
+  let tG = 0, tJ = 0, tM = 0, tO = 0, tP = 0;
+  for (const p of ordered) {
+    const qty = opNum(p, 'position');
+    const cost = opNum(p, 'costBasisMoney', 'costBasis');
+    const grossPx = opNum(p, 'costBasisPrice', 'openPrice') || (qty ? cost / qty : 0);
+    const mv = opNum(p, 'positionValue') || (qty * N(p.markPrice));
+    const upnl = opNum(p, 'fifoPnlUnrealized');
+    const held = daysBetween(p.openDateTime, valuationDate);
+    const lt = held != null && held > 365;
+    put(sheet, 'A', r, p.description, { text: true }); put(sheet, 'B', r, p.currency || 'USD', { text: true });
+    put(sheet, 'C', r, `${p.symbol} US`, { text: true }); put(sheet, 'D', r, p.assetCategory === 'STK' ? 'EQUITIES' : String(p.assetCategory || ''), { text: true });
+    put(sheet, 'E', r, ymd(p.openDateTime), { isDate: true });
+    put(sheet, 'F', r, qty < 0 ? 'Short' : 'Long', { text: true });
+    put(sheet, 'G', r, qty); put(sheet, 'H', r, grossPx); put(sheet, 'I', r, 1);
+    put(sheet, 'J', r, cost); put(sheet, 'K', r, N(p.markPrice)); put(sheet, 'L', r, 1); put(sheet, 'M', r, mv);
+    put(sheet, 'N', r, held, { numFmt: 'General' });
+    put(sheet, 'O', r, lt ? 0 : upnl); put(sheet, 'P', r, lt ? upnl : 0);
+    put(sheet, 'Q', r, secId[p.isin] ?? null, { numFmt: 'General' });
+    put(sheet, 'R', r, p.isin, { text: true }); put(sheet, 'S', r, BROKER_ACCT, { text: true });
+    r++; tG += qty; tJ += cost; tM += mv; if (lt) tP += upnl; else tO += upnl;
+  }
+  put(sheet, 'A', r, 'GRAND TOTAL', { text: true, bold: true });
+  put(sheet, 'G', r, tG); put(sheet, 'J', r, tJ); put(sheet, 'M', r, tM); put(sheet, 'O', r, tO); put(sheet, 'P', r, tP);
+  return { grandTotalCost: tJ, grandTotalMV: tM, count: ordered.length };
+}
+
 // ── Reconciliation Summary ─────────────────────────────────────────────────────
 // Per custodian: our-books (NAV cols D-F) vs broker (G-I) cash + portfolio MV; ties => diffs 0.
 function buildReconciliation(sheet, { bankCash, brokerCash, portfolioMV }) {
@@ -352,6 +433,13 @@ export function buildPortfolioNotebookSpec(data) {
   for (const d of data.divRows || []) divBySym[d.isin] = { income: N(d.received) + N(d.change), symbol: d.symbol, description: d.description };
   const perSym = perSymbolPnl({ lots: data.lots || [], divBySym, secId });
   const dateStrs = periodDateStrings(data.period);
+  const positions = data.openPositions || [];   // IBKR OpenPositions at month-end (empty when flat)
+  // Valuation date = period month-end (ISO), for days-held / lot ageing.
+  let valuationDate = null;
+  if (/^\d{4}-\d{2}$/.test(data.period || '')) {
+    const [vy, vm] = data.period.split('-').map(Number);
+    valuationDate = `${data.period}-${String(new Date(Date.UTC(vy, vm, 0)).getUTCDate()).padStart(2, '0')}`;
+  }
   const out = { sheets: [] };
   for (const s of SKELETON.sheets) {
     const sheet = fromSkeleton(s.name);
@@ -372,10 +460,14 @@ export function buildPortfolioNotebookSpec(data) {
           buildAttribution(sheet, { perSym, profileBySym: data.profileBySym, beginningNAV: data.beginningNAV });
         break;   // header-only if no sector profiles supplied
       case 'Glossary': break;   // fully static
-      // Genuinely empty for a flat/clean month (June liquidated to cash → 0 open positions/lots;
-      // clean books → no breaks; equities-only → no security interest) — "No Data Found" is CORRECT.
+      // Data-driven from IBKR OpenPositions: populate when the fund holds positions at month-end,
+      // else "No Data Found" (correct for a flat month like June — 0 positions at 6/30).
       case 'Portfolio Valuation':
+        positions.length ? buildPortfolioValuation(sheet, { positions, secId, navTotal: N(data.navTotal) }) : buildNoData(sheet); break;
       case 'Open Tax Lot':
+        positions.length ? buildOpenTaxLot(sheet, { positions, secId, valuationDate }) : buildNoData(sheet); break;
+      // Exception / non-applicable tabs — empty in a clean, equities-only month (empty in NAV's May too):
+      // no security-level interest, no reconciliation breaks, no unsettled trades, no unmapped cash.
       case 'Interest Detail':
       case 'Trade Break':
       case 'Trade Pending Cash':

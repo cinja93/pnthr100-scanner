@@ -276,6 +276,42 @@ function buildTopMovers(sheet, { perSym }) {
   section('MTD TOP LOSERS', losers);
 }
 
+// ── Attribution (P&L by Sector / Sub Sector / Country / Product Type / Asset Class) ──
+// IBKR/FMP basis. Groups the period's realized P&L (per-symbol) by each criterion; ROR = gain /
+// beginning NAV. For a flat month (0 open positions) all exposures & market value are 0. Windowed
+// gain columns carry MTD (DTD=0; QTD/YTD=MTD for the first self-administered close). profileBySym:
+// { SYM: { sector, industry, country } } (from FMP). Sector labels are FMP GICS (documented).
+function buildAttribution(sheet, { perSym, profileBySym, beginningNAV }) {
+  let r = sheet._sk.dataStart;   // 6
+  const base = N(beginningNAV) || 1;
+  const up = (s) => String(s || 'UNKNOWN').toUpperCase();
+  const groupBy = (keyFn) => {
+    const g = {};
+    for (const s of perSym) { const k = keyFn(s); if (!k) continue; g[k] = (g[k] || 0) + N(s.total); }
+    return g;
+  };
+  const emitCriterion = (criterion, groups) => {
+    for (const name of Object.keys(groups).sort()) {
+      const gain = groups[name], ror = gain / base;
+      put(sheet, 'A', r, criterion, { text: true }); put(sheet, 'B', r, name, { text: true });
+      put(sheet, 'C', r, 0); put(sheet, 'D', r, gain); put(sheet, 'E', r, gain); put(sheet, 'F', r, gain);
+      // ROR% (G-J total), long ROR (K-N = total; realized from long positions), short ROR (O-R = 0)
+      const pct = sheet._sk.colFmt?.G || '[$-010409]#,##0.00%;(#,##0.00%);-';
+      for (const c of ['G','H','I','J','K','L','M','N']) put(sheet, c, r, ror, { numFmt: pct });
+      for (const c of ['O','P','Q','R']) put(sheet, c, r, 0, { numFmt: pct });
+      for (const c of ['S','T','U','V','AA']) put(sheet, c, r, 0);          // exposures + market value = 0 (flat)
+      for (const c of ['W','X','Y','Z']) put(sheet, c, r, 0, { numFmt: pct }); // exposure % = 0 (flat)
+      r++;
+    }
+  };
+  const prof = (s) => profileBySym[s.symbol] || {};
+  emitCriterion('Sector', groupBy((s) => up(prof(s).sector)));
+  emitCriterion('Sub Sector', groupBy((s) => up(prof(s).industry)));
+  emitCriterion('Country', groupBy((s) => up(prof(s).country || 'UNITED STATES')));
+  emitCriterion('Product Type', groupBy((s) => up(s.secType)));
+  emitCriterion('Asset Class', groupBy(() => 'EQUITY'));
+}
+
 // ── "No Data Found" tabs (empty for a flat/clean month) ────────────────────────
 function buildNoData(sheet) {
   put(sheet, 'A', sheet._sk.dataStart, 'No Data Found', { text: true });
@@ -287,7 +323,11 @@ export function buildPortfolioNotebookSpec(data) {
   const secId = {};
   for (const l of data.lots || []) if (l.isin && secId[l.isin] == null) secId[l.isin] = navIdForIsin(l.isin);
   Object.assign(secId, data.secId || {});   // resolved (incl. PNTHR-assigned) ids override
-  const perSym = perSymbolPnl({ lots: data.lots || [], divBySym: {}, secId });   // dividends live in Dividend Detail
+  // Per-symbol P&L incl. dividend income (income = received + accrual change), keyed by ISIN — so the
+  // Trading Gain Loss / Top Movers / Attribution dividend columns populate consistently with Dividend Detail.
+  const divBySym = {};
+  for (const d of data.divRows || []) divBySym[d.isin] = { income: N(d.received) + N(d.change), symbol: d.symbol, description: d.description };
+  const perSym = perSymbolPnl({ lots: data.lots || [], divBySym, secId });
   const out = { sheets: [] };
   for (const s of SKELETON.sheets) {
     const sheet = fromSkeleton(s.name);
@@ -302,6 +342,10 @@ export function buildPortfolioNotebookSpec(data) {
         buildTopMovers(sheet, { perSym }); break;
       case 'Dividend Detail':
         buildDividendDetail(sheet, { divRows: data.divRows || [], secId }); break;
+      case 'Attribution':
+        if (data.profileBySym && Object.keys(data.profileBySym).length)
+          buildAttribution(sheet, { perSym, profileBySym: data.profileBySym, beginningNAV: data.beginningNAV });
+        break;   // header-only if no sector profiles supplied
       case 'Glossary': break;   // fully static
       // Genuinely empty for a flat/clean month (June liquidated to cash → 0 open positions/lots;
       // clean books → no breaks; equities-only → no security interest) — "No Data Found" is CORRECT.
@@ -312,9 +356,6 @@ export function buildPortfolioNotebookSpec(data) {
       case 'Trade Pending Cash':
       case 'Unmapped Cash':
         buildNoData(sheet); break;
-      // Header-only (NOT a false "No Data Found"): Attribution needs a GICS sector per holding — not
-      // in IBKR Flex — pending a sector source (e.g. FMP). Header renders; data rows to follow.
-      case 'Attribution':
       default: break;
     }
     out.sheets.push(finalize(sheet));

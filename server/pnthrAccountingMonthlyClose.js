@@ -22,7 +22,19 @@ import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialB
 import { buildWorkbookFundamentals, buildFundAccountingWorkbook } from './pnthrAccountingWorkbook.js';
 import { buildPortfolioNotebook, dividendRowsFromFlex } from './pnthrAccountingPortfolioNotebook.js';
 import { resolveSecurityIds } from './pnthrAccountingSecurityMaster.js';
+import { fetchFMP } from './stockService.js';
 import { connectToDatabase } from './database.js';
+
+// FMP sector/industry/country per symbol (batched) for the Doc 4 Attribution tab.
+async function fmpProfiles(symbols) {
+  const out = {};
+  for (let i = 0; i < symbols.length; i += 50) {
+    const chunk = symbols.slice(i, i + 50);
+    const profiles = await fetchFMP(`/profile/${chunk.join(',')}`).catch(() => []);
+    for (const p of (profiles || [])) out[p.symbol] = { sector: p.sector, industry: p.industry, country: p.country };
+  }
+  return out;
+}
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -224,9 +236,14 @@ export async function finalizeClose(period, bankBalance) {
     // Movers / Reconciliation built from IBKR closed-lot detail; Dividend Detail + Attribution pending.
     const lots = close.tbSections?.Lot || [];
     const secId = await resolveSecurityIds(lots.map((l) => l.isin).filter(Boolean));
+    // Attribution needs a sector/industry/country per holding — from FMP (the app's market-data
+    // source; IBKR Flex has none). Non-fatal: if FMP is unavailable the Attribution tab renders
+    // header-only rather than failing the notebook.
+    const profileBySym = await fmpProfiles([...new Set(lots.map((l) => l.symbol).filter(Boolean))]).catch(() => ({}));
     const nbBuf = await buildPortfolioNotebook({
       lots, otherTradingCost: income.otherTradingCost, secId, divRows: close.tbSections?.divRows || [],
       bankCash: bankBalance, brokerCash: r2(inputs.brokerCash), portfolioMV: r2(inputs.stockMarket),
+      profileBySym, beginningNAV: beginning,
     });
     await saveDocument({ period, docType: 'portfolio_notebook', investorNo: null, label: 'Portfolio Notebook', filename: `PNTHR Portfolio Notebook ${period}.xlsx`, contentType: XLSX, data: nbBuf, status, generatedBy: 'pnthr-engine' });
   } catch (e) {

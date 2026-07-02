@@ -19,7 +19,7 @@ import { renderAccountStatement, renderIndividualAccountStatement } from './pnth
 import { saveDocument } from './pnthrAccountingService.js';
 import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
 import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialBalance.js';
-import { buildWorkbookFundamentals, buildFundAccountingWorkbook, buildStatementWindows } from './pnthrAccountingWorkbook.js';
+import { buildWorkbookFundamentals, buildFundAccountingWorkbook, buildStatementWindows, monthlyMTD } from './pnthrAccountingWorkbook.js';
 import { buildPortfolioNotebook, dividendRowsFromFlex } from './pnthrAccountingPortfolioNotebook.js';
 import { resolveSecurityIds } from './pnthrAccountingSecurityMaster.js';
 import { fetchFMP } from './stockService.js';
@@ -168,7 +168,8 @@ export async function finalizeClose(period, bankBalance) {
   // so the PDF and the Excel rendering of the statement are identical by construction and cannot
   // drift. PTD == MTD; QTD/YTD roll the committed May anchors forward by this month's MTD.
   const beginning = await priorEndingNAV(db, period);
-  const { is: win, navBeginning } = buildStatementWindows({ income, expenseLines, beginning });
+  const history = await loadStatementHistory(db, period);
+  const { is: win, navBeginning } = buildStatementWindows({ income, expenseLines, beginning, period, history });
   const w = (k) => [win[k].ptd, win[k].mtd, win[k].qtd, win[k].ytd];
   const li = {
     realizedPL: w('realizedPL'), unrealizedPL: w('unrealizedPL'),
@@ -231,7 +232,7 @@ export async function finalizeClose(period, bankBalance) {
     const genTs = `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (ET)`;
     const f = buildWorkbookFundamentals({
       period, tbAccounts: tb.accounts, income, expenseLines, beginning, engEnding: r2(tb.checks.navEnding),
-      netIncome: eng.netIncome[0], bankCharge, cashflow, genTs,
+      netIncome: eng.netIncome[0], bankCharge, cashflow, genTs, history,
     });
     const wbBuf = await buildFundAccountingWorkbook(f);
     await saveDocument({ period, docType: 'fund_accounting_workbook', investorNo: null, label: 'Fund Accounting Workbook', filename: `PNTHR Fund Accounting Workbook ${period}.xlsx`, contentType: XLSX, data: wbBuf, status, generatedBy: 'pnthr-engine' });
@@ -281,6 +282,47 @@ async function priorEndingNAV(db, period) {
   const led = await db.collection(LEDGER_COLL).findOne({ period: prev });
   if (led?.endingNAV != null) return led.endingNAV;
   return 83246.55;   // May 2026 ending NAV (the handoff) for the first go-forward month
+}
+
+// First self-administered close: June 2026 (WB_SEED = the immutable cumulative baseline through
+// May 2026; earlier months were produced by NAV, not by our engine).
+const FIRST_SELF_ADMIN = { year: 2026, month: 6 };
+const isSelfAdmin = (y, m) => y > FIRST_SELF_ADMIN.year || (y === FIRST_SELF_ADMIN.year && m >= FIRST_SELF_ADMIN.month);
+const pkey = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+
+// Assemble the QTD/YTD roll-forward inputs for buildStatementWindows (stateless / self-healing):
+// every self-administered month BEFORE `period` (its 16-line MTD from the stored close income +
+// rolled ledger expenseLines), plus the ending NAV at the start of this quarter / year. Boundary
+// months that predate self-administration return null so the builder uses the WB_SEED baseline.
+async function loadStatementHistory(db, period) {
+  const [Y, M] = period.split('-').map(Number);
+  const priorMTD = [];
+  let y = FIRST_SELF_ADMIN.year, m = FIRST_SELF_ADMIN.month;
+  while (y < Y || (y === Y && m < M)) {
+    const p = pkey(y, m);
+    const [close, led] = await Promise.all([
+      db.collection(CLOSE_COLL).findOne({ period: p }),
+      db.collection(LEDGER_COLL).findOne({ period: p }),
+    ]);
+    if (!close) console.warn(`[statementWindows ${period}] no stored close for ${p} — QTD/YTD will be incomplete`);
+    priorMTD.push({ year: y, month: m, lines: monthlyMTD({ income: close?.income, expenseLines: led?.expenseLines }) });
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  const endingNAVof = async (yy, mm) => {
+    if (!isSelfAdmin(yy, mm)) return null;   // pre-takeover boundary -> caller falls back to the seed
+    const p = pkey(yy, mm);
+    const led = await db.collection(LEDGER_COLL).findOne({ period: p });
+    if (led?.endingNAV != null) return led.endingNAV;
+    const c = await db.collection(CLOSE_COLL).findOne({ period: p });
+    return c?.engEnding ?? null;
+  };
+  const qStartMonth = (Math.ceil(M / 3) - 1) * 3 + 1;                 // first month of this quarter
+  const beforeQ = qStartMonth === 1 ? [Y - 1, 12] : [Y, qStartMonth - 1];
+  return {
+    priorMTD,
+    quarterStartNAV: await endingNAVof(beforeQ[0], beforeQ[1]),
+    yearStartNAV: await endingNAVof(Y - 1, 12),
+  };
 }
 
 // Pending closes that need the GP's bank-balance input (drives the page banner).

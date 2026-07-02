@@ -371,15 +371,17 @@ export async function buildFundAccountingWorkbook(f) {
   return renderGridWorkbook(buildWorkbookSpec(f));
 }
 
-// ── Statement windows (PTD/MTD/QTD/YTD) — single source for the PDFs AND the workbook ──
-// The month's income/expense mapping IS the MTD (== PTD) column; QTD/YTD roll the committed May
-// anchors (WB_SEED) forward by this month's MTD. Exported so the two investor PDFs and the Fund
-// Accounting Workbook's Account Statement tab are built from the SAME windows and cannot drift.
-// NOTE (go-forward): the anchors are the May-2026 golden baseline — exactly right for the June
-// close (the first self-administered month, where QTD = Apr..Jun and YTD = Jan..Jun). July+ must
-// roll the anchor each month (with quarter/year resets); until that ships, callers get May+MTD.
-export function buildStatementWindows({ income, expenseLines, beginning }) {
-  const mtd = {
+// The committed May anchors (WB_SEED) are the fixed PRE-TAKEOVER baseline: cumulative through
+// this month-end. Self-administered closes (June-2026 onward) each contribute their own MTD; the
+// windows below sum the baseline + the self-admin months that fall inside the target window.
+export const SEED_THROUGH = { year: 2026, month: 5 };   // WB_SEED = cumulative through May 2026
+const quarterOf = (m) => Math.ceil(m / 3);
+
+// The 16 income-statement lines for ONE month, from the close's income (Bucket A) + ledger
+// expenseLines (Bucket B). PTD == MTD for a monthly close. Exported so prior months can be
+// re-derived identically when rolling QTD/YTD forward. Lines the close doesn't feed are 0.
+export function monthlyMTD({ income = {}, expenseLines = {} } = {}) {
+  return {
     realizedPL: N(income.realizedPL), unrealizedPL: N(income.unrealizedPL), commission: N(income.commission),
     otherTradingCost: N(income.otherTradingCost), brokerIntIncome: N(income.brokerInterestIncome),
     divIncomeUS: N(income.divIncomeUS), divIncomeForeign: 0, brokerIntExpense: N(income.brokerInterestExpense),
@@ -387,13 +389,41 @@ export function buildStatementWindows({ income, expenseLines, beginning }) {
     professional: N(expenseLines.professional), operating: N(expenseLines.operating),
     orgCost: N(expenseLines.orgCost), reimbursement: N(expenseLines.reimbursement),
   };
+}
+
+// ── Statement windows (PTD/MTD/QTD/YTD) — single source for the PDFs AND the workbook ──
+// Exported so the two investor PDFs and the Fund Accounting Workbook's Account Statement tab are
+// built from the SAME windows and cannot drift. STATELESS + self-healing: QTD/YTD are recomputed
+// each time from the immutable May baseline + the stored self-admin months, so quarter/year
+// rollovers are handled automatically and regenerating any month is safe.
+//   income/expenseLines : THIS month's Bucket A / Bucket B (its MTD).
+//   period              : "YYYY-MM" of this close (drives quarter/year membership).
+//   history.priorMTD    : [{ year, month, lines }] for stored self-admin months BEFORE `period`.
+//   history.quarterStartNAV / yearStartNAV : ending NAV before this quarter / year (null → seed).
+// For the June-2026 bootstrap (seed quarter Q2 + seed year 2026, no prior self-admin months) this
+// reduces exactly to seed + June-MTD, so June's output is unchanged.
+export function buildStatementWindows({ income, expenseLines, beginning, period, history = {} }) {
+  const cur = monthlyMTD({ income, expenseLines });
+  const { priorMTD = [], quarterStartNAV = null, yearStartNAV = null } = history;
+  const [Y, M] = period ? period.split('-').map(Number) : [SEED_THROUGH.year, SEED_THROUGH.month + 1];
+  const Q = quarterOf(M);
+  const seedQuarter = (Y === SEED_THROUGH.year && Q === quarterOf(SEED_THROUGH.month));  // seed covers this quarter
+  const seedYear = (Y === SEED_THROUGH.year);                                            // seed covers this year
+  const sameQuarter = priorMTD.filter((p) => p.year === Y && quarterOf(p.month) === Q);
+  const sameYear = priorMTD.filter((p) => p.year === Y);
   const is = {};
   for (const k of IS_LINES) {
-    const a = WB_SEED.isAnchors[k] || { qtd: 0, ytd: 0 };
-    is[k] = { ptd: mtd[k], mtd: mtd[k], qtd: a.qtd + mtd[k], ytd: a.ytd + mtd[k] };
+    const seedA = WB_SEED.isAnchors[k] || { qtd: 0, ytd: 0 };
+    const qtd = (seedQuarter ? seedA.qtd : 0) + cur[k] + sameQuarter.reduce((s, p) => s + N(p.lines[k]), 0);
+    const ytd = (seedYear ? seedA.ytd : 0) + cur[k] + sameYear.reduce((s, p) => s + N(p.lines[k]), 0);
+    is[k] = { ptd: cur[k], mtd: cur[k], qtd, ytd };
   }
-  const navBeginning = { ptd: beginning, mtd: beginning, qtd: WB_SEED.navBeginning.qtd, ytd: WB_SEED.navBeginning.ytd };
-  return { mtd, is, navBeginning };
+  const navBeginning = {
+    ptd: beginning, mtd: beginning,
+    qtd: seedQuarter ? WB_SEED.navBeginning.qtd : N(quarterStartNAV),
+    ytd: seedYear ? WB_SEED.navBeginning.ytd : N(yearStartNAV),
+  };
+  return { mtd: cur, is, navBeginning };
 }
 
 // ── Going-forward fundamentals builder (June+) ──────────────────────────────────
@@ -407,7 +437,7 @@ function ddmmyyyy(y, m, d) { return `${String(m).padStart(2, '0')}/${String(d).p
 
 export function buildWorkbookFundamentals(args) {
   const { period, tbAccounts, income, expenseLines, beginning, engEnding, netIncome, bankCharge,
-    cashflow, genTs } = args;
+    cashflow, genTs, history } = args;
   const [y, m] = period.split('-').map(Number);
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const prev = new Date(Date.UTC(y, m - 1, 0));
@@ -423,8 +453,8 @@ export function buildWorkbookFundamentals(args) {
   for (const a of tbAccounts) tb[a.financial] = { begin: a.begin, change: a.change, ending: a.ending };
 
   // Income-statement windows (PTD/MTD/QTD/YTD) — SAME source the investor PDFs use, so the two
-  // renderings of the statement cannot drift. PTD == MTD; QTD/YTD roll the May anchors + MTD.
-  const { is, navBeginning } = buildStatementWindows({ income, expenseLines, beginning });
+  // renderings of the statement cannot drift. Baseline + stored self-admin months (self-healing).
+  const { is, navBeginning } = buildStatementWindows({ income, expenseLines, beginning, period, history });
   const navRoll = { beginning: navBeginning, ror: {} };
   for (const [col, k] of [['ptd', 'ptd'], ['mtd', 'mtd'], ['qtd', 'qtd'], ['ytd', 'ytd']]) {
     const li = {}; for (const line of IS_LINES) li[line] = is[line][k];

@@ -1,0 +1,8277 @@
+{
+"sheets": [
+{
+"name": "Glossary",
+"dataStart": 999,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Reconciliation Summary",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Shows the reconciliation between the administrator-reported and the broker-reported cash balance and market value of the Fund. Any discrepancies in reported values are broken down by category and reflected in the last six columns of the report.",
+"numFmt": "General"
+},
+{
+"ref": "A6",
+"value": "This is a currency-wise broker account level report.",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P7",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A8",
+"value": "Top Movers",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P8",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A9",
+"value": "Highlights the top 10 Gainers and Decliners of the Fund\u2019s investments based on their month-to-date and year-to-date performance. The trading income/loss includes realized and unrealized P&L.  ",
+"numFmt": "General"
+},
+{
+"ref": "A10",
+"value": "This report shows data at security level.",
+"numFmt": "General"
+},
+{
+"ref": "A11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P11",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A12",
+"value": "Attribution",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P12",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A13",
+"value": "Breaks down exposure and performance of the Fund\u2019s portfolio by Sector, Sub Sector, Country, Product Type, and Asset Class attributes.",
+"numFmt": "General"
+},
+{
+"ref": "A14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P14",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A15",
+"value": "Portfolio Valuation",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P15",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A16",
+"value": "Reflects market price, date, and source of price used by NAV to calculate the Fund\u2019s net asset value, and compares market prices used by NAV to those used by the broker to highlight any pricing differences.",
+"numFmt": "General"
+},
+{
+"ref": "A17",
+"value": "This is a security based report.",
+"numFmt": "General"
+},
+{
+"ref": "A18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P18",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A19",
+"value": "Trading Gain Loss",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P19",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A20",
+"value": "Shows gain/loss of each security\u2014including realized and unrealized P&L, interest income/expense, and dividend income/expense\u2014in the Fund\u2019s portfolio for the given period. Does not factor in operating expenses, management fees, or performance fees for the Fund.",
+"numFmt": "General"
+},
+{
+"ref": "A21",
+"value": "This report is a broker account-wise security-based report.",
+"numFmt": "General"
+},
+{
+"ref": "A22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P22",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A23",
+"value": "Open Tax Lot",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P23",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A24",
+"value": "Displays the open individual tax lots of each security, and shows quantity, open date, open price, current market price, and unrealized gain/loss on each open tax lot. This is a tax lot-based report.",
+"numFmt": "General"
+},
+{
+"ref": "A25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P25",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A26",
+"value": "Realized Tax Lot",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P26",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A27",
+"value": "Shows the realized gain/loss of each tax lot during a given period and the bifurcation between short-term and long-term gains/losses. This is a tax lot-based report.",
+"numFmt": "General"
+},
+{
+"ref": "A28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P28",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A29",
+"value": "Interest Income/Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P29",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A30",
+"value": "Displays security-wise interest income/expense for a given period, beginning receivable/payable, interest received/paid during the given period, and ending receivable/payable.",
+"numFmt": "General"
+},
+{
+"ref": "A31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P31",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A32",
+"value": "Dividend Income/Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P32",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A33",
+"value": "Show security-wise dividend income/expense for a given period, beginning receivable/payable, dividend received/paid during the given period, and ending receivable/payable and tax withholding.",
+"numFmt": "General"
+},
+{
+"ref": "A34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P34",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A35",
+"value": "Trade Break",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P35",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A36",
+"value": "Shows discrepancies between client and broker reported trades.",
+"numFmt": "General"
+},
+{
+"ref": "A37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P37",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A38",
+"value": "Trade Pending Cash",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P38",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A39",
+"value": "Provides details of trades for which cash will be settled in future.",
+"numFmt": "General"
+},
+{
+"ref": "A40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P40",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A41",
+"value": "Unmapped Cash",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P41",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A42",
+"value": "Provides details of unidentified cash flows within the brokerage account.",
+"numFmt": "General"
+},
+{
+"ref": "A43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O43",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P43",
+"value": "",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {},
+"colWidths": {
+"A": 34.28,
+"B": 13.71,
+"C": 13.71,
+"D": 13.71,
+"E": 13.71,
+"F": 13.71,
+"G": 13.71,
+"H": 13.71,
+"I": 13.71,
+"J": 13.71,
+"K": 13.71,
+"L": 13.71,
+"M": 13.71,
+"N": 13.71,
+"O": 13.71,
+"P": 13.71
+},
+"merges": [
+"A42:P42",
+"A5:P5",
+"A15:B15",
+"A17:P17",
+"A20:P20",
+"A10:P10",
+"A13:P13",
+"A41:B41",
+"A9:P9",
+"A39:P39",
+"A30:P30",
+"A24:P24",
+"A12:B12",
+"A26:B26",
+"A36:P36",
+"A6:P6",
+"A32:B32",
+"A23:B23",
+"A16:P16",
+"A8:B8",
+"A35:B35",
+"A4:B4",
+"A38:B38",
+"A29:B29",
+"A19:B19",
+"A27:P27",
+"A21:P21",
+"A33:P33"
+]
+},
+{
+"name": "Reconciliation Summary",
+"dataStart": 7,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Reconciliation Summary as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D5",
+"value": "NAV",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Broker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "Broker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Ending Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Portfolio Market Value",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "Market Value + Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "Ending Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "Portfolio Market Value",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "Market Value + Cash Balance",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "Difference In_x000A_Equity_x000A_(NAV and Broker)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "Trade Break",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "Trade Pending Cash*",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "Difference Due To_x000A_Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N6",
+"value": "Unmapped Cash**",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O6",
+"value": "Unresolved Difference",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A16",
+"value": "*Trade Pending Cash : Trade amount for which cash will be settled in future",
+"numFmt": "General"
+},
+{
+"ref": "A17",
+"value": "**Unmapped Cash : Unidentified Cash Flows",
+"numFmt": "General"
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "General",
+"D": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"E": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"F": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"G": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"H": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"I": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"J": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"N": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"O": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+"colWidths": {
+"A": 18.23,
+"B": 24.68,
+"C": 10.97,
+"D": 20.57,
+"E": 20.57,
+"F": 20.57,
+"G": 20.57,
+"H": 20.57,
+"I": 20.57,
+"J": 20.57,
+"K": 15.77,
+"L": 15.77,
+"M": 19.88,
+"N": 15.77,
+"O": 15.77
+},
+"merges": [
+"G5:I5",
+"D5:F5"
+]
+},
+{
+"name": "Top Movers",
+"dataStart": 7,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Top Movers as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Trading Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Estimated Gross RoR",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "Security_x000A_Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Quantity",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "DTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "MTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "QTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "YTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "DTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "MTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "QTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "YTD",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "General",
+"E": "General",
+"F": "General",
+"G": "General",
+"H": "General",
+"I": "General",
+"J": "General",
+"K": "General",
+"L": "General",
+"M": "General"
+},
+"colWidths": {
+"A": 24.96,
+"B": 15.08,
+"C": 13.02,
+"D": 10.97,
+"E": 15.77,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.76,
+"N": 0.02
+},
+"merges": [
+"A84:M84",
+"A19:M19",
+"A45:M45",
+"A32:M32",
+"A58:M58",
+"F5:I5",
+"J5:M5",
+"A71:M71"
+]
+},
+{
+"name": "Attribution",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "U3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "V3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "W3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "X3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Y3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Z3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AA3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "Attribution as of May 29, 2026 ",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Criteria",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Particulars",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "DTD Gain",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "MTD Gain",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "QTD Gain",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "YTD Gain",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "DTD_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "MTD_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "QTD_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "YTD_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "DTD Long_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "MTD Long_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "QTD Long_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "YTD Long_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "DTD Short_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "MTD Short_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "QTD Short_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "YTD Short_x000A_ROR %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "Long_x000A_Exposure",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T5",
+"value": "Short_x000A_Exposure",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U5",
+"value": "Gross_x000A_Exposure",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V5",
+"value": "Net_x000A_Exposure",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W5",
+"value": "Long_x000A_Exposure %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X5",
+"value": "Short_x000A_Exposure %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y5",
+"value": "Gross_x000A_Exposure %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z5",
+"value": "Net_x000A_Exposure %",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA5",
+"value": "Market_x000A_Value",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "[$-010409]#,##0.00;(#,##0.00)",
+"D": "[$-010409]#,##0.00;(#,##0.00)",
+"E": "[$-010409]#,##0.00;(#,##0.00)",
+"F": "[$-010409]#,##0.00;(#,##0.00)",
+"G": "[$-010409]#,##0.00%;(#,##0.00)%",
+"H": "[$-010409]#,##0.00%;(#,##0.00)%",
+"I": "[$-010409]#,##0.00%;(#,##0.00)%",
+"J": "[$-010409]#,##0.00%;(#,##0.00)%",
+"K": "[$-010409]#,##0.00%;(#,##0.00)%",
+"L": "[$-010409]#,##0.00%;(#,##0.00)%",
+"M": "[$-010409]#,##0.00%;(#,##0.00)%",
+"N": "[$-010409]#,##0.00%;(#,##0.00)%",
+"O": "[$-010409]#,##0.00%;(#,##0.00)%",
+"P": "[$-010409]#,##0.00%;(#,##0.00)%",
+"Q": "[$-010409]#,##0.00%;(#,##0.00)%",
+"R": "[$-010409]#,##0.00%;(#,##0.00)%",
+"S": "[$-010409]#,##0.00;(#,##0.00)",
+"T": "[$-010409]#,##0.00;(#,##0.00)",
+"U": "[$-010409]#,##0.00;(#,##0.00)",
+"V": "[$-010409]#,##0.00;(#,##0.00)",
+"W": "[$-010409]#,##0.00%;(#,##0.00)%",
+"X": "[$-010409]#,##0.00%;(#,##0.00)%",
+"Y": "[$-010409]#,##0.00%;(#,##0.00)%",
+"Z": "[$-010409]#,##0.00%;(#,##0.00)%",
+"AA": "[$-010409]#,0.00;(#,0.00);\"-\""
+},
+"colWidths": {
+"A": 17.14,
+"B": 30.85,
+"C": 13.71,
+"D": 13.71,
+"E": 13.71,
+"F": 13.71,
+"G": 13.71,
+"H": 13.71,
+"I": 13.71,
+"J": 13.71,
+"K": 13.71,
+"L": 13.71,
+"M": 13.71,
+"N": 13.71,
+"O": 13.71,
+"P": 13.71,
+"Q": 13.71,
+"R": 13.71,
+"S": 13.71,
+"T": 13.71,
+"U": 13.71,
+"V": 13.71,
+"W": 13.71,
+"X": 13.71,
+"Y": 13.71,
+"Z": 13.71,
+"AA": 13.71
+},
+"merges": []
+},
+{
+"name": "Portfolio Valuation",
+"dataStart": 7,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "E2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "F2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Q2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "S2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "T2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "U2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "V2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "W2",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "U3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "V3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "W3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "Portfolio Valuation as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "NAV",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Broker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "N5",
+"value": "Difference",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "T5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "U5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "V5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "W5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A6",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Position",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "Market Value_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "Market Value_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "Position",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "Market Value_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "Market Value_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "% of AUM",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N6",
+"value": "Positions",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O6",
+"value": "Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P6",
+"value": "Market Value_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q6",
+"value": "Market Value_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R6",
+"value": "Factor",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S6",
+"value": "Source of_x000A_NAV_x000A_Market Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T6",
+"value": "Market Price_x000A_Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U6",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V6",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W6",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "General",
+"D": "General",
+"E": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"F": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"G": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"H": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"I": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"J": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00%;(#,##0.00%);0.00%",
+"N": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"O": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"P": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Q": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"R": "General",
+"S": "General",
+"T": "General",
+"U": "General",
+"V": "General",
+"W": "General"
+},
+"colWidths": {
+"A": 41.14,
+"B": 10.97,
+"C": 13.02,
+"D": 18.51,
+"E": 15.77,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 15.77,
+"O": 15.77,
+"P": 15.77,
+"Q": 15.77,
+"R": 15.77,
+"S": 15.77,
+"T": 13.71,
+"U": 12.34,
+"V": 15.08,
+"W": 28.11
+},
+"merges": [
+"N5:Q5",
+"E5:H5",
+"I5:L5"
+]
+},
+{
+"name": "Trading Gain Loss",
+"dataStart": 8,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AB1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AC1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AD1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AE1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AF1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AG1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AH1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AH2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "U3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "V3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "W3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "X3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Y3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "Z3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AA3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AB3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AC3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AD3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AE3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AF3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AG3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AH3",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A4",
+"value": "Trading Gain Loss as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AH4",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "DTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "MTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "QTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y5",
+"value": "YTD",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AE5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AF5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AG5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "AH5",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A6",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Total Gain/_x000A_Loss",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "Realized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "Unrealized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "Interest_x000A_Income &_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "Dividend Income_x000A_& Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "Tax_x000A_Withholding_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "Total Gain/_x000A_Loss",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "Realized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "Unrealized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N6",
+"value": "Interest_x000A_Income &_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O6",
+"value": "Dividend Income_x000A_& Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P6",
+"value": "Tax_x000A_Withholding_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q6",
+"value": "Total Gain/_x000A_Loss",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R6",
+"value": "Realized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S6",
+"value": "Unrealized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T6",
+"value": "Interest_x000A_Income &_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U6",
+"value": "Reward/Staking/_x000A_Farming P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V6",
+"value": "Exchange/Wallet_x000A_Interest P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W6",
+"value": "Dividend Income_x000A_& Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X6",
+"value": "Tax_x000A_Withholding_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y6",
+"value": "Total Gain/_x000A_Loss",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z6",
+"value": "Realized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA6",
+"value": "Unrealized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AB6",
+"value": "Interest_x000A_Income &_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AC6",
+"value": "Dividend Income_x000A_& Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AD6",
+"value": "Tax_x000A_Withholding_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AE6",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AF6",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AG6",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AH6",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "A7",
+"value": "10x Genomics Inc",
+"numFmt": "General"
+},
+{
+"ref": "B7",
+"value": "USD",
+"numFmt": "General"
+},
+{
+"ref": "C7",
+"value": "TXG US",
+"numFmt": "General"
+},
+{
+"ref": "D7",
+"value": "EQUITIES",
+"numFmt": "General"
+},
+{
+"ref": "E7",
+"value": 68.34142,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "F7",
+"value": 673.99061,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "G7",
+"value": -605.64919,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "H7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "I7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "J7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "K7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "L7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "M7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "N7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "O7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "P7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "Q7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "R7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "S7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "T7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "U7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "V7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "W7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "X7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "Y7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "Z7",
+"value": 516.79531,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "AA7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "AB7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "AC7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "AD7",
+"value": 0,
+"numFmt": "[$-010409]#,##0.00;(#,##0.00);0.00"
+},
+{
+"ref": "AE7",
+"value": 1155958,
+"numFmt": "General"
+},
+{
+"ref": "AF7",
+"value": "US88025U1097",
+"numFmt": "General"
+},
+{
+"ref": "AG7",
+"value": "PNTHR_IB_U18248579",
+"numFmt": "General"
+},
+{
+"ref": "AH7",
+"value": "",
+"numFmt": "General"
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "General",
+"D": "General",
+"E": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"F": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"G": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"H": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"I": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"J": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"N": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"O": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"P": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Q": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"R": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"S": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"T": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"U": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"V": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"W": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"X": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Y": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Z": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"AA": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"AB": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"AC": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"AD": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"AE": "General",
+"AF": "General",
+"AG": "General",
+"AH": "General"
+},
+"colWidths": {
+"A": 24.68,
+"B": 10.97,
+"C": 13.02,
+"D": 18.51,
+"E": 15.77,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 17.82,
+"J": 17.82,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 15.77,
+"O": 17.82,
+"P": 17.82,
+"Q": 15.77,
+"R": 15.77,
+"S": 15.77,
+"T": 15.77,
+"U": 17.82,
+"V": 17.82,
+"W": 17.82,
+"X": 17.82,
+"Y": 15.77,
+"Z": 15.77,
+"AA": 15.77,
+"AB": 15.77,
+"AC": 17.82,
+"AD": 17.82,
+"AE": 12.34,
+"AF": 15.08,
+"AG": 28.11,
+"AH": 20.57
+},
+"merges": [
+"K5:P5",
+"Q5:X5",
+"E5:J5",
+"Y5:AD5"
+]
+},
+{
+"name": "Open Tax Lot",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Open Tax Lot as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "Purchase_x000A_Trade Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Long/_x000A_Short",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Position As Per_x000A_NAV",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "Gross_x000A_Purchase Price_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Purchase Date_x000A_Exchange_x000A_Rate",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Cost Amount_x000A_(Net Of_x000A_Commission)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "Market Price As_x000A_Per NAV_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "Valuation Date_x000A_Exchange Rate",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "Market Value As_x000A_Per NAV_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "Days_x000A_Held",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "Unrealized P&L_x000A_- Short Term",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "Unrealized P&L_x000A_- Long Term",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "General",
+"D": "General",
+"E": "[$-010409]mm/dd/yyyy",
+"F": "General",
+"G": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"H": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"I": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"J": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"N": "General",
+"O": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"P": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Q": "General",
+"R": "General",
+"S": "General"
+},
+"colWidths": {
+"A": 24.68,
+"B": 10.97,
+"C": 13.02,
+"D": 18.51,
+"E": 13.02,
+"F": 9.6,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 10.28,
+"O": 15.77,
+"P": 15.77,
+"Q": 12.34,
+"R": 15.08,
+"S": 28.11
+},
+"merges": []
+},
+{
+"name": "Realized Tax Lot",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Realized Tax Lot from May 01, 2026 to May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Sale Trade_x000A_Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Position As Per_x000A_NAV",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Open Price_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "Open Amount_x000A_(Net Of_x000A_Commission)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Close Price_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Close Amount_x000A_(Net Of_x000A_Commission)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "Realized P&L",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "Realized P&L_x000A_- Short Term",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "Realized P&L_x000A_- Long Term",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "Purchase_x000A_Trade Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "[$-010409]mm/dd/yyyy",
+"B": "General",
+"C": "General",
+"D": "General",
+"E": "General",
+"F": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"N": "[$-010409]mm/dd/yyyy",
+"O": "General",
+"P": "General",
+"Q": "General"
+},
+"colWidths": {
+"A": 13.71,
+"B": 24.68,
+"C": 10.97,
+"D": 13.02,
+"E": 18.51,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 13.02,
+"O": 12.34,
+"P": 15.08,
+"Q": 28.11
+},
+"merges": []
+},
+{
+"name": "Interest Detail",
+"dataStart": 7,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Interest Detail from May 01, 2026 to May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Period Begin_x000A_Interest_x000A_Receivable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "Period Begin_x000A_Interest_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "Interest_x000A_Received",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "Interest_x000A_Paid",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "Period End_x000A_Interest_x000A_Receivable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "Period End_x000A_Interest_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "Interest Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "Interest_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "Interest_x000A_Receivable/Payable_x000A_Reported By Broker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N6",
+"value": "Difference",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O6",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P6",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q6",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A7",
+"value": "No Data Found",
+"numFmt": "General"
+}
+],
+"colFmt": {},
+"colWidths": {
+"A": 24.68,
+"B": 10.97,
+"C": 13.02,
+"D": 18.51,
+"E": 15.77,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 20.57,
+"N": 15.77,
+"O": 12.34,
+"P": 15.08,
+"Q": 28.11
+},
+"merges": [
+"A4:Q4"
+]
+},
+{
+"name": "Dividend Detail",
+"dataStart": 7,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Dividend Detail from May 01, 2026 to May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T5",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B6",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C6",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D6",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E6",
+"value": "Period Begin_x000A_Dividend_x000A_Receivable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F6",
+"value": "Period Begin_x000A_Tax Withholding_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G6",
+"value": "Period Begin_x000A_Dividend_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H6",
+"value": "Dividend_x000A_Received",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I6",
+"value": "Tax_x000A_Withholding_x000A_Paid",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J6",
+"value": "Dividend Paid",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K6",
+"value": "Period End_x000A_Dividend_x000A_Receivable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L6",
+"value": "Period End Tax_x000A_Withholding_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M6",
+"value": "Period End_x000A_Dividend_x000A_Payable",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N6",
+"value": "Dividend_x000A_Income",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O6",
+"value": "Tax_x000A_Withholding_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P6",
+"value": "Dividend_x000A_Expense",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q6",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R6",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S6",
+"value": "Country",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T6",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+}
+],
+"colFmt": {
+"A": "General",
+"B": "General",
+"C": "General",
+"D": "General",
+"E": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"F": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"G": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"H": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"I": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"J": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"K": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"L": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"M": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"N": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"O": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"P": "[$-010409]#,##0.00;(#,##0.00);0.00",
+"Q": "General",
+"R": "General",
+"S": "General",
+"T": "General"
+},
+"colWidths": {
+"A": 24.68,
+"B": 10.97,
+"C": 13.02,
+"D": 18.51,
+"E": 15.77,
+"F": 15.77,
+"G": 15.77,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 15.77,
+"O": 15.77,
+"P": 15.77,
+"Q": 12.34,
+"R": 15.08,
+"S": 20.57,
+"T": 28.11
+},
+"merges": [
+"A4:T4"
+]
+},
+{
+"name": "Trade Break",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Trade Break as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Trade_x000A_Reported By",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Trade Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "Quantity",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Trade Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Gross Trade_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "Commission_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "Bond Interest_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "Net Trade_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "Gross Trade_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "Commission_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "Bond Interest_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "Net Trade_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "MTM_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T5",
+"value": "MTM_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U5",
+"value": "Report Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V5",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W5",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X5",
+"value": "Symbol",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y5",
+"value": "External_x000A_Trade ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z5",
+"value": "Comments",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "No Data Found",
+"numFmt": "General"
+}
+],
+"colFmt": {},
+"colWidths": {
+"A": 28.11,
+"B": 24.68,
+"C": 10.97,
+"D": 13.02,
+"E": 18.51,
+"F": 15.77,
+"G": 13.02,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 15.77,
+"O": 15.77,
+"P": 15.77,
+"Q": 15.77,
+"R": 15.77,
+"S": 15.77,
+"T": 15.77,
+"U": 13.02,
+"V": 12.34,
+"W": 15.08,
+"X": 48.0,
+"Y": 13.02,
+"Z": 25.37
+},
+"merges": []
+},
+{
+"name": "Trade Pending Cash",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Trade Pending Cash as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Security Description",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "Ticker",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "Security Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Trade_x000A_Reported By",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Trade Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "Quantity",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Trade Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Gross Trade_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "K5",
+"value": "Commission_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "L5",
+"value": "Bond Interest_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "M5",
+"value": "Net Trade_x000A_Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "N5",
+"value": "Gross Trade_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "O5",
+"value": "Commission_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "P5",
+"value": "Bond Interest_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Q5",
+"value": "Net Trade_x000A_Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "R5",
+"value": "Settlement Price",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "S5",
+"value": "MTM_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "T5",
+"value": "MTM_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "U5",
+"value": "Report Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "V5",
+"value": "Settlement_x000A_Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "W5",
+"value": "NAV_x000A_Security ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "X5",
+"value": "ISIN",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Y5",
+"value": "Symbol",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "Z5",
+"value": "External_x000A_Trade ID",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "AA5",
+"value": "Comments",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "No Data Found",
+"numFmt": "General"
+}
+],
+"colFmt": {},
+"colWidths": {
+"A": 28.11,
+"B": 24.68,
+"C": 10.97,
+"D": 13.02,
+"E": 18.51,
+"F": 15.77,
+"G": 13.02,
+"H": 15.77,
+"I": 15.77,
+"J": 15.77,
+"K": 15.77,
+"L": 15.77,
+"M": 15.77,
+"N": 15.77,
+"O": 15.77,
+"P": 15.77,
+"Q": 15.77,
+"R": 15.77,
+"S": 15.77,
+"T": 15.77,
+"U": 13.02,
+"V": 13.02,
+"W": 12.34,
+"X": 15.08,
+"Y": 34.28,
+"Z": 13.02,
+"AA": 25.36,
+"AB": 0.02
+},
+"merges": []
+},
+{
+"name": "Unmapped Cash",
+"dataStart": 6,
+"static": [
+{
+"ref": "A1",
+"value": "",
+"numFmt": "General"
+},
+{
+"ref": "B1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J1",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A2",
+"value": "PNTHR Funds, Carnivore Quant Fund, LP",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G2",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J3",
+"value": "",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A4",
+"value": "Unmapped Cash as of May 29, 2026",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A5",
+"value": "Broker Account",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "B5",
+"value": "Currency",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "C5",
+"value": "Report Date",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "D5",
+"value": "Product Id",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "E5",
+"value": "Security Description ",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "F5",
+"value": "Cash Type",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "G5",
+"value": "Reported By",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "H5",
+"value": "Amount_x000A_(Native)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "I5",
+"value": "Amount_x000A_(Base)",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "J5",
+"value": "Comments",
+"numFmt": "General",
+"bold": true
+},
+{
+"ref": "A6",
+"value": "No Data Found",
+"numFmt": "General"
+}
+],
+"colFmt": {},
+"colWidths": {
+"A": 24.68,
+"B": 10.97,
+"C": 13.02,
+"D": 13.71,
+"E": 24.68,
+"F": 13.71,
+"G": 13.71,
+"H": 15.77,
+"I": 15.77,
+"J": 38.81
+},
+"merges": []
+}
+]
+}

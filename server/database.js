@@ -624,6 +624,47 @@ export async function getAiRankingByDate(date) {
   }
 }
 
+// ── Short-list rank-change baselines (skip shortless docs) ───────────────────
+// ai_rankings is SHARED by two Friday producers: the AI-100 scanner (100 long + 100
+// SHORT) and the ~316-member AI-300 universe snapshot (long-only, powering the Rising
+// sparklines via getAiRankHistory). For the 100-Shorts page's week-over-week rank change
+// we must diff against the most recent doc that ACTUALLY HAS shorts — otherwise the
+// immediately-prior doc is often a shortless universe snapshot and every rankChange is
+// null (the "shorts not updating" bug). These two helpers walk back past shortless docs.
+export async function getMostRecentAiRankingWithShorts() {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const docs = await collection.find({ shortRankings: { $exists: true, $ne: [] } }).sort({ date: -1 }).limit(1).toArray();
+    if (!docs.length) return null;
+    const doc = docs[0];
+    doc.rankings = sortRankingsByYtdAndAssignRank(doc.rankings);
+    doc.shortRankings = sortShortRankingsByYtdAndAssignRank(doc.shortRankings);
+    return doc;
+  } catch (error) {
+    console.error('Error getting most recent AI ranking with shorts:', error.message);
+    return null;
+  }
+}
+
+export async function getAiRankingBeforeDateWithShorts(date) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const docs = await collection.find({ date: { $lt: date }, shortRankings: { $exists: true, $ne: [] } }).sort({ date: -1 }).limit(1).toArray();
+    if (!docs.length) return null;
+    const doc = docs[0];
+    doc.rankings = sortRankingsByYtdAndAssignRank(doc.rankings);
+    doc.shortRankings = sortShortRankingsByYtdAndAssignRank(doc.shortRankings);
+    return doc;
+  } catch (error) {
+    console.error('Error getting AI ranking before date with shorts:', error.message);
+    return null;
+  }
+}
+
 export async function cleanupOldAiRankings(weeksToKeep = 12) {
   try {
     const database = await connectToDatabase();

@@ -1,5 +1,6 @@
 import { getMostRecentRanking, getRankingBeforeDate, saveRanking, getRankingByDate, cleanupOldRankings } from './database.js';
 import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, getAiRankingByDate, cleanupOldAiRankings, connectToDatabase } from './database.js';
+import { getMostRecentAiRankingWithShorts, getAiRankingBeforeDateWithShorts } from './database.js';
 
 // US Eastern timezone for market close
 const MARKET_TZ = 'America/New_York';
@@ -236,12 +237,15 @@ export async function addAiRankingComparison(currentStocks) {
 
 export async function addAiShortRankingComparison(bottomStocks) {
   try {
-    const mostRecent = await getMostRecentAiRanking();
-    if (!mostRecent?.shortRankings) {
+    // Anchor + previous baseline must both come from docs that ACTUALLY HAVE shorts —
+    // the ai_rankings collection interleaves shortless ~316-member universe snapshots that
+    // would otherwise force every rankChange to null (the "shorts not updating" bug).
+    const anchor = await getMostRecentAiRankingWithShorts();
+    if (!anchor) {
       return bottomStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
     }
-    const previousRanking = await getAiRankingBeforeDate(mostRecent.date);
-    if (!previousRanking?.shortRankings) {
+    const previousRanking = await getAiRankingBeforeDateWithShorts(anchor.date);
+    if (!previousRanking?.shortRankings?.length) {
       return bottomStocks.map((stock, index) => ({ ...stock, rank: index + 1, rankChange: null, previousRank: null }));
     }
     const previousRankMap = new Map();
@@ -283,18 +287,29 @@ export async function autoSaveAiRankingIfFriday(longStocks, shortStocks = null) 
     if (!isFriday()) return;
     const rankingDate = getRankingDate();
     const existing = await getAiRankingByDate(rankingDate);
-    if (existing) {
-      if (longStocks.length > (existing.rankings?.length || 0)) {
-        console.log(`📊 Replacing AI ranking for ${rankingDate}: ${existing.rankings?.length} → ${longStocks.length} stocks`);
-        const db = await connectToDatabase();
-        await db.collection('ai_rankings').deleteOne({ date: rankingDate });
-      } else {
-        console.log(`✅ AI ranking already saved for ${rankingDate}`);
-        return;
-      }
+
+    // ai_rankings is SHARED by two Friday producers on the SAME date key: the AI-100 scanner
+    // (100 long + 100 SHORT, by YTD) and the ~316-member AI-300 universe snapshot (long-only,
+    // powers the Rising sparklines). MERGE rather than clobber, so the day's doc keeps BOTH the
+    // larger long set AND whichever short set exists. The old "replace-if-longer" rule let the
+    // 316-member universe save overwrite the scanner's 100 shorts (316 > 100), which erased the
+    // 100-Shorts page's week-over-week rank-change baseline. Merge is order-independent.
+    const existingLongs  = existing?.rankings || [];
+    const existingShorts = existing?.shortRankings || [];
+    const needLongUpgrade = (longStocks?.length || 0) > existingLongs.length;   // a larger (universe) long set arrived
+    const needShortAdd    = (shortStocks?.length || 0) > 0 && existingShorts.length === 0;   // shorts arrived where there were none
+    if (existing && !needLongUpgrade && !needShortAdd) {
+      console.log(`✅ AI ranking already complete for ${rankingDate} (${existingLongs.length} long, ${existingShorts.length} short)`);
+      return;
     }
-    console.log(`💾 Auto-saving AI ranking for Friday ${rankingDate}...`);
-    await saveAiRanking(rankingDate, longStocks, shortStocks);
+    const mergedLongs  = needLongUpgrade ? longStocks : (existingLongs.length ? existingLongs : longStocks);
+    const mergedShorts = (shortStocks?.length) ? shortStocks : (existingShorts.length ? existingShorts : null);
+    if (existing) {
+      const db = await connectToDatabase();
+      await db.collection('ai_rankings').deleteOne({ date: rankingDate });
+    }
+    console.log(`💾 Auto-saving/merging AI ranking for Friday ${rankingDate} (${mergedLongs.length} long, ${mergedShorts?.length || 0} short)...`);
+    await saveAiRanking(rankingDate, mergedLongs, mergedShorts);
     await cleanupOldAiRankings(12);
   } catch (error) {
     console.error('Error in AI auto-save:', error);

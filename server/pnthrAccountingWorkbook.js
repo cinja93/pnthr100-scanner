@@ -118,7 +118,7 @@ function mapBalanceSheet(f) {
 // COMPUTES the four subtotal rows (cash, Net Assets, Net (Income)/Loss, Capital) from the seed's
 // sumRows. Labels/GL/category/broker are static (template). f.tb keyed by financial account.
 function mapTrialBalance(f) {
-  const out = { A4: `As of ${f.dates.priorMonthEnd} and ${f.dates.monthEnd}` };
+  const out = { A4: `As of ${f.dates.priorMonthEnd} and ${f.dates.monthEnd}`, B46: f.dates.genTs };
   for (const a of TB_SEED.accounts) {
     const v = f.tb[a.financial];
     if (!v) continue;
@@ -164,6 +164,7 @@ function mapAccountStatement(f) {
     A4: `For the Period Ended ${f.dates.monthNameYear}`,
     C4: `Start Of Period : ${f.dates.monthStart}`,
     C5: `End Of Period  : ${f.dates.monthEnd}`,
+    A40: `Report generated on: ${f.dates.genTs}`,
   };
   for (const [col, k] of Object.entries(cols)) {
     const li = {}; for (const line of IS_LINES) li[line] = f.is[line]?.[k] || 0;
@@ -191,7 +192,7 @@ function mapSummaryEquity(f) {
   const ending = base + net;
   const cells = { D: base, E: 0, F: base, G: N(e.grossIncome), H: N(e.incentiveFee), I: net, J: 0,
     K: ending, L: ror.ptd, M: ror.mtd, N: ror.qtd, O: ror.ytd };
-  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}` };
+  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}`, B11: f.dates.genTs };
   for (const [col, v] of Object.entries(cells)) { out[`${col}8`] = r6(v); out[`${col}9`] = r6(v); }
   return out;
 }
@@ -221,7 +222,7 @@ function mapDetailedEquity(f) {
     J: changeUnreal, K: brokerInt, L: usDiv, M: intExpense, N: operatingExp, O: orgCost, P: grossIncome,
     Q: mgmtBase, R: mgmtFee, S: N(f.equity.cumulativeProfit), T: incentive, U: netIncome, V: 0, W: ending,
     X: 0, Y: grossRor, Z: netRor, AA: grossRor, AB: netRor, AC: R.qtd, AD: R.qtd, AE: R.ytd, AF: R.ytd };
-  const out = { A4: `For the Period ${f.dates.monthStart}  To  ${f.dates.monthEnd}` };
+  const out = { A4: `For the Period ${f.dates.monthStart}  To  ${f.dates.monthEnd}`, B11: f.dates.genTs };
   for (const [col, v] of Object.entries(cells)) { out[`${col}8`] = r6(v); out[`${col}9`] = r6(v); }
   return out;
 }
@@ -238,7 +239,7 @@ function mapIncentiveFee(f) {
   const cells = { D: N(i.hurdleBase), E: i.hurdleRate, F: N(i.hurdleAmt), G: N(i.cumHurdleProfit),
     H: 0, I: N(i.cumProfitCarryFwd), J: gain, K: cumProfit, L: outPerf, M: 0, N: 0, O: 0, P: 0, Q: 0,
     R: ending };
-  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}` };
+  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}`, A11: `Report generated on ${f.dates.genTs}` };
   const totalSkip = new Set(['E', 'M']);   // NAV's Incentive-Fee total row omits the two rate columns
   for (const [col, v] of Object.entries(cells)) {
     out[`${col}8`] = r6(v);
@@ -255,6 +256,7 @@ function mapIncentiveFee(f) {
 function mapAccountSummary(f) {
   const t = f.tb, cf = f.cashflow, out = {};
   out.A4 = `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}`;
+  out.A52 = `Report generated on: ${f.dates.genTs}`;
   const put = (row, col, v) => { out[`${col}${row}`] = r6(v); };
   const putTotalIn = (row, financial, v) => { put(row, 'D', v); put(row, acctCol(financial), v); };
 
@@ -320,7 +322,7 @@ function mapAccountSummary(f) {
 // lists the actual cash payments this month: f.opExpensePayments = [{ date, category, description, amount }].
 const OPEX_ROWS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 function mapOperatingExpense(f) {
-  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}` };
+  const out = { A4: `For the Period ${f.dates.monthStart} To ${f.dates.monthEnd}`, A30: `Report generated on: ${f.dates.genTs}` };
   let D = 0, E = 0, F = 0, G = 0, H = 0, I = 0;
   for (const row of OPEX_ROWS) {
     const l = f.opExpense[row]; if (!l) continue;
@@ -369,6 +371,31 @@ export async function buildFundAccountingWorkbook(f) {
   return renderGridWorkbook(buildWorkbookSpec(f));
 }
 
+// ── Statement windows (PTD/MTD/QTD/YTD) — single source for the PDFs AND the workbook ──
+// The month's income/expense mapping IS the MTD (== PTD) column; QTD/YTD roll the committed May
+// anchors (WB_SEED) forward by this month's MTD. Exported so the two investor PDFs and the Fund
+// Accounting Workbook's Account Statement tab are built from the SAME windows and cannot drift.
+// NOTE (go-forward): the anchors are the May-2026 golden baseline — exactly right for the June
+// close (the first self-administered month, where QTD = Apr..Jun and YTD = Jan..Jun). July+ must
+// roll the anchor each month (with quarter/year resets); until that ships, callers get May+MTD.
+export function buildStatementWindows({ income, expenseLines, beginning }) {
+  const mtd = {
+    realizedPL: N(income.realizedPL), unrealizedPL: N(income.unrealizedPL), commission: N(income.commission),
+    otherTradingCost: N(income.otherTradingCost), brokerIntIncome: N(income.brokerInterestIncome),
+    divIncomeUS: N(income.divIncomeUS), divIncomeForeign: 0, brokerIntExpense: N(income.brokerInterestExpense),
+    divExpenseUS: 0, divExpenseForeign: 0, admin: N(expenseLines.admin), legal: 0,
+    professional: N(expenseLines.professional), operating: N(expenseLines.operating),
+    orgCost: N(expenseLines.orgCost), reimbursement: N(expenseLines.reimbursement),
+  };
+  const is = {};
+  for (const k of IS_LINES) {
+    const a = WB_SEED.isAnchors[k] || { qtd: 0, ytd: 0 };
+    is[k] = { ptd: mtd[k], mtd: mtd[k], qtd: a.qtd + mtd[k], ytd: a.ytd + mtd[k] };
+  }
+  const navBeginning = { ptd: beginning, mtd: beginning, qtd: WB_SEED.navBeginning.qtd, ytd: WB_SEED.navBeginning.ytd };
+  return { mtd, is, navBeginning };
+}
+
 // ── Going-forward fundamentals builder (June+) ──────────────────────────────────
 // Assembles the normalized `f` the mappers consume from the monthly-close pieces + the committed
 // May anchors (WB_SEED). MTD lines come from the close's income/expense mapping (which ties to the
@@ -395,24 +422,10 @@ export function buildWorkbookFundamentals(args) {
   const tb = {};
   for (const a of tbAccounts) tb[a.financial] = { begin: a.begin, change: a.change, ending: a.ending };
 
-  // Income-statement MTD lines from the close mapping (+ expense lines). PTD == MTD.
-  const mtd = {
-    realizedPL: N(income.realizedPL), unrealizedPL: N(income.unrealizedPL), commission: N(income.commission),
-    otherTradingCost: N(income.otherTradingCost), brokerIntIncome: N(income.brokerInterestIncome),
-    divIncomeUS: N(income.divIncomeUS), divIncomeForeign: 0, brokerIntExpense: N(income.brokerInterestExpense),
-    divExpenseUS: 0, divExpenseForeign: 0, admin: N(expenseLines.admin), legal: 0,
-    professional: N(expenseLines.professional), operating: N(expenseLines.operating),
-    orgCost: N(expenseLines.orgCost), reimbursement: N(expenseLines.reimbursement),
-  };
-  const is = {};
-  for (const k of IS_LINES) {
-    const a = WB_SEED.isAnchors[k] || { qtd: 0, ytd: 0 };
-    is[k] = { ptd: mtd[k], mtd: mtd[k], qtd: a.qtd + mtd[k], ytd: a.ytd + mtd[k] };
-  }
-  const navRoll = {
-    beginning: { ptd: beginning, mtd: beginning, qtd: WB_SEED.navBeginning.qtd, ytd: WB_SEED.navBeginning.ytd },
-    ror: {},
-  };
+  // Income-statement windows (PTD/MTD/QTD/YTD) — SAME source the investor PDFs use, so the two
+  // renderings of the statement cannot drift. PTD == MTD; QTD/YTD roll the May anchors + MTD.
+  const { is, navBeginning } = buildStatementWindows({ income, expenseLines, beginning });
+  const navRoll = { beginning: navBeginning, ror: {} };
   for (const [col, k] of [['ptd', 'ptd'], ['mtd', 'mtd'], ['qtd', 'qtd'], ['ytd', 'ytd']]) {
     const li = {}; for (const line of IS_LINES) li[line] = is[line][k];
     const ni = incomeSubtotals(li).netIncome;

@@ -19,7 +19,7 @@ import { renderAccountStatement, renderIndividualAccountStatement } from './pnth
 import { saveDocument } from './pnthrAccountingService.js';
 import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
 import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialBalance.js';
-import { buildWorkbookFundamentals, buildFundAccountingWorkbook } from './pnthrAccountingWorkbook.js';
+import { buildWorkbookFundamentals, buildFundAccountingWorkbook, buildStatementWindows } from './pnthrAccountingWorkbook.js';
 import { buildPortfolioNotebook, dividendRowsFromFlex } from './pnthrAccountingPortfolioNotebook.js';
 import { resolveSecurityIds } from './pnthrAccountingSecurityMaster.js';
 import { fetchFMP } from './stockService.js';
@@ -163,22 +163,27 @@ export async function finalizeClose(period, bankBalance) {
   const { balances, expenseLines } = postMonth(prior, { bankBalance });
   const bNet = bucketBNet(balances);
 
-  // Combined income lineItems (A trading/income + B expenses). Single-period (PTD); other
-  // columns mirror PTD until the multi-period roll-up is wired (single-LP, first months).
-  const col = (v) => [v, v, v, v];
-  const li = {
-    realizedPL: col(income.realizedPL), unrealizedPL: col(income.unrealizedPL),
-    commission: col(income.commission), otherTradingCost: col(income.otherTradingCost),
-    brokerInterestIncome: col(income.brokerInterestIncome), divIncomeUS: col(income.divIncomeUS),
-    brokerInterestExpense: col(income.brokerInterestExpense),
-    admin: col(expenseLines.admin), professional: col(expenseLines.professional),
-    operating: col(expenseLines.operating), orgCost: col(expenseLines.orgCost),
-    reimbursement: col(expenseLines.reimbursement),
-  };
+  // Income-statement windows [PTD, MTD, QTD, YTD] for the two investor statements. Built from the
+  // SAME helper that feeds the Fund Accounting Workbook's Account Statement tab (buildStatementWindows),
+  // so the PDF and the Excel rendering of the statement are identical by construction and cannot
+  // drift. PTD == MTD; QTD/YTD roll the committed May anchors forward by this month's MTD.
   const beginning = await priorEndingNAV(db, period);
+  const { is: win, navBeginning } = buildStatementWindows({ income, expenseLines, beginning });
+  const w = (k) => [win[k].ptd, win[k].mtd, win[k].qtd, win[k].ytd];
+  const li = {
+    realizedPL: w('realizedPL'), unrealizedPL: w('unrealizedPL'),
+    commission: w('commission'), otherTradingCost: w('otherTradingCost'),
+    brokerInterestIncome: w('brokerIntIncome'), divIncomeUS: w('divIncomeUS'),
+    divIncomeForeign: w('divIncomeForeign'), brokerInterestExpense: w('brokerIntExpense'),
+    divExpenseUS: w('divExpenseUS'), divExpenseForeign: w('divExpenseForeign'),
+    admin: w('admin'), legal: w('legal'), professional: w('professional'),
+    operating: w('operating'), orgCost: w('orgCost'), reimbursement: w('reimbursement'),
+  };
+  const zero4 = [0, 0, 0, 0];
   const inputs = {
     header: headerFor(period, close), lineItems: li,
-    beginning: col(beginning), additions: col(0), redemptions: col(0),
+    beginning: [navBeginning.ptd, navBeginning.mtd, navBeginning.qtd, navBeginning.ytd],
+    additions: zero4, redemptions: zero4,
     signatory: ['For PNTHR Funds, LLC', 'General Partner of PNTHR Funds, Carnivore Quant Fund, LP'],
     generatedOn: `Report generated on: ${new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })} (ET)`,
   };
@@ -241,6 +246,7 @@ export async function finalizeClose(period, bankBalance) {
     // header-only rather than failing the notebook.
     const profileBySym = await fmpProfiles([...new Set(lots.map((l) => l.symbol).filter(Boolean))]).catch(() => ({}));
     const nbBuf = await buildPortfolioNotebook({
+      period,
       lots, otherTradingCost: income.otherTradingCost, secId, divRows: close.tbSections?.divRows || [],
       bankCash: bankBalance, brokerCash: r2(inputs.brokerCash), portfolioMV: r2(inputs.stockMarket),
       profileBySym, beginningNAV: beginning,

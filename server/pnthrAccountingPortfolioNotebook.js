@@ -64,6 +64,29 @@ const put = (sheet, col, row, value, opts = {}) => {
 };
 const finalize = (sheet) => { delete sheet._sk; return sheet; };
 
+// The skeleton's static tab titles carry NAV's May-golden dates ("as of May 29, 2026",
+// "from May 01, 2026 to May 29, 2026"). Overlay the CURRENT period's dates so a June notebook
+// is titled June, not May. Only the date portion is rewritten; each tab's title prefix is kept.
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function periodDateStrings(period) {
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) return null;
+  const [y, m] = period.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const mn = MONTH_NAMES[m - 1];
+  const pad = (d) => String(d).padStart(2, '0');
+  return { start: `${mn} 01, ${y}`, end: `${mn} ${pad(lastDay)}, ${y}` };  // NAV format: "June 30, 2026"
+}
+function applyPeriodDates(sheet, d) {
+  if (!d) return;
+  const reRange = /from [A-Z][a-z]+ \d{1,2}, \d{4}\s+to\s+[A-Z][a-z]+ \d{1,2}, \d{4}/;
+  const reAsOf = /as of [A-Z][a-z]+ \d{1,2}, \d{4}/;
+  for (const c of sheet.cells) {
+    if (typeof c.value !== 'string') continue;
+    if (reRange.test(c.value)) c.value = c.value.replace(reRange, `from ${d.start} to ${d.end}`);
+    else if (reAsOf.test(c.value)) c.value = c.value.replace(reAsOf, `as of ${d.end}`);
+  }
+}
+
 // ── Realized Tax Lot ─────────────────────────────────────────────────────────
 // Grouped by security (sorted by NAV/PNTHR Security ID ascending, matching NAV), each closed lot a
 // row, K = fifoPnlRealized (= close − open), ST/LT by holding period, SUB TOTAL per group + blank row,
@@ -328,9 +351,11 @@ export function buildPortfolioNotebookSpec(data) {
   const divBySym = {};
   for (const d of data.divRows || []) divBySym[d.isin] = { income: N(d.received) + N(d.change), symbol: d.symbol, description: d.description };
   const perSym = perSymbolPnl({ lots: data.lots || [], divBySym, secId });
+  const dateStrs = periodDateStrings(data.period);
   const out = { sheets: [] };
   for (const s of SKELETON.sheets) {
     const sheet = fromSkeleton(s.name);
+    applyPeriodDates(sheet, dateStrs);
     switch (s.name) {
       case 'Realized Tax Lot':
         buildRealizedTaxLot(sheet, { lots: data.lots || [], otherTradingCost: data.otherTradingCost, secId }); break;

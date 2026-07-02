@@ -46,6 +46,7 @@ import { getFundComparison, getFundComparisonForMember } from './fundCompareServ
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog, setTreeNoBuyback } from './pnthrTreeEngine.js';
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks, listPaperBooks } from './treePaperBook.js';
+import { refreshHandsOffBand } from './backtest/treePaperReconstruction.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
 import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
@@ -6649,7 +6650,10 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
     if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));
     // Member Elite + Ambush PAPER books — owner-scoped (pnthr_elite_*__<id> / pnthr_ambush_paper_*__<id>),
     // sized to the member's own $50k, NEVER touch the house books or IBKR. Same 2-min cadence as Tree.
+    // treeOnly books (the house hands-off Tree paper book) run ONLY the Tree strategy above via
+    // runAllPaperBookTicks — skip them here so they don't spawn owner-scoped Elite/Ambush engines.
     for (const bk of await listPaperBooks(db)) {
+      if (bk.treeOnly) continue;
       try {
         await runEliteAiDryRun({ ownerId: bk.ownerId });
         await manageEliteAiDryRun({ ownerId: bk.ownerId });
@@ -6658,6 +6662,20 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
     }
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
   finally { pnthrTreeTickRunning = false; }
+}, { timezone: 'America/New_York' });
+
+// PNTHR Tree — hands-off (no-intervention) RECONSTRUCTION band refresh. Nightly at 8:00pm ET
+// (after the daily candle pipeline lands the completed session), recompute the hypothetical
+// 06-22→last-complete-session band from the LOCKED treeSim engine and store it for the
+// fund-compare page. HYPOTHETICAL/simulated — heavy (loads all AI candles) so it runs ONCE a
+// day here, NOT on the 10s-polled endpoint. Writer-gated (Render only).
+cron.schedule('0 20 * * 1-5', async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;
+  try {
+    const db = await connectToDatabase();
+    const doc = await refreshHandsOffBand(db);   // asOf = last complete bar
+    console.log('[Tree hands-off band] refreshed:', JSON.stringify({ status: doc.status, asOf: doc.asOf, central: doc.centralPct, low: doc.lowPct, high: doc.highPct }));
+  } catch (err) { console.error('[Tree hands-off band] refresh failed:', err.message); }
 }, { timezone: 'America/New_York' });
 
 // PNTHR Accounting — monthly close: 3rd of each month at 6:00am ET, pull the PRIOR month's

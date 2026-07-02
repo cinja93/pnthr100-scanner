@@ -33,6 +33,7 @@ function Row({ label, value, color }) {
 function FundCard({ f, acknowledged, startDate }) {
   const r = f.risk || {};
   const ts = f.tradeStats?.combined || {};
+  const rec = f.reconstruction && f.reconstruction.hypothetical ? f.reconstruction : null;
   return (
     <div style={{ flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column', background: '#0d0d0f',
       border: `1px solid ${f.simulated ? '#2a2a3a' : '#1e3a26'}`,
@@ -43,6 +44,29 @@ function FundCard({ f, acknowledged, startDate }) {
       </div>
       <div style={{ fontSize: 11, color: '#777', marginBottom: 12 }}>{f.strategy}</div>
 
+      {rec ? (
+        // ── HANDS-OFF Tree: HYPOTHETICAL reconstruction is the comparable since-baseline figure,
+        //    the live paper book tracks forward from the day it was stood up (kept visually apart).
+        <>
+          <div style={{ border: `1px dashed ${AMBER}`, background: '#170f03', borderRadius: 8, padding: '9px 11px', marginBottom: 10,
+            backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 7px, rgba(245,158,11,0.05) 7px, rgba(245,158,11,0.05) 14px)' }}>
+            <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, color: AMBER, marginBottom: 3 }}>HYPOTHETICAL · RECONSTRUCTED</div>
+            <div style={{ fontSize: 10.5, color: '#b99', marginBottom: 4 }}>If un-touched, {rec.start} → {rec.asOf} (no intervention)</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: pctc(rec.centralPct), fontFamily: 'monospace' }}>~{rec.centralPct}%</span>
+              <span style={{ fontSize: 11, color: MUT }}>gross · central</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#a99', fontFamily: 'monospace' }}>range {rec.lowPct}% to {rec.highPct}% <span style={{ color: '#776', fontFamily: 'sans-serif' }}>(by entry tiebreak)</span></div>
+          </div>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, color: BLUE, marginBottom: 2 }}>LIVE PAPER · FORWARD</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 1 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: pctc(f.returnPct), fontFamily: 'monospace' }}>{f.returnPct >= 0 ? '+' : ''}{f.returnPct}%</span>
+            <span style={{ fontSize: 11, color: MUT }}>real, since {f.forwardStart || startDate}</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Equity {usd(f.currentEquity)} · tracks live from here</div>
+        </>
+      ) : (
+      <>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 1 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: pctc(f.returnPct), fontFamily: 'monospace' }}>
           {f.returnPct >= 0 ? '+' : ''}{f.returnPct}%
@@ -54,8 +78,10 @@ function FundCard({ f, acknowledged, startDate }) {
         <span style={{ color: MUT, fontSize: 11 }}> net, after fund fees</span>
       </div>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Equity {usd(f.currentEquity)} · from {usd(f.baselineNav)} baseline</div>
+      </>
+      )}
 
-      <Row label={`P&L since ${startDate || 'start'}`} value={signed(f.pnlSinceStart)} color={pctc(f.pnlSinceStart)} />
+      <Row label={rec ? 'P&L (live paper, forward)' : `P&L since ${startDate || 'start'}`} value={signed(f.pnlSinceStart)} color={pctc(f.pnlSinceStart)} />
       <Row label="Risk at stop" value={usd(f.riskAtStop)} color={AMBER} />
       <Row label="Open positions" value={f.openCount} />
       <div style={{ borderTop: '1px solid #1a1a22', margin: '8px 0' }} />
@@ -117,11 +143,14 @@ export default function FundComparisonPage() {
   const funds = data?.funds || [];
   const rdy = (f) => f.risk?.status === 'ready';
   const ts = (f) => f.tradeStats?.combined || {};
+  // For the hands-off Tree column, the comparable SINCE-BASELINE figure is the hypothetical
+  // reconstruction (marked *), not the forward paper book's 0% (it only started today).
+  const rc = (f) => (f.reconstruction && f.reconstruction.hypothetical) ? f.reconstruction : null;
   const metricRows = [
-    ['Total return (gross)', f => `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(f.returnPct)],
-    ['Total return (net, after fees)', f => `${f.returnPctNet >= 0 ? '+' : ''}${f.returnPctNet}%`, f => pctc(f.returnPctNet)],
-    ['P&L since start', f => signed(f.pnlSinceStart), f => pctc(f.pnlSinceStart)],
-    ['Ending equity', f => usd(f.currentEquity)],
+    ['Total return (gross)', f => rc(f) ? `~${rc(f).centralPct}%*` : `${f.returnPct >= 0 ? '+' : ''}${f.returnPct}%`, f => pctc(rc(f) ? rc(f).centralPct : f.returnPct)],
+    ['Total return (net, after fees)', f => rc(f) ? `~${rc(f).netCentralPct}%*` : `${f.returnPctNet >= 0 ? '+' : ''}${f.returnPctNet}%`, f => pctc(rc(f) ? rc(f).netCentralPct : f.returnPctNet)],
+    ['P&L since start', f => rc(f) ? signed(Math.round(f.baselineNav * rc(f).centralPct / 100)) + '*' : signed(f.pnlSinceStart), f => pctc(rc(f) ? rc(f).centralPct : f.pnlSinceStart)],
+    ['Ending equity', f => rc(f) ? usd(Math.round(f.baselineNav * (1 + rc(f).centralPct / 100))) + '*' : usd(f.currentEquity)],
     ['CAGR', f => rdy(f) ? `${f.risk.cagr}%` : 'building'],
     ['Sharpe', f => rdy(f) ? f.risk.sharpe : 'building'],
     ['Sortino', f => rdy(f) ? f.risk.sortino : 'building'],
@@ -160,7 +189,7 @@ export default function FundComparisonPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr><th style={{ textAlign: 'left', color: '#777', fontWeight: 600, padding: '4px 8px' }}>Metric</th>
-                  {funds.map(f => <th key={f.id} style={{ textAlign: 'right', padding: '4px 8px', color: f.mode === 'LIVE' ? GREEN : BLUE }}>{f.name}<div style={{ fontSize: 9, fontWeight: 400, color: '#666' }}>{f.mode === 'LIVE' ? 'live' : 'paper'}</div></th>)}</tr>
+                  {funds.map(f => <th key={f.id} style={{ textAlign: 'right', padding: '4px 8px', color: f.mode === 'LIVE' ? GREEN : BLUE }}>{f.name}<div style={{ fontSize: 9, fontWeight: 400, color: '#666' }}>{f.mode === 'LIVE' ? 'live' : (rc(f) ? 'paper · reconstructed' : 'paper')}</div></th>)}</tr>
               </thead>
               <tbody>
                 {metricRows.map(([label, fn, colorFn], i) => (
@@ -171,12 +200,18 @@ export default function FundComparisonPage() {
                 ))}
               </tbody>
             </table>
+            {funds.some(f => rc(f)) && (() => { const tp = funds.find(f => rc(f)); const r = rc(tp);
+              return (
+                <div style={{ fontSize: 10.5, color: '#b8935a', lineHeight: 1.5, marginTop: 10, borderTop: `1px dashed ${AMBER}`, paddingTop: 8 }}>
+                  <b style={{ color: AMBER }}>* PNTHR Tree (hands-off) since-{r.start} figures are a HYPOTHETICAL RECONSTRUCTION</b>, not live results: what the pure 42-week-high strategy would have done with NO manual intervention, replayed on the locked, executable (no-look-ahead) engine from a warm-up-matured book rebased to the ${Math.round(tp.baselineNav).toLocaleString()} baseline. Central ~{r.centralPct}% (range {r.lowPct}% to {r.highPct}% depending on which same-day breakout wins scarce capital under the 2× cap). The live paper book tracks forward from {tp.forwardStart} and will converge to a single real line over time. Gross of costs, matching Elite/Ambush paper.
+                </div>
+              ); })()}
           </div>
 
           {/* Accredited acknowledgment gate for the interest buttons */}
           <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11.5, color: MUT, marginBottom: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>I am a verified accredited investor, I understand that Elite AI and Ambush V7.6 figures above are <b>simulated/paper</b> results and not a track record, and I have read the disclosures. (Required to express interest.)</span>
+            <span>I am a verified accredited investor, I understand that Elite AI, Ambush V7.6, and the PNTHR Tree (hands-off) figures above are <b>simulated / paper / reconstructed</b> results and not a track record, and I have read the disclosures. (Required to express interest.)</span>
           </label>
           <div style={{ fontSize: 10.5, color: '#666', lineHeight: 1.5, marginTop: 8 }}>
             <b>Gross vs net:</b> {data.fees?.basis || 'net is after 2% management + 30% performance fee (high-water mark)'}. Gross figures are before fund fees; paper figures are also gross of commissions and borrow costs, with modeled slippage where the strategy specifies. PNTHR Tree gross reflects the actual live account. Risk-adjusted statistics require several weeks of data before they are meaningful. This page is an internal comparison tool; nothing herein is an offer, solicitation, or recommendation to buy or sell any security.

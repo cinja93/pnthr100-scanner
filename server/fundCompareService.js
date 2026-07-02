@@ -18,6 +18,7 @@ import { getElitePositions } from './eliteAiEngine.js';
 import { getAmbushPaperPositions } from './ambushPaperEngine.js';
 import { getPnthrTreeState } from './pnthrTreeEngine.js';
 import { getPaperBookState } from './treePaperBook.js';
+import { getHandsOffBand } from './backtest/treePaperReconstruction.js';
 
 // Position → slim card (module-level so both the house and per-member builders share it).
 // Direction: explicit field when set, else infer from share sign (Tree is long-only, stores none).
@@ -111,6 +112,16 @@ export async function getFundComparison() {
   const ambTotalPnl = ambOpenPnl + ambRealized;
   const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
 
+  // PNTHR Tree — HANDS-OFF PAPER book (house, no-intervention). Forward-live paper book
+  // (reuses treePaperBook), included ONLY when the house treeOnly book is registered so a
+  // read never auto-creates a mis-seeded book. Plus the stored hypothetical reconstruction band.
+  const houseOwner = String((await db.collection('pnthr_ambush_config').findOne({}, { projection: { ownerId: 1 } }))?.ownerId || '');
+  const houseBook = houseOwner ? await db.collection('pnthr_tree_books').findOne({ ownerId: houseOwner, treeOnly: true }) : null;
+  const treePaperState = houseBook ? await getPaperBookState(db, houseOwner).catch(() => null) : null;
+  const treePaperNav = treePaperState?.nav || 0;
+  const treePaperTradesC = houseOwner ? `pnthr_tree_trades__${houseOwner}` : null;
+  const reconBand = await getHandsOffBand(db).catch(() => null);
+
   // ── Lock the common baseline on the first call on/after Monday ─────────────
   let cfg = await db.collection(CFG).findOne({ key: 'fund_compare' });
   if (started && (!cfg || !cfg.locked)) {
@@ -124,6 +135,9 @@ export async function getFundComparison() {
   const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : treeNav;
   const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
   const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
+  // Hands-off Tree paper book is seeded at the $89,882 baseline and marks itself to market,
+  // so its NAV IS its equity on the common scale (forward-only — begins the day it was stood up).
+  const treePaperEquity = treePaperState ? treePaperNav : baselineNav;
   const pct = (eq) => baselineNav > 0 ? +(((eq / baselineNav) - 1) * 100).toFixed(2) : 0;
 
   // Fund fees applied uniformly so the comparison shows "what an investor keeps" — the same
@@ -142,7 +156,9 @@ export async function getFundComparison() {
 
   // ── Record today's equity point per fund (one row per fund per day) ────────
   if (started) {
-    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]]) {
+    const rows = [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]];
+    if (treePaperState) rows.push(['treePaper', treePaperEquity]);   // only once the house book is live
+    for (const [fund, eq] of rows) {
       await db.collection(DAILY).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
     }
   }
@@ -184,6 +200,30 @@ export async function getFundComparison() {
       tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
       risk: riskMetrics(await series('ambush')) },
   ];
+
+  // 4th column — PNTHR Tree HANDS-OFF (paper). Two clearly-separated parts:
+  //   • reconstruction — the HYPOTHETICAL 06-22→last-complete-session band (from treeSim), and
+  //   • the forward-live paper book that ticks from the day it was stood up.
+  // Only added once the house book is registered (treePaperState non-null).
+  if (treePaperState) {
+    const tpTrades = recent(await db.collection(treePaperTradesC).find({}).toArray());
+    const forwardStart = houseBook?.createdAt ? new Date(houseBook.createdAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : today;
+    funds.push({
+      id: 'treePaper', name: 'PNTHR Tree (hands-off)', strategy: '42-week-high momentum — paper, no intervention', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(treePaperEquity), returnPct: pct(treePaperEquity), returnPctNet: pctNet(treePaperEquity),
+      pnlSinceStart: Math.round(treePaperEquity - baselineNav), openPnl: Math.round(treePaperState.treePnl || 0),
+      riskAtStop: Math.round(treePaperState.totalRisk?.actual || 0), openCount: (treePaperState.positions || []).length,
+      positions: (treePaperState.positions || []).map(slim),
+      tradeStats: computeTradeStats(tpTrades, baselineNav, 1), avgWinnerHold: avgWinnerHold(tpTrades),
+      risk: riskMetrics(await series('treePaper')),
+      forwardStart,   // the paper book tracks live from here; before it, only the reconstruction is meaningful
+      reconstruction: (reconBand && reconBand.status === 'ok') ? {
+        start: reconBand.start, asOf: reconBand.asOf, centralPct: reconBand.centralPct,
+        lowPct: reconBand.lowPct, highPct: reconBand.highPct, netCentralPct: reconBand.netCentralPct,
+        method: reconBand.method, series: reconBand.series || [], hypothetical: true,
+      } : null,
+    });
+  }
 
   const result = {
     started, startDate: START_DATE, baselineNav: Math.round(baselineNav), asOf: new Date().toISOString(),

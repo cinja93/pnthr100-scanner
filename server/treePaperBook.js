@@ -37,10 +37,17 @@ const C = (ownerId) => ({
   AUM:    `pnthr_tree_aum__${ownerId}`,
 });
 
-export async function ensurePaperBook(db, ownerId, label = null) {
+// opts.baseCapital → the book seeds at an explicit NAV (e.g. the house hands-off Tree
+// book at the $89,882 fund-compare baseline) instead of the member's profile accountSize.
+// opts.treeOnly  → this book runs ONLY the Tree strategy; the index.js member loop skips
+// it so it never spawns owner-scoped Elite/Ambush paper engines (house has its own).
+export async function ensurePaperBook(db, ownerId, label = null, opts = {}) {
+  const setOnInsert = { ownerId: String(ownerId), label, createdAt: new Date() };
+  if (opts.baseCapital > 0) setOnInsert.baseCapital = +opts.baseCapital;
+  if (opts.treeOnly) setOnInsert.treeOnly = true;
   await db.collection(BOOKS).updateOne(
     { ownerId: String(ownerId) },
-    { $setOnInsert: { ownerId: String(ownerId), label, createdAt: new Date() } },
+    { $setOnInsert: setOnInsert },
     { upsert: true },
   );
 }
@@ -48,8 +55,10 @@ export async function listPaperBooks(db) {
   return db.collection(BOOKS).find({}).toArray();
 }
 
-// Base starting capital for the book = the member's account size (default $50k).
-async function baseCapital(ownerId) {
+// Base starting capital for the book: the book's own explicit baseCapital (house
+// hands-off Tree = $89,882) if set, else the member's profile account size, else $50k.
+async function baseCapital(db, ownerId) {
+  try { const bk = await db.collection(BOOKS).findOne({ ownerId: String(ownerId) }); if (bk?.baseCapital > 0) return bk.baseCapital; } catch { /* fall through */ }
   try { const p = await getUserProfile(ownerId); if (p?.accountSize > 0) return p.accountSize; } catch { /* default */ }
   return DEFAULT_CAPITAL;
 }
@@ -72,7 +81,7 @@ function markToMarketNav(base, active, closed, quotes) {
 export async function getPaperBookState(db, ownerId) {
   await ensurePaperBook(db, ownerId);
   const cols = C(ownerId);
-  const base = await baseCapital(ownerId);
+  const base = await baseCapital(db, ownerId);
   const excl = await engineExclusions(db);
   const [quotes, bands, active, closed] = await Promise.all([
     fetchQuotes(AI_TICKERS),
@@ -175,7 +184,7 @@ export async function getPaperBookState(db, ownerId) {
 export async function runPaperBookTick(db, ownerId) {
   await ensurePaperBook(db, ownerId);
   const cols = C(ownerId);
-  const base = await baseCapital(ownerId);
+  const base = await baseCapital(db, ownerId);
   const excl = await engineExclusions(db);
   const [quotes, bands, active0, closed] = await Promise.all([
     fetchQuotes(AI_TICKERS),
@@ -272,7 +281,7 @@ export async function runAllPaperBookTicks(db) {
 export async function getPaperBookProjection(db, ownerId) {
   await ensurePaperBook(db, ownerId);
   const cols = C(ownerId);
-  const base = await baseCapital(ownerId);
+  const base = await baseCapital(db, ownerId);
   const [quotes, active, closed] = await Promise.all([
     fetchQuotes(AI_TICKERS),
     db.collection(cols.POS).find({ status: 'ACTIVE' }).toArray(),

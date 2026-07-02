@@ -20,6 +20,8 @@ import { saveDocument } from './pnthrAccountingService.js';
 import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
 import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialBalance.js';
 import { buildWorkbookFundamentals, buildFundAccountingWorkbook } from './pnthrAccountingWorkbook.js';
+import { buildPortfolioNotebook } from './pnthrAccountingPortfolioNotebook.js';
+import { resolveSecurityIds } from './pnthrAccountingSecurityMaster.js';
 import { connectToDatabase } from './database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -101,6 +103,7 @@ export async function stageClose(period) {
   const tbSections = {
     ChangeInNAV: S.ChangeInNAV, CashReport: S.CashReport, EquitySummaryInBase: S.EquitySummaryInBase,
     FIFOPerformanceSummaryInBase: S.FIFOPerformanceSummaryInBase, TierInterestDetails: S.TierInterestDetails,
+    Lot: S.Lot,   // closed-lot detail for Doc 4 (Portfolio Notebook — Realized Tax Lot / per-symbol P&L)
   };
   await db.collection(CLOSE_COLL).updateOne(
     { period },
@@ -214,8 +217,19 @@ export async function finalizeClose(period, bankBalance) {
     });
     const wbBuf = await buildFundAccountingWorkbook(f);
     await saveDocument({ period, docType: 'fund_accounting_workbook', investorNo: null, label: 'Fund Accounting Workbook', filename: `PNTHR Fund Accounting Workbook ${period}.xlsx`, contentType: XLSX, data: wbBuf, status, generatedBy: 'pnthr-engine' });
+
+    // Doc 4: Portfolio Notebook (13 tabs) — CUSTODIAN (IBKR) authoritative basis (NAV's proprietary
+    // tax-lot method is not reproducible from our data). Realized Tax Lot / Trading Gain Loss / Top
+    // Movers / Reconciliation built from IBKR closed-lot detail; Dividend Detail + Attribution pending.
+    const lots = close.tbSections?.Lot || [];
+    const secId = await resolveSecurityIds(lots.map((l) => l.isin).filter(Boolean));
+    const nbBuf = await buildPortfolioNotebook({
+      lots, otherTradingCost: income.otherTradingCost, secId,
+      bankCash: bankBalance, brokerCash: r2(inputs.brokerCash), portfolioMV: r2(inputs.stockMarket),
+    });
+    await saveDocument({ period, docType: 'portfolio_notebook', investorNo: null, label: 'Portfolio Notebook', filename: `PNTHR Portfolio Notebook ${period}.xlsx`, contentType: XLSX, data: nbBuf, status, generatedBy: 'pnthr-engine' });
   } catch (e) {
-    console.error(`[close ${period}] Doc 3 workbook generation failed (core close unaffected):`, e.message);
+    console.error(`[close ${period}] Doc 3/4 workbook generation failed (core close unaffected):`, e.message);
   }
 
   // Persist the rolled ledger + the close result.

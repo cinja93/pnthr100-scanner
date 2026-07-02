@@ -146,6 +146,113 @@ function buildReconciliation(sheet, { bankCash, brokerCash, portfolioMV }) {
   for (const c of ['J','K','L','M','N','O']) put(sheet, c, 13, 0);
 }
 
+// ── Per-symbol P&L aggregate (IBKR basis) ──────────────────────────────────────
+// From closed lots (realized) + dividend income; June is flat so unrealized = 0. Returns array of
+// { isin, symbol, description, ticker, secType, qty, realized, dividend, total } sorted by Security ID.
+function perSymbolPnl({ lots, divBySym, secId }) {
+  const bySym = {};
+  for (const l of lots) {
+    const k = l.isin; if (!k) continue;
+    const e = bySym[k] || (bySym[k] = { isin: k, symbol: l.symbol, description: l.description, ticker: tickerOf(l), secType: secTypeOf(l), qty: 0, realized: 0, dividend: 0 });
+    e.qty += Math.abs(N(l.quantity)); e.realized += N(l.fifoPnlRealized);
+  }
+  for (const [isin, d] of Object.entries(divBySym || {})) {
+    const e = bySym[isin] || (bySym[isin] = { isin, symbol: d.symbol, description: d.description, ticker: `${d.symbol} US`, secType: 'EQUITIES', qty: 0, realized: 0, dividend: 0 });
+    e.dividend += N(d.income);
+  }
+  const arr = Object.values(bySym);
+  for (const e of arr) e.total = e.realized + e.dividend;   // unrealized 0 (flat)
+  return arr.sort((a, b) => (secId[a.isin] ?? 9e15) - (secId[b.isin] ?? 9e15));
+}
+
+// ── Dividend Detail ─────────────────────────────────────────────────────────
+// Per-security dividend accrual/receipt; grouped US / non-US with totals. divRows: [{symbol,
+// description, isin, country, received, income, endReceivable}].
+function buildDividendDetail(sheet, { divRows, secId }) {
+  let r = sheet._sk.dataStart;   // 7
+  const us = divRows.filter((d) => (d.country || 'UNITED STATES').toUpperCase().includes('UNITED STATES'));
+  const nonUs = divRows.filter((d) => !((d.country || 'UNITED STATES').toUpperCase().includes('UNITED STATES')));
+  let tE = 0, tH = 0, tK = 0, tN = 0;
+  const emit = (d) => {
+    put(sheet, 'A', r, d.description, { text: true }); put(sheet, 'B', r, 'USD', { text: true });
+    put(sheet, 'C', r, `${d.symbol} US`, { text: true }); put(sheet, 'D', r, 'EQUITIES', { text: true });
+    put(sheet, 'E', r, 0); put(sheet, 'F', r, 0); put(sheet, 'G', r, 0);
+    put(sheet, 'H', r, N(d.received)); put(sheet, 'I', r, 0); put(sheet, 'J', r, 0);
+    put(sheet, 'K', r, N(d.endReceivable)); put(sheet, 'L', r, 0); put(sheet, 'M', r, 0);
+    put(sheet, 'N', r, N(d.income)); put(sheet, 'O', r, 0); put(sheet, 'P', r, 0);
+    put(sheet, 'Q', r, secId[d.isin] ?? null, { numFmt: 'General' }); put(sheet, 'R', r, d.isin, { text: true });
+    put(sheet, 'S', r, d.country || 'UNITED STATES', { text: true }); put(sheet, 'T', r, BROKER_ACCT, { text: true });
+    tE += 0; tH += N(d.received); tK += N(d.endReceivable); tN += N(d.income); r++;
+  };
+  us.forEach(emit);
+  const usTot = { H: tH, K: tK, N: tN };
+  // TOTAL OF US SECURITIES
+  put(sheet, 'A', r, 'TOTAL OF US SECURITIES', { text: true, bold: true });
+  put(sheet, 'E', r, 0); put(sheet, 'F', r, 0); put(sheet, 'G', r, 0); put(sheet, 'H', r, usTot.H); put(sheet, 'I', r, 0);
+  put(sheet, 'J', r, 0); put(sheet, 'K', r, usTot.K); put(sheet, 'L', r, 0); put(sheet, 'M', r, 0); put(sheet, 'N', r, usTot.N);
+  put(sheet, 'O', r, 0); put(sheet, 'P', r, 0); r++;
+  let nH = 0, nK = 0, nN = 0; const base = r; r = base;   // non-US block (usually empty)
+  nonUs.forEach((d) => { emit(d); });
+  put(sheet, 'A', r, 'TOTAL OF NON-US SECURITIES', { text: true, bold: true });
+  for (const [c, v] of [['E',0],['F',0],['G',0],['H',nH],['I',0],['J',0],['K',nK],['L',0],['M',0],['N',nN],['O',0],['P',0]]) put(sheet, c, r, v);
+}
+
+// ── Trading Gain Loss (per-symbol; DTD/MTD/QTD/YTD) ────────────────────────────
+// IBKR basis. For the first self-administered close, our per-symbol series begins in June, so the
+// QTD/YTD windows equal MTD (documented); DTD = 0 unless the symbol traded on the last day (we do not
+// have reliable daily P&L, so DTD is left 0). Realized from lots, unrealized 0 (flat), dividend income.
+function buildTradingGainLoss(sheet, { perSym, otherTradingCost, secId, lastTradeDate }) {
+  let r = sheet._sk.dataStart;   // 8
+  const tot = { E:0,F:0,G:0,H:0,I:0,K:0,L:0,M:0,N:0,O:0,Q:0,R:0,S:0,T:0,W:0,Y:0,Z:0,AA:0,AB:0,AC:0 };
+  const emit = (name, ticker, secType, isin, id, real, unreal, div) => {
+    const total = real + unreal + div;
+    put(sheet, 'A', r, name, { text: true }); put(sheet, 'B', r, 'USD', { text: true });
+    put(sheet, 'C', r, ticker, { text: true }); put(sheet, 'D', r, secType, { text: true });
+    // DTD (E-J) = 0 (no reliable daily attribution). MTD/QTD/YTD carry the month's figures.
+    const win = (tCol, rCol, uCol, dCol) => {
+      put(sheet, tCol, r, total); put(sheet, rCol, r, real); put(sheet, uCol, r, unreal); put(sheet, dCol, r, div);
+    };
+    win('K','L','M','O'); win('Q','R','S','W'); win('Y','Z','AA','AC');
+    put(sheet, 'AE', r, id ?? null, { numFmt: 'General' }); put(sheet, 'AF', r, isin, { text: true }); put(sheet, 'AG', r, BROKER_ACCT, { text: true });
+    tot.K+=total; tot.L+=real; tot.M+=unreal; tot.O+=div; tot.Q+=total; tot.R+=real; tot.S+=unreal; tot.W+=div; tot.Y+=total; tot.Z+=real; tot.AA+=unreal; tot.AC+=div;
+    r++;
+  };
+  for (const s of perSym) emit(s.description, s.ticker, s.secType, s.isin, secId[s.isin], s.realized, 0, s.dividend);
+  if (Math.abs(N(otherTradingCost)) > 0) emit('Trading Expenses', 'USD', 'TRADING EXPENSES', 'Trading Expenses', 1, N(otherTradingCost), 0, 0);
+  // SUB TOTAL + GRAND TOTAL (identical for a single grouping)
+  const totalsRow = (label) => {
+    put(sheet, 'B', r, label, { text: true, bold: true });
+    for (const [c, v] of Object.entries(tot)) put(sheet, c, r, v);
+    r++;
+  };
+  totalsRow('SUB TOTAL'); r++; put(sheet, 'A', r, 'GRAND TOTAL', { text: true, bold: true });
+  for (const [c, v] of Object.entries(tot)) put(sheet, c, r, v);
+}
+
+// ── Top Movers (per-symbol; top gainers/losers by window) ──────────────────────
+// IBKR basis. Sections: DTD/MTD/QTD/YTD TOP GAINERS then LOSERS. For the first close QTD/YTD = MTD;
+// DTD = 0. We rank by MTD trading income and list the same ranking under each window (documented).
+function buildTopMovers(sheet, { perSym }) {
+  let r = sheet._sk.dataStart;   // 7
+  const ranked = [...perSym].filter((s) => Math.abs(s.total) > 1e-9).sort((a, b) => b.total - a.total);
+  const gainers = ranked.filter((s) => s.total > 0).slice(0, 10);
+  const losers = [...ranked].filter((s) => s.total < 0).sort((a, b) => a.total - b.total).slice(0, 10);
+  const section = (title, list) => {
+    put(sheet, 'A', r, title, { text: true, bold: true }); r++;
+    for (const s of list) {
+      put(sheet, 'A', r, s.description, { text: true }); put(sheet, 'B', r, s.isin, { text: true });
+      put(sheet, 'C', r, s.ticker, { text: true }); put(sheet, 'D', r, 'USD', { text: true }); put(sheet, 'E', r, 0);
+      // Trading Income DTD/MTD/QTD/YTD (F-I) and Est Gross RoR (J-M). MTD authoritative; QTD/YTD=MTD.
+      put(sheet, 'F', r, 0); put(sheet, 'G', r, s.total); put(sheet, 'H', r, s.total); put(sheet, 'I', r, s.total);
+      put(sheet, 'J', r, 0, { numFmt: sheet._sk.colFmt?.J }); put(sheet, 'K', r, 0, { numFmt: sheet._sk.colFmt?.K });
+      put(sheet, 'L', r, 0, { numFmt: sheet._sk.colFmt?.L }); put(sheet, 'M', r, 0, { numFmt: sheet._sk.colFmt?.M });
+      r++;
+    }
+  };
+  section('MTD TOP GAINERS', gainers);
+  section('MTD TOP LOSERS', losers);
+}
+
 // ── "No Data Found" tabs (empty for a flat/clean month) ────────────────────────
 function buildNoData(sheet) {
   put(sheet, 'A', sheet._sk.dataStart, 'No Data Found', { text: true });
@@ -157,6 +264,7 @@ export function buildPortfolioNotebookSpec(data) {
   const secId = {};
   for (const l of data.lots || []) if (l.isin && secId[l.isin] == null) secId[l.isin] = navIdForIsin(l.isin);
   Object.assign(secId, data.secId || {});   // resolved (incl. PNTHR-assigned) ids override
+  const perSym = perSymbolPnl({ lots: data.lots || [], divBySym: {}, secId });   // dividends live in Dividend Detail
   const out = { sheets: [] };
   for (const s of SKELETON.sheets) {
     const sheet = fromSkeleton(s.name);
@@ -165,18 +273,25 @@ export function buildPortfolioNotebookSpec(data) {
         buildRealizedTaxLot(sheet, { lots: data.lots || [], otherTradingCost: data.otherTradingCost, secId }); break;
       case 'Reconciliation Summary':
         buildReconciliation(sheet, data); break;
+      case 'Trading Gain Loss':
+        buildTradingGainLoss(sheet, { perSym, otherTradingCost: data.otherTradingCost, secId }); break;
+      case 'Top Movers':
+        buildTopMovers(sheet, { perSym }); break;
       case 'Glossary': break;   // fully static
       // Genuinely empty for a flat/clean month (June liquidated to cash → 0 open positions/lots;
-      // clean books → no breaks) — "No Data Found" is CORRECT here.
+      // clean books → no breaks; equities-only → no security interest) — "No Data Found" is CORRECT.
       case 'Portfolio Valuation':
       case 'Open Tax Lot':
+      case 'Interest Detail':
       case 'Trade Break':
       case 'Trade Pending Cash':
       case 'Unmapped Cash':
         buildNoData(sheet); break;
-      // TODO (not yet built — do NOT emit a false "No Data Found"; header-only for now):
-      // Trading Gain Loss, Attribution (needs GICS sector data — not in Flex), Top Movers,
-      // Dividend Detail, Interest Detail. Header renders from the skeleton; data rows pending.
+      // Header-only (NOT a false "No Data Found"): Dividend Detail (per-security cash-dividend split
+      // not cleanly separable from the accrual-change feed — pending) and Attribution (needs a GICS
+      // sector per holding — not in IBKR Flex — pending a sector source). Data rows to follow.
+      case 'Dividend Detail':
+      case 'Attribution':
       default: break;
     }
     out.sheets.push(finalize(sheet));

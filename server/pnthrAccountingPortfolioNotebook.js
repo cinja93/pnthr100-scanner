@@ -166,35 +166,58 @@ function perSymbolPnl({ lots, divBySym, secId }) {
 }
 
 // ── Dividend Detail ─────────────────────────────────────────────────────────
-// Per-security dividend accrual/receipt; grouped US / non-US with totals. divRows: [{symbol,
-// description, isin, country, received, income, endReceivable}].
+// Per-security dividend income (accrual basis) = cash received + change in dividend receivable
+// (validated to tie to the income-statement dividend line). divRows: [{isin, symbol, description,
+// country, received, change, endReceivable}]. Begin receivable E = endReceivable − change; income
+// N = received + change. Grouped US / non-US with TOTAL rows (matches NAV's layout).
+function dedupeDivKey(d) { return `${d.isin}|${d.description}`; }
 function buildDividendDetail(sheet, { divRows, secId }) {
   let r = sheet._sk.dataStart;   // 7
-  const us = divRows.filter((d) => (d.country || 'UNITED STATES').toUpperCase().includes('UNITED STATES'));
-  const nonUs = divRows.filter((d) => !((d.country || 'UNITED STATES').toUpperCase().includes('UNITED STATES')));
-  let tE = 0, tH = 0, tK = 0, tN = 0;
-  const emit = (d) => {
-    put(sheet, 'A', r, d.description, { text: true }); put(sheet, 'B', r, 'USD', { text: true });
-    put(sheet, 'C', r, `${d.symbol} US`, { text: true }); put(sheet, 'D', r, 'EQUITIES', { text: true });
-    put(sheet, 'E', r, 0); put(sheet, 'F', r, 0); put(sheet, 'G', r, 0);
-    put(sheet, 'H', r, N(d.received)); put(sheet, 'I', r, 0); put(sheet, 'J', r, 0);
-    put(sheet, 'K', r, N(d.endReceivable)); put(sheet, 'L', r, 0); put(sheet, 'M', r, 0);
-    put(sheet, 'N', r, N(d.income)); put(sheet, 'O', r, 0); put(sheet, 'P', r, 0);
-    put(sheet, 'Q', r, secId[d.isin] ?? null, { numFmt: 'General' }); put(sheet, 'R', r, d.isin, { text: true });
-    put(sheet, 'S', r, d.country || 'UNITED STATES', { text: true }); put(sheet, 'T', r, BROKER_ACCT, { text: true });
-    tE += 0; tH += N(d.received); tK += N(d.endReceivable); tN += N(d.income); r++;
+  const isUS = (d) => (d.country || 'UNITED STATES').toUpperCase().includes('UNITED STATES');
+  const emitGroup = (rows) => {
+    const t = { E: 0, H: 0, K: 0, N: 0 };
+    for (const d of rows) {
+      const received = N(d.received), change = N(d.change), endR = N(d.endReceivable);
+      const beginR = endR - change, income = received + change;
+      put(sheet, 'A', r, d.description, { text: true }); put(sheet, 'B', r, 'USD', { text: true });
+      put(sheet, 'C', r, `${d.symbol} US`, { text: true }); put(sheet, 'D', r, 'EQUITIES', { text: true });
+      put(sheet, 'E', r, beginR); put(sheet, 'F', r, 0); put(sheet, 'G', r, 0);
+      put(sheet, 'H', r, received); put(sheet, 'I', r, 0); put(sheet, 'J', r, 0);
+      put(sheet, 'K', r, endR); put(sheet, 'L', r, 0); put(sheet, 'M', r, 0);
+      put(sheet, 'N', r, income); put(sheet, 'O', r, 0); put(sheet, 'P', r, 0);
+      put(sheet, 'Q', r, secId[d.isin] ?? null, { numFmt: 'General' }); put(sheet, 'R', r, d.isin, { text: true });
+      put(sheet, 'S', r, d.country || 'UNITED STATES', { text: true }); put(sheet, 'T', r, BROKER_ACCT, { text: true });
+      t.E += beginR; t.H += received; t.K += endR; t.N += income; r++;
+    }
+    return t;
   };
-  us.forEach(emit);
-  const usTot = { H: tH, K: tK, N: tN };
-  // TOTAL OF US SECURITIES
+  const usT = emitGroup(divRows.filter(isUS));
   put(sheet, 'A', r, 'TOTAL OF US SECURITIES', { text: true, bold: true });
-  put(sheet, 'E', r, 0); put(sheet, 'F', r, 0); put(sheet, 'G', r, 0); put(sheet, 'H', r, usTot.H); put(sheet, 'I', r, 0);
-  put(sheet, 'J', r, 0); put(sheet, 'K', r, usTot.K); put(sheet, 'L', r, 0); put(sheet, 'M', r, 0); put(sheet, 'N', r, usTot.N);
-  put(sheet, 'O', r, 0); put(sheet, 'P', r, 0); r++;
-  let nH = 0, nK = 0, nN = 0; const base = r; r = base;   // non-US block (usually empty)
-  nonUs.forEach((d) => { emit(d); });
+  for (const [c, v] of [['E', usT.E], ['F', 0], ['G', 0], ['H', usT.H], ['I', 0], ['J', 0], ['K', usT.K], ['L', 0], ['M', 0], ['N', usT.N], ['O', 0], ['P', 0]]) put(sheet, c, r, v);
+  r++;
+  const nonT = emitGroup(divRows.filter((d) => !isUS(d)));
   put(sheet, 'A', r, 'TOTAL OF NON-US SECURITIES', { text: true, bold: true });
-  for (const [c, v] of [['E',0],['F',0],['G',0],['H',nH],['I',0],['J',0],['K',nK],['L',0],['M',0],['N',nN],['O',0],['P',0]]) put(sheet, c, r, v);
+  for (const [c, v] of [['E', nonT.E], ['F', 0], ['G', 0], ['H', nonT.H], ['I', 0], ['J', 0], ['K', nonT.K], ['L', 0], ['M', 0], ['N', nonT.N], ['O', 0], ['P', 0]]) put(sheet, c, r, v);
+}
+
+// Build per-security dividend rows from Flex sections (dedupes IBKR's doubled levelOfDetail rows).
+export function dividendRowsFromFlex(sections) {
+  const n = (v) => +(+v || 0);
+  // IBKR reports ISO country codes ("US"); NAV shows full names. Map US (and empty, since all holdings
+  // are US-listed) to "UNITED STATES"; pass any other code through (mapped when a non-US name appears).
+  const country2name = (c) => (!c || /^US$/i.test(c) || /UNITED STATES/i.test(c) ? 'UNITED STATES' : c);
+  const rows = {};   // isin -> {isin, symbol, description, country, received, change, endReceivable}
+  const get = (isin, symbol, description, country) => (rows[isin] = rows[isin] || { isin, symbol, description, country: country2name(country), received: 0, change: 0, endReceivable: 0 });
+  for (const l of sections.StmtFunds || []) {
+    if (l.levelOfDetail === 'BaseCurrency' && /div|lieu/i.test(l.activityDescription || '')) {
+      const g = get(l.isin, l.symbol, (l.description || '').split('(')[0].trim(), l.issuerCountryCode); g.received += n(l.amount);
+    }
+  }
+  for (const d of sections.ChangeInDividendAccruals || []) {
+    if (d.levelOfDetail === 'DETAIL') { const g = get(d.isin, d.symbol, d.description, d.issuerCountryCode); g.change += n(d.netAmount); }
+  }
+  for (const a of sections.OpenDividendAccruals || []) { const g = get(a.isin, a.symbol, a.description, a.issuerCountryCode); g.endReceivable += n(a.netAmount); }
+  return Object.values(rows).filter((d) => Math.abs(d.received) + Math.abs(d.change) + Math.abs(d.endReceivable) > 1e-9);
 }
 
 // ── Trading Gain Loss (per-symbol; DTD/MTD/QTD/YTD) ────────────────────────────
@@ -277,6 +300,8 @@ export function buildPortfolioNotebookSpec(data) {
         buildTradingGainLoss(sheet, { perSym, otherTradingCost: data.otherTradingCost, secId }); break;
       case 'Top Movers':
         buildTopMovers(sheet, { perSym }); break;
+      case 'Dividend Detail':
+        buildDividendDetail(sheet, { divRows: data.divRows || [], secId }); break;
       case 'Glossary': break;   // fully static
       // Genuinely empty for a flat/clean month (June liquidated to cash → 0 open positions/lots;
       // clean books → no breaks; equities-only → no security interest) — "No Data Found" is CORRECT.
@@ -287,10 +312,8 @@ export function buildPortfolioNotebookSpec(data) {
       case 'Trade Pending Cash':
       case 'Unmapped Cash':
         buildNoData(sheet); break;
-      // Header-only (NOT a false "No Data Found"): Dividend Detail (per-security cash-dividend split
-      // not cleanly separable from the accrual-change feed — pending) and Attribution (needs a GICS
-      // sector per holding — not in IBKR Flex — pending a sector source). Data rows to follow.
-      case 'Dividend Detail':
+      // Header-only (NOT a false "No Data Found"): Attribution needs a GICS sector per holding — not
+      // in IBKR Flex — pending a sector source (e.g. FMP). Header renders; data rows to follow.
       case 'Attribution':
       default: break;
     }

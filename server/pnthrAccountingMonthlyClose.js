@@ -20,7 +20,7 @@ import { saveDocument } from './pnthrAccountingService.js';
 import { generateCapitalRoll } from './pnthrAccountingCapitalRoll.js';
 import { trialBalanceInputs, computeTrialBalance } from './pnthrAccountingTrialBalance.js';
 import { buildWorkbookFundamentals, buildFundAccountingWorkbook } from './pnthrAccountingWorkbook.js';
-import { buildPortfolioNotebook } from './pnthrAccountingPortfolioNotebook.js';
+import { buildPortfolioNotebook, dividendRowsFromFlex } from './pnthrAccountingPortfolioNotebook.js';
 import { resolveSecurityIds } from './pnthrAccountingSecurityMaster.js';
 import { connectToDatabase } from './database.js';
 import path from 'path';
@@ -104,6 +104,7 @@ export async function stageClose(period) {
     ChangeInNAV: S.ChangeInNAV, CashReport: S.CashReport, EquitySummaryInBase: S.EquitySummaryInBase,
     FIFOPerformanceSummaryInBase: S.FIFOPerformanceSummaryInBase, TierInterestDetails: S.TierInterestDetails,
     Lot: S.Lot,   // closed-lot detail for Doc 4 (Portfolio Notebook — Realized Tax Lot / per-symbol P&L)
+    divRows: dividendRowsFromFlex(S),   // per-security dividend rows for Doc 4 Dividend Detail (small)
   };
   await db.collection(CLOSE_COLL).updateOne(
     { period },
@@ -224,7 +225,7 @@ export async function finalizeClose(period, bankBalance) {
     const lots = close.tbSections?.Lot || [];
     const secId = await resolveSecurityIds(lots.map((l) => l.isin).filter(Boolean));
     const nbBuf = await buildPortfolioNotebook({
-      lots, otherTradingCost: income.otherTradingCost, secId,
+      lots, otherTradingCost: income.otherTradingCost, secId, divRows: close.tbSections?.divRows || [],
       bankCash: bankBalance, brokerCash: r2(inputs.brokerCash), portfolioMV: r2(inputs.stockMarket),
     });
     await saveDocument({ period, docType: 'portfolio_notebook', investorNo: null, label: 'Portfolio Notebook', filename: `PNTHR Portfolio Notebook ${period}.xlsx`, contentType: XLSX, data: nbBuf, status, generatedBy: 'pnthr-engine' });

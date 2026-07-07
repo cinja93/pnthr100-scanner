@@ -63,10 +63,16 @@ function avgWinnerHold(trades) {
   return +(days.reduce((s, d) => s + d, 0) / days.length).toFixed(1);
 }
 
+// Only the always-on Render writer may mutate the daily series / baselines from a
+// GET (2026-07-06 audit: a local dev server pointed at Atlas could record a day's
+// equity from stale quotes — the same two-writer class the tick's gate closes).
+const IS_WRITER = process.env.RECONCILIATION_CRON_ENABLED === 'true' || process.env.AMBUSH_CRON_ENABLED === 'true';
+
 // Risk-adjusted metrics from a daily equity series — only once it's long enough to
 // be meaningful; otherwise a 'building' placeholder (honest small-sample handling).
+// Rows flagged corrupt:true (the quarantined 2026-06-22→07-02 Tree window) are excluded.
 function riskMetrics(series) {
-  const pts = (series || []).filter(s => s.equity > 0);
+  const pts = (series || []).filter(s => s.equity > 0 && !s.corrupt);
   if (pts.length < MIN_RISK_POINTS) {
     return { status: 'building', points: pts.length, need: MIN_RISK_POINTS };
   }
@@ -88,10 +94,14 @@ export async function getFundComparison() {
   const started = today >= START_DATE;
 
   // ── Gather each fund's live state ──────────────────────────────────────────
-  // Tree (LIVE house book): real positions + real account NAV.
+  // Tree (house book — real account): real positions + real account NAV.
   let tree = { positions: [], nav: 0, openPnl: 0, totalRisk: { actual: { dollars: 0 } } };
   try { tree = await getPnthrTreeState(db); } catch { /* leave default */ }
-  const treeNav = tree?.nav || (await realNav(db));
+  const treeMode = tree?.mode || 'off';
+  // NAV is TRUSTED only when it came from a real source (not the hardcoded default)
+  // — the 2026-07-02 corruption was the $80,200 default recorded as real equity.
+  const treeNavTrusted = tree?.navTrusted === true && tree?.nav > 0;
+  const treeNav = treeNavTrusted ? tree.nav : (await realNav(db));
   const treePos = (tree?.positions || []).filter(p => p.real);
   const treeOpenPnl = tree?.treePnl ?? tree?.openPnl ?? treePos.reduce((s, p) => s + (+p.pnl || 0), 0);
   const treeRisk = tree?.totalRisk?.actual?.dollars ?? treePos.reduce((s, p) => s + Math.abs(((+p.last || +p.avgCost) - (+p.stop || 0)) * (+p.shares || 0)), 0);
@@ -124,7 +134,7 @@ export async function getFundComparison() {
 
   // ── Lock the common baseline on the first call on/after Monday ─────────────
   let cfg = await db.collection(CFG).findOne({ key: 'fund_compare' });
-  if (started && (!cfg || !cfg.locked)) {
+  if (started && (!cfg || !cfg.locked) && IS_WRITER) {
     cfg = { key: 'fund_compare', locked: true, startDate: today, baselineNav: treeNav || 100000,
       treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, ambushBaselinePnl: ambTotalPnl, lockedAt: new Date() };
     await db.collection(CFG).updateOne({ key: 'fund_compare' }, { $set: cfg }, { upsert: true });
@@ -154,16 +164,32 @@ export async function getFundComparison() {
     return +(((grossPnl - mgmt - perf) / baselineNav) * 100).toFixed(2);
   };
 
+  // ── One-time quarantine of the corrupted Tree window (2026-06-22 → 2026-07-02) ──
+  // Mode toggles + the 6/23 full liquidation booked at $0 P&L + default-NAV fallbacks
+  // corrupted the recorded tree equity in this window. Rows are FLAGGED (never deleted —
+  // audit trail) and excluded from risk metrics; the payload discloses the window.
+  const TREE_CORRUPT_FROM = '2026-06-22', TREE_CORRUPT_TO = '2026-07-02';
+  if (IS_WRITER && !cfg?.treeCorruptQuarantined) {
+    await db.collection(DAILY).updateMany(
+      { fund: 'tree', date: { $gte: TREE_CORRUPT_FROM, $lte: TREE_CORRUPT_TO } },
+      { $set: { corrupt: true, corruptReason: 'mode toggles + 6/23 liquidation booked $0 P&L + default-NAV fallback (2026-07-06 audit)' } });
+    await db.collection(CFG).updateOne({ key: 'fund_compare' }, { $set: { treeCorruptQuarantined: true } }, { upsert: true });
+  }
+
   // ── Record today's equity point per fund (one row per fund per day) ────────
-  if (started) {
-    const rows = [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]];
+  // Writer-gated, and the tree point is recorded ONLY off a trusted NAV with a
+  // confirmed IBKR snapshot — a fallback/default NAV must never enter the history.
+  if (started && IS_WRITER) {
+    const rows = [['elite', eliteEquity], ['ambush', ambushEquity]];
+    if (treeNavTrusted && tree?.snapshotConfirmed) rows.push(['tree', treeEquity]);
+    else console.warn(`[FundCompare] tree equity point SKIPPED — navTrusted=${treeNavTrusted} snapshotConfirmed=${tree?.snapshotConfirmed}`);
     if (treePaperState) rows.push(['treePaper', treePaperEquity]);   // only once the house book is live
     for (const [fund, eq] of rows) {
       await db.collection(DAILY).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
     }
   }
   async function series(fund) {
-    return (await db.collection(DAILY).find({ fund }, { projection: { _id: 0, date: 1, equity: 1 } }).sort({ date: 1 }).toArray());
+    return (await db.collection(DAILY).find({ fund }, { projection: { _id: 0, date: 1, equity: 1, corrupt: 1 } }).sort({ date: 1 }).toArray());
   }
 
   // ── Assemble per-fund payload ──────────────────────────────────────────────
@@ -178,10 +204,20 @@ export async function getFundComparison() {
   };
   const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
 
-  const treeTrades = recent(await db.collection('pnthr_tree_trades').find({}).toArray());
+  // The house tree column is REAL-ACCOUNT trades only — the engine writes its paper-mode
+  // simulations into the same collection with mode:'paper' (they belong to the hands-off
+  // column's own suffixed collection, never here). Same filter treeJourneyCompare uses.
+  const treeTrades = recent(await db.collection('pnthr_tree_trades').find({ mode: { $ne: 'paper' } }).toArray());
   const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
   const funds = [
-    { id: 'tree', name: 'PNTHR Tree', strategy: '42-week-high momentum (daily)', mode: 'LIVE', simulated: false,
+    // Mode label follows the ENGINE's actual mode — hardcoding 'LIVE' showed paper-mode
+    // periods (like right now) as live performance on an investor-facing page.
+    { id: 'tree', name: 'PNTHR Tree', strategy: '42-week-high momentum (daily)',
+      mode: treeMode === 'live' ? 'LIVE' : 'PAPER', simulated: treeMode !== 'live',
+      dataQuality: {
+        corruptWindow: { from: TREE_CORRUPT_FROM, to: TREE_CORRUPT_TO },
+        note: 'Recorded equity 06/22–07/02 is quarantined (mode toggles, a 6/23 liquidation booked at $0 P&L, and default-NAV fallbacks corrupted the series). Return-since-start includes that window and is NOT a reliable strategy track record; risk metrics exclude the quarantined rows. The hands-off paper column is the clean strategy track.',
+      },
       baselineNav, currentEquity: Math.round(treeEquity), returnPct: pct(treeEquity), returnPctNet: pctNet(treeEquity),
       pnlSinceStart: Math.round(treeEquity - baselineNav), openPnl: Math.round(treeOpenPnl),
       riskAtStop: Math.round(treeRisk), openCount: treePos.length, positions: treePos.map(slim),
@@ -230,7 +266,7 @@ export async function getFundComparison() {
     fees: { mgmtPct: FEE_MGMT * 100, perfPct: FEE_PERF * 100, basis: '2% annual management + 30% performance (Filet tier), high-water mark — net = what an investor keeps' },
     note: started ? `Common start ${START_DATE} at $${Math.round(baselineNav).toLocaleString()} NAV.`
                    : `Comparison begins ${START_DATE} (Tree's first live trading day). Showing live previews.`,
-    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
+    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. The PNTHR Tree column reflects the house account (its mode label shows whether the engine is currently live or paper); its recorded 06/22–07/02 history is quarantined as corrupted and its return-since-start is not a reliable strategy track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
     funds,
   };
   _cache.at = Date.now(); _cache.data = result;
@@ -289,7 +325,7 @@ export async function getFundComparisonForMember(db, ownerId) {
 
   // Common baseline = the member's $50k, locked on/after Monday in his OWN config doc.
   let cfg = await db.collection(CFG_M).findOne({ key: 'fund_compare' });
-  if (started && (!cfg || !cfg.locked)) {
+  if (started && (!cfg || !cfg.locked) && IS_WRITER) {
     cfg = { key: 'fund_compare', locked: true, startDate: today, baselineNav: base,
       treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, ambushBaselinePnl: ambTotalPnl, lockedAt: new Date() };
     await db.collection(CFG_M).updateOne({ key: 'fund_compare' }, { $set: cfg }, { upsert: true });
@@ -312,7 +348,7 @@ export async function getFundComparisonForMember(db, ownerId) {
     return +(((grossPnl - mgmt - perf) / baselineNav) * 100).toFixed(2);
   };
 
-  if (started) {
+  if (started && IS_WRITER) {
     for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]]) {
       await db.collection(DAILY_M).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
     }

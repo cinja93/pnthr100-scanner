@@ -105,17 +105,25 @@ export const AI_TICKERS = (() => {
 })();
 
 // ── NAV (same source the Ambush/Elite pages use) ────────────────────────────
-export async function getNav(db) {
-  let nav = 80200;
+// getNavInfo carries WHERE the number came from. source:'default' means every real
+// source failed — the 2026-07-02 corruption incident was this default ($80,200)
+// silently sizing orders and being written into the fund-compare history as real
+// NAV. Consumers must treat source:'default' as UNTRUSTED: the tick skips entries
+// and fund-compare refuses to record the point. (2026-07-06 audit.)
+export async function getNavInfo(db) {
+  let nav = 80200, source = 'default';
   try {
-    const cfg = await db.collection('pnthr_ambush_config').findOne({});
-    if (cfg?.nav > 0) nav = cfg.nav;
-    if (cfg?.ownerId) { const p = await getUserProfile(cfg.ownerId); if (p?.accountSize > 0) nav = p.accountSize; }
+    // keyed doc first (writes use { key: 'ambush_config' }); tolerate a legacy keyless doc
+    const cfg = (await db.collection('pnthr_ambush_config').findOne({ key: 'ambush_config' }))
+             || (await db.collection('pnthr_ambush_config').findOne({}));
+    if (cfg?.nav > 0) { nav = cfg.nav; source = 'config'; }
+    if (cfg?.ownerId) { const p = await getUserProfile(cfg.ownerId); if (p?.accountSize > 0) { nav = p.accountSize; source = 'profile'; } }
     const tcfg = await db.collection(CFG).findOne({});
-    if (tcfg?.navOverride > 0) nav = tcfg.navOverride;   // page can set an explicit NAV
-  } catch { /* default */ }
-  return nav;
+    if (tcfg?.navOverride > 0) { nav = tcfg.navOverride; source = 'override'; }   // page can set an explicit NAV
+  } catch (e) { console.error('[Tree] getNavInfo failed — UNTRUSTED default NAV:', e.message); source = 'default'; }
+  return { nav, source, trusted: source !== 'default' };
 }
+export async function getNav(db) { return (await getNavInfo(db)).nav; }
 
 export async function fetchQuotes(tickers) {
   const map = {};
@@ -205,7 +213,8 @@ async function ensureMirrorMigration(db, cfg, excl) {
 // ── Live snapshot the page polls: funnel + sizing/stops + positions ──────────
 export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
-  const nav = await getNav(db);
+  const navInfo = await getNavInfo(db);
+  const nav = navInfo.nav;
   const excl = await engineExclusions(db);
   const noBuyback = await getNoBuybackSet(db);
   await ensureMirrorMigration(db, cfg, excl);
@@ -397,9 +406,13 @@ export async function getPnthrTreeState(db) {
     strategy: strategyRiskNow, strategyPct: +((strategyRiskNow / (nav || 1)) * 100).toFixed(2),
   };
   return {
-    mode: cfg.mode, nav, funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl, totalRisk,
+    mode: cfg.mode, nav, navSource: navInfo.source, navTrusted: navInfo.trusted,
+    // fund-compare / recorders need to know the snapshot is real before treating NAV/positions as truth
+    snapshotConfirmed: snap.positionsConfirmed === true, snapshotSyncedAt: snap.syncedAt || null,
+    funnel, positions, manualTrades, counts, recentStops, treePnl, manualPnl, openPnl, simPnl, totalRisk,
     grossUsed: +grossUsed.toFixed(0), grossX: +(grossUsed / (nav || 1)).toFixed(2), grossCapX: MAX_GROSS_X,
     baselineDrift: cfg.baselineDrift || null,   // drift guard flag — page shows a banner if the backtest baseline went stale
+    bridgeHealth: cfg.bridgeHealth || null,     // server-side bridge alarm (2026-07-06) — page banner
     updatedAt: new Date().toISOString(),
   };
 }

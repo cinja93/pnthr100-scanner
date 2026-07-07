@@ -125,6 +125,33 @@ export async function getNavInfo(db) {
 }
 export async function getNav(db) { return (await getNavInfo(db)).nav; }
 
+// ── House IBKR snapshot — PINNED to the house owner ─────────────────────────
+// ibkrSync upserts ONE snapshot doc PER OWNER. Reading the latest across ALL owners
+// (the old `.find({}).sort({syncedAt:-1})`) means the moment any second account syncs
+// more recently — a member brokerage, a `--paper` bridge login — the live engine's
+// held/gross/stop view flips to the WRONG account and it would enter/trail/cover
+// against the wrong book (2026-07-06 audit; a stale 143-position doc for another owner
+// was already sitting in the collection). Pin to the house ownerId from ambush_config;
+// only if the house owner has never synced do we fall back (and log it loudly).
+let _houseOwnerCache = { at: 0, id: null };
+export async function houseOwnerId(db) {
+  if (_houseOwnerCache.id && Date.now() - _houseOwnerCache.at < 60000) return _houseOwnerCache.id;
+  const cfg = (await db.collection('pnthr_ambush_config').findOne({ key: 'ambush_config' }))
+           || (await db.collection('pnthr_ambush_config').findOne({}));
+  const id = cfg?.ownerId ? String(cfg.ownerId) : null;
+  _houseOwnerCache = { at: Date.now(), id };
+  return id;
+}
+export async function houseSnapshot(db) {
+  const owner = await houseOwnerId(db);
+  if (owner) {
+    const s = (await db.collection('pnthr_ibkr_positions').find({ ownerId: owner }).sort({ syncedAt: -1 }).limit(1).toArray())[0];
+    if (s) return s;
+    console.warn(`[Tree] house owner ${owner} has no IBKR snapshot yet — falling back to latest overall`);
+  }
+  return (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+}
+
 export async function fetchQuotes(tickers) {
   const map = {};
   for (let i = 0; i < tickers.length; i += 200) {
@@ -208,7 +235,7 @@ async function ensureMirrorMigration(db, cfg, excl) {
   await db.collection(POS).deleteMany({ mode: 'paper' });
   await db.collection(TRADES).deleteMany({ mode: 'paper' });
   await db.collection('pnthr_tree_seen').deleteMany({});
-  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const snap = await houseSnapshot(db);
   const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
   const yStr = etDateStr(yesterday);
   for (const p of (snap.positions || [])) {
@@ -241,7 +268,7 @@ export async function getPnthrTreeState(db) {
   // ── Displayed book = your REAL IBKR account (adopted) + (paper only) the engine's
   //    SIMULATED would-buys, so paper mimics live automation exactly. The ONLY thing
   //    live does that paper doesn't is actually send the orders to the broker. ───────
-  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const snap = await houseSnapshot(db);
   const realRaw = [];
   for (const p of (snap.positions || [])) {
     const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
@@ -672,7 +699,7 @@ export async function runPnthrTreeTick(db) {
   // while mode was off/toggling was never recorded and P&L booked $0/null, corrupting NAV.
   // Now the fills/exits ledger is maintained regardless of mode, so it can never lose a fill.
   if (!cfg.mode || cfg.mode === 'off') {
-    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+    const snap = await houseSnapshot(db);
     const off = [];
     try { const n = await captureTreeStopOuts(db, cfg, snap, {}, await engineExclusions(db)); if (n) off.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
     catch (e) { console.error('[Tree] off-mode stop-out capture failed:', e.message); }
@@ -705,7 +732,7 @@ export async function runPnthrTreeTick(db) {
   // held set + current GROSS exposure (for the 2× leverage cap). Read your REAL account
   // ONCE (adopted in BOTH modes). In paper, ALSO count the engine's simulated would-buys
   // so it never double-buys a name you already hold, real or simulated.
-  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const snap = await houseSnapshot(db);
   const held = new Set();
   let gross = 0;
   for (const p of (snap.positions || [])) {
@@ -734,13 +761,31 @@ export async function runPnthrTreeTick(db) {
   // so a genuinely failed entry stays retryable.
   const ENTRY_INFLIGHT_MS = 5 * 60 * 1000;   // fill → snapshot propagation window
   const inflightCutoff = new Date(Date.now() - ENTRY_INFLIGHT_MS);
+  // Window the dedup on createdAt (PENDING/EXECUTING) OR updatedAt (DONE). A command that
+  // EXECUTED near the end of its createdAt window is marked DONE with a fresh updatedAt but
+  // an aged createdAt; keying only on createdAt let it fall out of the window BEFORE its fill
+  // propagated into the snapshot → the AMD double-entry. updatedAt keeps a just-filled DONE
+  // in the window until the snapshot catches up. (2026-07-06 audit.)
+  const inflightWindow = { $or: [{ createdAt: { $gte: inflightCutoff } }, { updatedAt: { $gte: inflightCutoff } }] };
   for (const c of await db.collection('pnthr_ambush_outbox').find({
     command: 'BUY_ENTRY',
     status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
-    createdAt: { $gte: inflightCutoff },
+    ...inflightWindow,
   }).toArray()) {
     const t = (c.request?.ticker || '').toUpperCase();
     if (t && !held.has(t)) { held.add(t); gross += (+c.request?.shares || 0) * (+c.request?.price || 0); }
+  }
+  // A BUY_ENTRY that FAILED with an ambiguous bridge/broker timeout (NO_STATUS_AFTER /
+  // BRIDGE_TIMEOUT) may actually be LIVE in TWS — treat it as in-flight for one propagation
+  // window so we don't fire a duplicate entry while the truth settles (the ibkrOutbox path
+  // has this guard; the ambush/Tree path did not).
+  for (const c of await db.collection('pnthr_ambush_outbox').find({
+    command: 'BUY_ENTRY', status: 'FAILED', updatedAt: { $gte: inflightCutoff },
+  }).toArray()) {
+    const err = String(c.error || c.response?.error || '');
+    if (!/NO_STATUS|BRIDGE_TIMEOUT|TIMEOUT/i.test(err)) continue;   // only AMBIGUOUS failures, not clean rejects
+    const t = (c.request?.ticker || '').toUpperCase();
+    if (t && !held.has(t)) { held.add(t); gross += (+c.request?.shares || 0) * (+c.request?.price || 0); actions.push({ type: 'ENTRY_AMBIGUOUS_FAILED_HOLD', ticker: t }); }
   }
 
   // ── ENTRY SAFETY GATE (2026-06-20 audit) — only OPEN new positions when it's safe: ──
@@ -889,7 +934,7 @@ export async function runPnthrTreeTick(db) {
     for (const c of await db.collection('pnthr_ambush_outbox').find({
       command: 'MODIFY_STOP',
       status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
-      createdAt: { $gte: inflightCutoff },   // same time bound: a stuck command can't freeze a ticker's trailing
+      ...inflightWindow,   // createdAt (pending) OR updatedAt (just-done) within the window — see BUY_ENTRY dedup
     }).toArray()) {
       const t = (c.request?.ticker || '').toUpperCase();
       if (t) pendingStop[t] = Math.max(pendingStop[t] || 0, +c.request?.newStopPrice || 0);
@@ -900,7 +945,7 @@ export async function runPnthrTreeTick(db) {
     for (const c of await db.collection('pnthr_ambush_outbox').find({
       command: 'CANCEL_ORDER',
       status: { $in: ['PENDING', 'EXECUTING', 'DONE'] },
-      createdAt: { $gte: inflightCutoff },
+      ...inflightWindow,
     }).toArray()) {
       const pid = c.request?.permId; if (pid != null) pendingCancel.add(String(pid));
     }
@@ -930,10 +975,23 @@ export async function runPnthrTreeTick(db) {
       // (client 0) binds it, orderId becomes non-zero and trailing/trim resumes automatically.
       const stops = (snap.stopOrders || [])
         .filter(o => (o.symbol || o.ticker || '').toUpperCase() === t && (o.action || '').toUpperCase() === 'SELL')
-        .map(o => ({ permId: o.permId, orderId: Number(o.orderId) || 0, price: +o.stopPrice || 0 }))
+        .map(o => ({ permId: o.permId, orderId: Number(o.orderId) || 0, price: +o.stopPrice || 0, shares: Math.abs(+o.totalQuantity || +o.quantity || +o.shares || 0) }))
         .filter(o => o.price > 0);
       const cur = stops.reduce((m, o) => Math.max(m, o.price), 0);
       const hasOrphan = stops.some(o => o.orderId === 0);   // unbound (orderId 0) = uncancellable
+      // ── SHARE COVERAGE: the resting stop(s) must cover the FULL position. A duplicate-add
+      // entry, a manual scale-in, or a partial-fill entry can leave a stop sized to fewer
+      // shares than are held → on a stop hit only part sells and the rest rides naked. The
+      // trail loop only ever RAISES price, never fixes quantity, so this was invisible. When
+      // total resting-stop coverage < position shares (and no orphan we can't safely add to),
+      // re-place at the tightest price for the FULL share count. (2026-07-06 audit.)
+      const coveredShares = stops.reduce((s, o) => s + (o.shares || 0), 0);
+      if (!hasOrphan && stops.length && coveredShares > 0 && coveredShares < sh && (pendingStop[t] || 0) < cur) {
+        await enqueueAmbushOrder(db, 'MODIFY_STOP', { ticker: t, direction: 'LONG', newStopPrice: cur, shares: sh, reason: 'TREE_STOP_UNDERSIZED' });
+        pendingStop[t] = cur;
+        actions.push({ type: 'STOP_SHARE_COVERAGE_FIX', ticker: t, stop: cur, covered: coveredShares, position: sh });
+        continue;   // fix the size this tick; trailing resumes next tick once the snapshot reflects full coverage
+      }
 
       // ── DUP TRIM: enforce EXACTLY ONE protective stop = the TIGHTEST (highest for a long). ─────
       // Cancel every OTHER cancellable stop (real orderId) by permId — auto-heals a cancellable
@@ -1205,7 +1263,7 @@ export async function recordTreeDailyLog(db) {
   const date = etDateStr();
   const cfg = await getPnthrTreeConfig(db);
   const excl = await engineExclusions(db);
-  const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+  const snap = await houseSnapshot(db);
   const nav = await getNav(db);
 
   // Strategy = an AI-300 name Tree actually trades. ENGINE_EXCLUDE names (SPCX) and any

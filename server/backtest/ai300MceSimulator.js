@@ -35,10 +35,16 @@ const navLabel = STARTING_NAV >= 1000000 ? `${STARTING_NAV / 1000000}m` : `${STA
 const AI_GATE_OFFSET    = 0.25;
 const C679_GATE_OFFSET  = CARNIVORE_GATE_OFFSET;  // 0.10 — stricter 679 gate
 const REGIME_EMA_PERIOD = 21;                      // SPY/QQQ 21W EMA for 679 regime
-const BACKTEST_START    = '2022-01-03';
+const BACKTEST_START    = process.env.BACKTEST_START || '2022-01-03';   // env override for period-aligned comparisons
 const ADV_ARG = process.argv.find(a => a.startsWith('--adv='));
 const ADV_CAP_PCT       = ADV_ARG ? parseFloat(ADV_ARG.split('=')[1]) : 0.02;  // default 2% of 20-day ADV
-const LOT_PCT           = [0.35, 0.25, 0.20, 0.12, 0.08];
+// Pyramid sizing lever (alpha hunt): how much size goes at entry vs added up the move.
+const LOT_PROFILES      = {
+  default:      [0.35, 0.25, 0.20, 0.12, 0.08],   // current
+  frontload:    [0.60, 0.20, 0.10, 0.06, 0.04],   // more at the (lower) entry
+  concentrated: [0.90, 0.07, 0.03, 0.00, 0.00],   // ~all at entry, ~no chase
+};
+const LOT_PCT           = LOT_PROFILES[process.env.LOT_PROFILE || 'default'];
 const LOT_NAMES         = ['The Scent', 'The Stalk', 'The Strike', 'The Jugular', 'The Kill'];
 const LOT_OFFSET_PCT    = [0, 0.03, 0.06, 0.10, 0.14];
 const TIME_GATE_DAYS    = 5;
@@ -47,6 +53,13 @@ const PAI300_EMA_PERIOD = 36;
 const GO_TOP            = 6;
 const NEUT_TOP          = 12;
 const MCE_TOP_N         = 100;  // TTM top-100 ranking for MCE eligibility
+// Trail width (Scott alpha hunt 2026-06-11): widen the ATR trail so winners RUN instead of
+// getting clipped. 1 = current (close−1×ATR floor). Higher = looser trail, lets runners run.
+// Cuts losers at the same tight initial stop; only loosens the trailing on names already winning.
+const STOP_ATR_MULT     = parseFloat(process.env.STOP_ATR_MULT || '1');
+// Entry-timing lever: N-bar-high breakout. 1 = earlier/looser entry (Scott's "get in on the
+// green-turn, not late"), 2 = current 2-bar, 3 = stricter/later confirmation.
+const BREAKOUT_BARS     = parseInt(process.env.BREAKOUT_BARS || '2', 10);
 
 // AI-sector borrow rates
 const AI_BORROW_RATES = {
@@ -104,7 +117,7 @@ function computeWeeklyStopCandidate(weekly, atrArr, weekIdx, signal, currentStop
   const prev2 = weekly[weekIdx - 2];
   const twoWeekHigh = Math.max(prev1.high, prev2.high);
   const twoWeekLow  = Math.min(prev1.low, prev2.low);
-  const prevAtr = atrArr[weekIdx - 1];
+  const prevAtr = atrArr[weekIdx - 1] * STOP_ATR_MULT;
   if (signal === 'BL') {
     const struct = parseFloat((twoWeekLow - 0.01).toFixed(2));
     const atrFloor = parseFloat((prev1.close - prevAtr).toFixed(2));
@@ -367,11 +380,16 @@ async function main() {
     for (let i = daily.length - 1; i >= 0; i--) {
       if (daily[i].date === date) { idx = i; break; }
     }
-    if (idx < 2) return null;
-    const prev1High = daily[idx - 1].high;
-    const prev2High = daily[idx - 2].high;
-    const twoBarHigh = Math.max(prev1High, prev2High);
-    const trigger = parseFloat((twoBarHigh + 0.01).toFixed(2));
+    if (idx < Math.max(1, BREAKOUT_BARS)) return null;
+    let trigger;
+    if (BREAKOUT_BARS <= 0) {
+      // Green-turn (Scott's Heat Map idea): enter the moment price breaks the PRIOR CLOSE.
+      trigger = parseFloat((daily[idx - 1].close + 0.01).toFixed(2));
+    } else {
+      let nBarHigh = daily[idx - 1].high;
+      for (let k = 2; k <= BREAKOUT_BARS; k++) nBarHigh = Math.max(nBarHigh, daily[idx - k].high);
+      trigger = parseFloat((nBarHigh + 0.01).toFixed(2));
+    }
     return { trigger, todayBar: daily[idx] };
   }
 
@@ -560,9 +578,17 @@ async function main() {
     const c679Bull = spyBull && qqqBull;  // 679 requires BOTH above EMA
 
     // ── MCE: Update active weekly signals + TTM ranking on new week ─────
+    // LOOK-AHEAD FIX (2026-07-06 audit): a weekly BL/SS for week W is only KNOWN at
+    // the CLOSE of week W (Friday). The old code activated week W's signal on the
+    // FIRST trading day of week W (mondayStr), then let daily breakout entries fire
+    // Mon-Thu of week W on it — buying on information from the future (the Ambush-class
+    // "keep the weeks that worked out" bias). We now activate a week's signal on the
+    // first trading day of the FOLLOWING week: on entering week W, apply the events of
+    // the just-completed week W-1 (getMondayOf 7 days back). Executable in real time.
     if (mondayStr !== lastTtmComputeWeek) {
       lastTtmComputeWeek = mondayStr;
-      const weeklyEvents = weeklyEventsByDate[mondayStr] || {};
+      const prevMonday = getMondayOf(new Date(new Date(mondayStr + 'T12:00:00').getTime() - 7 * 86400000).toISOString().split('T')[0]);
+      const weeklyEvents = weeklyEventsByDate[prevMonday] || {};
       for (const [ticker, wev] of Object.entries(weeklyEvents)) {
         if (wev.signal === 'BL' || wev.signal === 'SS') {
           activeWeeklySignal[ticker] = wev.signal;
@@ -664,19 +690,25 @@ async function main() {
             pos.stop = newStop;
           }
 
-          // Structural exit check
-          const prev1 = weekly[weekIdx - 1];
-          const prev2 = weekly[weekIdx - 2];
-          const twoWeekHigh = Math.max(prev1.high, prev2.high);
-          const twoWeekLow = Math.min(prev1.low, prev2.low);
-          const weekBar = weekly[weekIdx];
-          if (weekBar) {
-            if (pos.signal === 'BL' && weekBar.low < twoWeekLow) {
-              closePosition(pos, bar.date, pos.stop, 'SIGNAL_BE');
+          // Structural exit check — LOOK-AHEAD FIX (2026-07-06 audit): the old code used
+          // weekly[weekIdx] (the week that just STARTED, whose low/high is only known at
+          // Friday's close) to exit on Monday. Now it uses the just-COMPLETED week
+          // (weekIdx-1) breaking the 2-week structural low/high of the two weeks before it
+          // (weekIdx-2, weekIdx-3) — all known by this Monday. The fill is today's OPEN
+          // (executable at the Monday we act), not pos.stop (which implied a same-week fill).
+          const completed = weekly[weekIdx - 1];   // just-closed week (signal is knowable now)
+          const ref1 = weekly[weekIdx - 2];
+          const ref2 = weekly[weekIdx - 3];
+          if (completed && ref1 && ref2) {
+            const twoWeekHigh = Math.max(ref1.high, ref2.high);
+            const twoWeekLow = Math.min(ref1.low, ref2.low);
+            const exitPx = bar.open || pos.stop;
+            if (pos.signal === 'BL' && completed.low < twoWeekLow) {
+              closePosition(pos, bar.date, exitPx, 'SIGNAL_BE');
               continue;
             }
-            if (pos.signal === 'SS' && weekBar.high > twoWeekHigh) {
-              closePosition(pos, bar.date, pos.stop, 'SIGNAL_SE');
+            if (pos.signal === 'SS' && completed.high > twoWeekHigh) {
+              closePosition(pos, bar.date, exitPx, 'SIGNAL_SE');
               continue;
             }
           }
@@ -724,7 +756,9 @@ async function main() {
           const triggerHit = pos.signal === 'BL' ? bar.high >= trigger : bar.low <= trigger;
 
           if (triggerHit) {
-            const fillPrice = trigger;
+            // Gap-through (Scott STRICT audit 2026-06-11): if the bar gapped past the trigger,
+            // you fill at the open, not the trigger. Fill at the WORSE of the two.
+            const fillPrice = pos.signal === 'BL' ? Math.max(trigger, bar.open) : Math.min(trigger, bar.open);
             const advMax = Math.floor(getAdv20(ticker, bar.date) * ADV_CAP_PCT);
             const shares = Math.min(pos.lotShares[nextLotIdx], advMax > 0 ? advMax : pos.lotShares[nextLotIdx]);
             if (shares <= 0) continue;
@@ -857,27 +891,35 @@ async function main() {
           mceShares = Math.min(mceShares, advMax > 0 ? advMax : mceShares);
           if (mceShares <= 0) continue;
 
+          // Gap-through fill: a resting buy-stop at `trigger` fills at the OPEN when the
+          // bar gapped above it. Cash, commission, slippage, lotValue, totalCost/avgCost
+          // and the risk calc must ALL use this fill price — the old code booked P&L at
+          // the (worse) fill but charged cash/avgCost at the (better) trigger, an internal
+          // inconsistency that flattered the result (2026-07-06 audit — the half-applied
+          // branch the pyramid-lot and new-position branches already fixed).
+          const mceFill = Math.max(trigger, todayBar.open);
+
           // Capital constraint
-          const mceCost = mceShares * trigger;
+          const mceCost = mceShares * mceFill;
           if (availableCash < mceCost) { totalSkippedForCash++; continue; }
           availableCash -= mceCost;
 
-          const entryComm = calcCommission(mceShares, trigger);
-          const entrySlip = calcSlippage(mceShares, trigger);
+          const entryComm = calcCommission(mceShares, mceFill);
+          const entrySlip = calcSlippage(mceShares, mceFill);
 
           existingPos.lots.push({
             lot: existingPos.lots.length + 1, name: 'MCE Gap Add',
-            pct: 0, fillDate: date, fillPrice: trigger,
-            shares: mceShares, lotValue: parseFloat((mceShares * trigger).toFixed(2)),
+            pct: 0, fillDate: date, fillPrice: mceFill,
+            shares: mceShares, lotValue: parseFloat((mceShares * mceFill).toFixed(2)),
             tradingDayAtFill: existingPos.tradingDays, entryComm, entrySlip,
             isMceAdd: true,
           });
 
           existingPos.totalShares += mceShares;
-          existingPos.totalCost += mceShares * trigger;
+          existingPos.totalCost += mceShares * mceFill;
           existingPos.avgCost = parseFloat((existingPos.totalCost / existingPos.totalShares).toFixed(4));
 
-          const rpsUsed = mceShares * Math.abs(trigger - stopPrice);
+          const rpsUsed = mceShares * Math.abs(mceFill - stopPrice);
           existingPos.vitalityCommitted = (existingPos.vitalityCommitted || existingPos.navTier * 0.01) + rpsUsed;
           existingPos.lastMceGapDay = dayCount;
 
@@ -889,7 +931,7 @@ async function main() {
           totalMceGapAdds++;
         } else if ((!existingPos || existingPos.closed) && mceNewToday < 3) {
           // New MCE position — full 5-lot pyramid (max 3 per day)
-          const entryPrice = trigger;
+          const entryPrice = Math.max(trigger, todayBar.open);  // gap-through: fill at the worse of trigger vs open
           const sectorMult = 1.0;
           const fullShares = sizePositionNav(currentNav, entryPrice, stopPrice, sectorMult);
           if (fullShares <= 0) continue;
@@ -1007,9 +1049,29 @@ async function main() {
         });
       }
 
-      // Sort by sector tier (GO first) then by sector mult descending
+      // Sort by sector tier (GO first). NOTE: within a tier there is NO secondary sort by default,
+      // so the cap-constrained .slice(0,10) below depends on arbitrary object-iteration order.
+      // ENTRY_TIEBREAK (test hook) flips the within-tier order to measure that fragility.
       const tierOrder = { GO: 0, NEUTRAL: 1, NO_GO: 2 };
-      weeklyCandidates.sort((a, b) => (tierOrder[a.sectorTier] || 1) - (tierOrder[b.sectorTier] || 1));
+      // DETERMINISTIC default tiebreak (2026-07-06 audit): the old default `return 0`
+      // let a within-tier tie fall to arbitrary MongoDB/file insertion order, so which of
+      // >10 same-tier candidates got the capped capital changed with a pure editorial
+      // reorder of aiUniverseData.js — the exact 945%-artifact class. Default is now
+      // MOST_LIQUID (20-day ADV, the rule the Tree engine's robustness battery validated
+      // as best out-of-sample) with an alphabetical final tiebreak so it is fully
+      // reproducible. ENTRY_TIEBREAK still overrides it to MEASURE the fragility.
+      const _tb = process.env.ENTRY_TIEBREAK;
+      weeklyCandidates.sort((a, b) => {
+        const t = (tierOrder[a.sectorTier] || 1) - (tierOrder[b.sectorTier] || 1);
+        if (t !== 0) return t;
+        if (_tb === 'alpha') return a.ticker.localeCompare(b.ticker);
+        if (_tb === 'revalpha') return b.ticker.localeCompare(a.ticker);
+        if (_tb === 'mult') return (b.sectorMult || 0) - (a.sectorMult || 0);
+        if (_tb === 'insertion') return 0;   // explicit opt-in to the OLD arbitrary order (fragility measurement)
+        const adv = (getAdv20(b.ticker, date) || 0) - (getAdv20(a.ticker, date) || 0);   // most-liquid first
+        if (adv !== 0) return adv;
+        return a.ticker.localeCompare(b.ticker);   // deterministic final tiebreak
+      });
 
       const blCands = weeklyCandidates.filter(c => c.signal === 'BL').slice(0, 10);
       const ssCands = weeklyCandidates.filter(c => c.signal === 'SS').slice(0, 5);
@@ -1120,10 +1182,20 @@ async function main() {
   console.log(`  ${dailyGrossNav.length} daily NAV points`);
 
   // ── Persist to MongoDB ───────────────────────────────────────────────────
+  // FOOT-GUN GUARD (2026-07-06 audit): `--suffix=` with an EMPTY value used to make
+  // colSuffix '' and then deleteMany+insertMany into the NO-SUFFIX collections — the
+  // exact ones irLiveService serves to investors. This research engine must NEVER
+  // overwrite the canonical Investor-Report collections without an explicit override.
   const SUFFIX_ARG = process.argv.find(a => a.startsWith('--suffix='));
-  const colSuffix = SUFFIX_ARG ? SUFFIX_ARG.split('=')[1] : '_mce';
+  const rawSuffix = SUFFIX_ARG ? SUFFIX_ARG.split('=')[1] : undefined;
+  const colSuffix = rawSuffix === undefined ? '_mce' : rawSuffix;
+  if (colSuffix === '' && !process.argv.includes('--overwrite-canonical')) {
+    console.error('❌ Refusing to write the CANONICAL (no-suffix) IR collections. Pass --overwrite-canonical to confirm you really mean to replace the investor-facing data.');
+    process.exit(1);
+  }
   const tradeCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_trade_log${colSuffix}`);
   const navCol = db.collection(`pnthr_ai_bt_pyramid_nav_${navLabel}_daily_nav_gross${colSuffix}`);
+  console.log(`Writing to collections with suffix "${colSuffix}": ${tradeCol.collectionName}, ${navCol.collectionName}`);
 
   console.log(`\nPersisting ${closedTrades.length} trades...`);
   await tradeCol.deleteMany({});
@@ -1272,8 +1344,8 @@ async function main() {
 
   console.log('\n' + '═'.repeat(80));
   console.log('  DATA PERSISTED:');
-  console.log(`  Trade log:  pnthr_ai_bt_pyramid_nav_${navLabel}_trade_log (${closedTrades.length} docs)`);
-  console.log(`  Daily NAV:  pnthr_ai_bt_pyramid_nav_${navLabel}_daily_nav_gross (${dailyGrossNav.length} docs)`);
+  console.log(`  Trade log:  ${tradeCol.collectionName} (${closedTrades.length} docs)`);
+  console.log(`  Daily NAV:  ${navCol.collectionName} (${dailyGrossNav.length} docs)`);
   console.log('═'.repeat(80) + '\n');
 
   process.exit(0);

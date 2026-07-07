@@ -52,6 +52,26 @@ export async function connectToDatabase() {
     await db.collection('pnthr_portfolio').createIndex(
       { ticker: 1, ownerId: 1, status: 1 }
     );
+    // The AI-300 portfolio filter queries {ownerId, status, fundId} which the ticker-leading
+    // index above can't serve — add a matching index (2026-07-06 audit).
+    await db.collection('pnthr_portfolio').createIndex({ ownerId: 1, status: 1, fundId: 1 });
+
+    // TTL indexes on PURELY OPERATIONAL, high-volume, re-derivable debug logs that otherwise
+    // grow forever and are the OOM risk on the single Render instance (2026-07-06 audit).
+    // DELIBERATELY EXCLUDED — compliance/audit/order records a regulated fund must retain:
+    // pnthr_impersonation_log, dataroom_view_log, pnthr_tree_mode_log, pnthr_ibkr_outbox_archive
+    // (order-execution history), pnthr_ops_alerts. Those need a proper long-term archival policy,
+    // NOT a 90-day auto-delete. Each TTL keys off a BSON Date field; createIndex is idempotent.
+    const ttl90 = 90 * 24 * 3600;
+    const TTL_SPECS = [
+      ['pnthr_reconciliation_log', 'runAt'],      // minute-by-minute reconcile actions — operational
+      ['pnthr_system_changelog', 'createdAt'],    // dev/debug changelog
+      ['pnthr_ai_system_changelog', 'createdAt'], // dev/debug changelog
+    ];
+    for (const [coll, field] of TTL_SPECS) {
+      try { await db.collection(coll).createIndex({ [field]: 1 }, { expireAfterSeconds: ttl90 }); }
+      catch (e) { /* field-name/existing-index mismatch is non-fatal */ }
+    }
 
     console.log('✅ Connected to MongoDB');
     return db;

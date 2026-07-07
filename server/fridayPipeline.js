@@ -857,8 +857,10 @@ export async function runFridayKillPipeline() {
 
     // ── Portfolio Return Snapshot (per user who has an accountSize) ──────────
     try {
-      // db is already connected from the top of this function — no re-import needed
-      const profiles = await db.collection('user_profiles').find({ accountSize: { $gt: 0 } }).toArray();
+      // db is already connected from the top of this function — no re-import needed.
+      // Exclude the $10M demo_fund profile so simulated demo data can never contaminate
+      // a real per-user portfolio-return snapshot (2026-07-06 audit).
+      const profiles = await db.collection('user_profiles').find({ accountSize: { $gt: 0 }, userId: { $ne: 'demo_fund' } }).toArray();
       for (const profile of profiles) {
         const ownerId   = profile.userId || profile._id?.toString();
         const currentNav = profile.accountSize;

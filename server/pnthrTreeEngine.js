@@ -17,6 +17,7 @@ import { getUserProfile } from './database.js';
 import { SECTORS as AI_SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 import { enqueueAmbushOrder } from './ambush/ambushStateManager.js';
 import { getSplitExclusions, flagSuspectSplit } from './splitMaintenanceService.js';
+import { isTradingDay } from './marketCalendar.js';
 
 const CFG    = 'pnthr_tree_config';
 const POS    = 'pnthr_tree_positions';
@@ -173,8 +174,32 @@ export async function fetchQuotes(tickers) {
 // many CALENDAR days (~10 trading days), we DROP its bands — no entry, no stop trailing off
 // a stale 42wk-high / 10-day-low — and surface it so the freeze gets fixed. (2026-07-06 audit.)
 const STALE_DATA_DAYS = 14;
+// priorBands is DETERMINISTIC per ET day (it filters b.date < today), yet it re-reads the
+// FULL AI-300 candle history from Atlas and re-derives bands on EVERY call — and it is called
+// several times per minute (house tick + each paper book + the 30s page poll + the drift-guard
+// window). That was the single biggest recurring Atlas/CPU/GC load on the one Render instance.
+// Cache the derived bands keyed by (ET date + exclusion signature) with a short TTL, so repeated
+// calls within the same minute reuse one read. Exclusions/splits that change mid-day bust the
+// key; the TTL bounds any staleness to ~90s. (2026-07-06 audit.)
+const _bandsCache = { key: null, at: 0, data: null };
+const BANDS_TTL_MS = 90 * 1000;
 export async function priorBands(db, tickers, excl) {
   const today = etDateStr();
+  const exclSig = excl ? [...excl.keys()].sort().join(',') : '';
+  const cacheKey = `${today}|${tickers.length}|${exclSig}`;
+  if (_bandsCache.key === cacheKey && Date.now() - _bandsCache.at < BANDS_TTL_MS && _bandsCache.data) {
+    return _copyBands(_bandsCache.data);
+  }
+  const result = await _computePriorBands(db, tickers, excl, today);
+  _bandsCache.key = cacheKey; _bandsCache.at = Date.now(); _bandsCache.data = result;
+  return _copyBands(result);
+}
+// callers mutate the band maps (applyPriceSanity deletes split-suspect keys), so hand out a
+// fresh shallow copy each call — the cached original stays pristine for the next hit.
+function _copyBands(b) {
+  return { highs: { ...b.highs }, lows: { ...b.lows }, lastClose: { ...b.lastClose }, adv: { ...b.adv }, stale: [...b.stale] };
+}
+async function _computePriorBands(db, tickers, excl, today) {
   const staleCutoff = new Date(Date.parse(today) - STALE_DATA_DAYS * 86400000).toISOString().slice(0, 10);
   const highs = {}, lows = {}, lastClose = {}, adv = {}, stale = [];
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
@@ -812,7 +837,11 @@ export async function runPnthrTreeTick(db) {
   const _etp = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' }).formatToParts(new Date());
   const _eo = {}; for (const x of _etp) _eo[x.type] = x.value; let _eh = parseInt(_eo.hour, 10); if (_eh === 24) _eh = 0;
   const _etMin = _eh * 60 + parseInt(_eo.minute, 10);
-  const inSession = _etMin >= 570 && _etMin <= 960;                  // 9:30 AM – 4:00 PM ET
+  // NYSE holiday gate (2026-07-06 audit): never OPEN a new position on a market holiday.
+  // On a holiday FMP's static quote dayHigh can disagree with the stored candle high by
+  // pennies and spuriously clear the 42wk trigger — a real order on a closed market.
+  const tradingDay = isTradingDay();
+  const inSession = tradingDay && _etMin >= 570 && _etMin <= 960;    // 9:30 AM – 4:00 PM ET, trading day only
   const snapAgeMin = snap.syncedAt ? (Date.now() - new Date(snap.syncedAt).getTime()) / 60000 : Infinity;
   const snapFreshConfirmed = snapAgeMin <= 10 && snap.positionsConfirmed === true;
   const entriesAllowed = inSession && (cfg.mode !== 'live' || snapFreshConfirmed);

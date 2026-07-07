@@ -15,8 +15,13 @@
 //   loadTreeData(db, opts)            → { T, allDates, spyAt, lastDate }
 //   simulateTree(data, { nav0, ... }) → { equity, equityGross, closed, maxDD…, costs }
 
-import { calcCommission, calcSlippage } from './costEngine.js';
+import { calcCommission, calcSlippage, calcMarginInterest } from './costEngine.js';
 import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
+
+// Calendar-day gap between two ISO dates (for weekend/holiday margin accrual).
+function calendarDayGap(a, b) {
+  return Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 86400000));
+}
 
 // ── LOCKED strategy constants (the ONLY place they live) ─────────────────────
 export const VITALITY_PCT = 0.02;          // risk budget per name (2% NAV)
@@ -81,10 +86,11 @@ export async function loadTreeData(db, { end = DEFAULT_END, universe = 'ai', loo
 // entryFilter (OPTIONAL, default null) — research hook for the hybrid-rotation study only.
 // When provided, an entry is taken only if entryFilter(ticker, date) returns truthy. Default null
 // ⇒ NO gate ⇒ the locked behavior is byte-for-byte unchanged for build_tree_baseline + the IR.
-export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, start = DEFAULT_START, beSnap = BE_SNAP_PROFIT, entryFilter = null, entrySort = null, regimeGate = null, entryRankFn = null, maxGross = MAX_GROSS } = {}) {
+export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, start = DEFAULT_START, beSnap = BE_SNAP_PROFIT, entryFilter = null, entrySort = null, regimeGate = null, entryRankFn = null, maxGross = MAX_GROSS, marginFinancing = true } = {}) {
   const NAV0 = nav0;
   const positions = {};
-  let realized = 0, realizedGross = 0, totalComm = 0, totalSlip = 0;
+  let realized = 0, realizedGross = 0, totalComm = 0, totalSlip = 0, totalMarginInterest = 0;
+  let prevDate = null;   // for calendar-day margin accrual
   let capSkipped = 0;   // eligible breakouts skipped because the 2× gross cap was already full (diagnostic)
   let advBind = 0;      // entries whose full %-NAV size was truncated by the 2%-ADV cap (capacity diagnostic)
   let sumUtil = 0, nUtilDays = 0;   // gross/NAV utilization, averaged across trading days (capacity diagnostic)
@@ -134,7 +140,13 @@ export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, 
       if (pos.stop != null && bar.l <= pos.stop) closePos(t, Math.min(pos.stop, bar.o), date, 'STOP');
     }
     const mark = {}; for (const t of Object.keys(positions)) { const i = T[t].idxByDate[date]; if (i != null) mark[t] = T[t].bars[i].c; }
-    const curEq = equityAt(mark);
+    // SIZING / CAP ADMISSION uses PRIOR-close marks, not today's close (2026-07-06 audit).
+    // At the moment of an intraday breakout fill, today's closes are NOT known — sizing and
+    // the 2× cap must be computed from information available at that point. `mark` (today's
+    // close) is still used for the reported equity curve below. markPrev = each open
+    // position's prior bar close (its fill price on the day it was opened).
+    const markPrev = {}; for (const t of Object.keys(positions)) { const i = T[t].idxByDate[date]; if (i == null) continue; markPrev[t] = (i > 0 ? T[t].bars[i - 1].c : positions[t].fill); }
+    const curEq = equityAt(markPrev);
     // Gather today's eligible breakouts (new 42wk high, valid stop, full size ≥ 1 share), then take
     // them in `entrySort` order until the 2× gross cap is full. When the cap binds (more breakouts
     // than capital, the common case here), WHICH names get the scarce capital drives the result —
@@ -169,10 +181,13 @@ export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, 
     if (entryRankFn) cands = entryRankFn(cands);   // set-level ranking (blend multiple signals)
     else if (entrySort) cands.sort(entrySort);     // pairwise rank (e.g. CLOSEST_TO_TRIGGER)
     for (const c of cands) {
-      if (grossAt(mark) + c.sh * c.fill > maxGross * curEq) { capSkipped++; continue; }
+      // Cap admission also on prior-close marks (grossAt(markPrev)) — held positions'
+      // exposure at prior close + this fill vs the prior-close equity; both known at fill.
+      if (grossAt(markPrev) + c.sh * c.fill > maxGross * curEq) { capSkipped++; continue; }
       const comm = calcCommission(c.sh, c.fill), slip = calcSlippage(c.sh, c.fill);
       totalComm += comm; totalSlip += slip; realized -= comm + slip;
       positions[c.t] = { sh: c.sh, fill: c.fill, stop: c.stop, entryDate: date };
+      markPrev[c.t] = c.fill;   // a name opened today is marked at its fill for the rest of this tick's cap checks
     }
     // breakeven snap (forward-only: set at the close, governs from the next bar). One stop:
     // pos.stop is floored at breakeven; the 2-week-low trail still ratchets it up later via max().
@@ -186,6 +201,21 @@ export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, 
         if (pos.stop == null || be > pos.stop) pos.stop = be;         // raise-only
       }
     }
+    // MARGIN FINANCING: interest on the borrowed (debit) balance = max(0, gross − equity),
+    // accrued over the CALENDAR days since the prior bar (weekend/holiday financing counts).
+    // Deducted from NET realized so the equity curve, drawdown and closed-trade NET all
+    // reflect the true cost of the 2× leverage (2026-07-06 audit).
+    if (marginFinancing && prevDate) {
+      const grossNow = grossAt(mark), eqNow = equityAt(mark);
+      const borrowed = Math.max(0, grossNow - eqNow);
+      const days = calendarDayGap(prevDate, date);
+      const interest = calcMarginInterest(borrowed, date, days);
+      // NET only — gross stays "price P&L before ALL costs" (same as commission/slippage,
+      // which reduce `realized` but never `realizedGross`), so risk metrics on the gross
+      // stream are unaffected and only the investor-facing NET carries the financing drag.
+      if (interest > 0) { realized -= interest; totalMarginInterest += interest; }
+    }
+    prevDate = date;
     if (date >= start) { sumUtil += grossAt(mark) / Math.max(1, equityAt(mark)); nUtilDays++; }   // gross/NAV utilization (capacity diagnostic)
     const eq = equityAt(mark); equity.push({ date, eq });
     if (eq > peak) peak = eq;
@@ -198,7 +228,7 @@ export function simulateTree({ T, allDates, spyAt, lastDate }, { nav0 = 100000, 
   }
   for (const t of Object.keys(positions)) { const i = T[t].idxByDate[lastDate]; closePos(t, i != null ? T[t].bars[i].c : positions[t].fill, lastDate, 'OPEN_AT_END'); }
 
-  return { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip, NAV0, lastDate, capSkipped, advBind, grossUtilAvg: nUtilDays ? sumUtil / nUtilDays : 0 };
+  return { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip, totalMarginInterest, NAV0, lastDate, capSkipped, advBind, grossUtilAvg: nUtilDays ? sumUtil / nUtilDays : 0 };
 }
 
 // Scarce-capital entry priority — matches the live engine (pnthrTreeEngine.js, commit 9fe798c): the

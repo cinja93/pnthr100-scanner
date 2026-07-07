@@ -32,8 +32,9 @@ const db = await connectToDatabase();
 // Load candles + run the shared LOCKED simulation (identical engine to the live dashboard + the IR).
 const data = await loadTreeData(db, { end: END, universe: UNIVERSE, lookback: LOOKBACK });
 const { spyAt, lastDate } = data;
-const sim = simulateTree(data, { nav0: NAV0, start: START, beSnap: BE_SNAP, entrySort: MOST_LIQUID });   // most-liquid buy priority = live engine since 2026-06-30
-const { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip } = sim;
+const MARGIN_FINANCING = process.env.MARGIN !== '0';   // MARGIN=0 → disable margin interest (isolation/comparison only; default ON)
+const sim = simulateTree(data, { nav0: NAV0, start: START, beSnap: BE_SNAP, entrySort: MOST_LIQUID, marginFinancing: MARGIN_FINANCING });   // most-liquid buy priority = live engine since 2026-06-30
+const { equity, equityGross, closed, maxDDfrac, maxDDdollar, maxDDfracG, maxDDdollarG, totalComm, totalSlip, totalMarginInterest } = sim;
 
 // ── metrics — computed identically for NET (after costs) and GROSS (before costs) ───
 // Same trades either way; gross just adds the commission+slippage back. pnlField selects
@@ -133,7 +134,7 @@ const inputFingerprint = await computeInputHash(db);   // stamp the exact inputs
 const out = {
   generatedFrom: 'build_tree_baseline.mjs',
   strategy: `AI-300 · LONG-only · new intraday 42wk high (210d) · daily-10 stop · 2% risk / 10% cap · 2× gross cap · MOST-LIQUID buy priority (20-day share volume) · breakeven snap (+$${BE_SNAP} & green)`,
-  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED, and the 2023-2026 window is a BULL market only (the AI-300 has no bear-market history). Scarce-capital entry priority = most-liquid (deterministic, order-invariant; robustness-validated in-sample + out-of-sample), matching the live engine. Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
+  disclosure: 'Hypothetical. Universe = current AI-300 members → SURVIVORSHIP-FLATTERED, and the 2023-2026 window is a BULL market only (the AI-300 has no bear-market history). Scarce-capital entry priority = most-liquid (deterministic, order-invariant; robustness-validated in-sample + out-of-sample), matching the live engine. Costs modeled: commission + slippage every leg, AND margin financing on the borrowed balance of the 2× leverage (dated IBKR-approx rate ~5.5-6.5%/yr) — so NET reflects the true cost of the leverage. Sizing + 2× cap admission use PRIOR-close marks (executable — today\'s close is unknown at an intraday fill). Breakeven snap modeled on a green-DAY proxy for the live green-HOUR rule (approximate). Backtest FROZEN at go-live (2026-06-11); live track record begins 2026-06-12. Not a track record.',
   version: `tree-${lastDate}`,
   backtestStart: equity[0].date,        // first session traded (frozen)
   backtestEnd: lastDate,                // last session before go-live (frozen at 2026-06-11)
@@ -147,7 +148,7 @@ const out = {
   metrics,                     // NET (dashboard headline)
   metricsGross: grossMetrics,  // GROSS (before commission + slippage) — frontend renders a 2nd row when present
   metricsNetFees,              // NET after PPM fund fees (Filet $100K) — the true investor net (matches the IR)
-  costs: { commission: Math.round(totalComm), slippage: Math.round(totalSlip) },
+  costs: { commission: Math.round(totalComm), slippage: Math.round(totalSlip), marginInterest: Math.round(totalMarginInterest || 0) },
   factors,
 };
 const outPath = new URL('../data/treeProjectionBaseline.json', import.meta.url).pathname;

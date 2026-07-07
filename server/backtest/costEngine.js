@@ -156,6 +156,38 @@ export function calcBorrowCost(shares, entryPrice, tradingDays, sector) {
   return parseFloat(cost.toFixed(2));
 }
 
+// ── 3b. Margin financing (2026-07-06 audit) ────────────────────────────────────
+// The Tree strategy runs up to 2× gross (MAX_GROSS), so up to ~1× NAV is BORROWED
+// from the broker on margin. The old cost model charged commission, slippage, and
+// SHORT borrow, but ZERO interest on the LONG margin balance — so the backtest NET
+// overstated what a live 2× account keeps (IBKR charges ~5.5-6.5% on debit balances
+// over this window), and live will structurally trail the backtest forever.
+//
+// Dated annualized margin rate (IBKR Pro blended, benchmark + tier spread — an
+// approximation, not a per-day pull). Deliberately a touch conservative so NET is
+// not flattered. Keyed by year; the newest bracket applies to later dates.
+const MARGIN_RATE_BY_YEAR = {
+  2022: 0.045,   // Fed hiking through the year, blended
+  2023: 0.065,   // peak-rate environment
+  2024: 0.065,
+  2025: 0.058,   // cuts begin
+  2026: 0.055,
+};
+const DEFAULT_MARGIN_RATE = 0.06;
+
+// Annualized margin rate for a given ISO date (YYYY-MM-DD).
+export function getMarginRate(dateStr) {
+  const y = parseInt(String(dateStr).slice(0, 4), 10);
+  return MARGIN_RATE_BY_YEAR[y] ?? DEFAULT_MARGIN_RATE;
+}
+
+// Interest on a borrowed (debit) balance over a span of CALENDAR days (interest
+// accrues over weekends/holidays too, so pass the real calendar-day gap between bars).
+export function calcMarginInterest(borrowedDollars, dateStr, calendarDays) {
+  if (!(borrowedDollars > 0) || !(calendarDays > 0)) return 0;
+  return borrowedDollars * getMarginRate(dateStr) * (calendarDays / 365);
+}
+
 // ── 4. Full Trade Cost Bundle ─────────────────────────────────────────────────
 //
 // Applies all three cost components to a single closed trade.

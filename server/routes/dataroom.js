@@ -13,6 +13,48 @@ const COLLECTION = 'dataroom_documents';
 const DEFAULT_SECTION = 'PNTHR Funds, Carnivore Quant LP Fund Documents';
 const SEED_SECTIONS = [DEFAULT_SECTION, 'Supporting PNTHR Documents'];
 
+// ── Document entitlement (2026-07-06 audit, critical #8 — member IDOR) ────────
+// Old behavior: the per-investor allowedDocIds gate ran ONLY for investor-role
+// tokens, so a plain MEMBER token skipped it and could view/list EVERY document —
+// including confidential per-investor LP docs (subscriptions, K-1s) assigned to
+// investors they have no relationship with.
+//
+// Model: a document is RESTRICTED if it appears in ANY investor's allowedDocIds
+// (i.e. it was explicitly assigned to specific investors). A GENERAL document is
+// in nobody's list. Visibility, for the SAME id, is then:
+//   • admin              → everything
+//   • investor with a list → exactly their allowedDocIds (unchanged)
+//   • everyone else (member, or investor with an empty/missing list)
+//                        → all GENERAL docs, plus any RESTRICTED doc explicitly
+//                          assigned to THEM; never another party's restricted docs.
+// This closes the leak while preserving general-document access for members.
+export async function buildDocGate(db, user) {
+  const isAdmin = user?.role === 'admin';
+  if (isAdmin) return { isAdmin: true, canSee: () => true };
+
+  // The set of doc ids that are restricted to specific investors (union of all lists).
+  const restricted = new Set();
+  const cursor = db.collection('den_investors').find({ allowedDocIds: { $exists: true, $ne: [] } }, { projection: { allowedDocIds: 1 } });
+  for await (const inv of cursor) for (const id of (inv.allowedDocIds || [])) restricted.add(id.toString());
+
+  // This user's own explicit allow-list (if they are an investor).
+  const own = new Set();
+  const isInvestor = user?.source === 'den_investors' || user?.role === 'investor';
+  let hasOwnList = false;
+  if (isInvestor && user?.userId) {
+    let inv = null;
+    try { inv = await db.collection('den_investors').findOne({ _id: new ObjectId(user.userId) }, { projection: { allowedDocIds: 1 } }); } catch { /* bad id */ }
+    if (inv?.allowedDocIds?.length) { hasOwnList = true; for (const id of inv.allowedDocIds) own.add(id.toString()); }
+  }
+
+  const canSee = (id) => {
+    const s = id.toString();
+    if (hasOwnList) return own.has(s);          // investor scoped to exactly their list
+    return !restricted.has(s) || own.has(s);    // member / unscoped: general docs + any assigned to them
+  };
+  return { isAdmin: false, canSee };
+}
+
 // GET /api/dataroom — list all documents (exclude raw data from listing)
 router.get('/', async (req, res) => {
   try {
@@ -24,20 +66,10 @@ router.get('/', async (req, res) => {
     // Backfill section for legacy docs
     let filled = docs.map(d => ({ ...d, section: d.section || DEFAULT_SECTION }));
 
-    // Per-investor document filtering: only return docs in their allowedDocIds
-    const isInvestor = req.user?.source === 'den_investors' || req.user?.role === 'investor';
-    if (isInvestor && req.user?.userId) {
-      const inv = await db.collection('den_investors').findOne(
-        { _id: new ObjectId(req.user.userId) },
-        { projection: { allowedDocIds: 1 } },
-      );
-      const allowed = inv?.allowedDocIds;
-      if (allowed && allowed.length > 0) {
-        const idSet = new Set(allowed.map(id => id.toString()));
-        filled = filled.filter(d => idSet.has(d._id.toString()));
-      }
-      // If allowedDocIds is empty/missing, investor sees all docs (legacy/default)
-    }
+    // Entitlement filter — applies to EVERY non-admin principal (members included),
+    // so a member can no longer enumerate other investors' restricted documents.
+    const gate = await buildDocGate(db, req.user);
+    if (!gate.isAdmin) filled = filled.filter(d => gate.canSee(d._id));
 
     res.json(filled);
   } catch (err) {
@@ -170,19 +202,11 @@ router.get('/:id/view', async (req, res) => {
     const doc = await db.collection(COLLECTION).findOne({ _id: new ObjectId(req.params.id) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-    // Per-investor document access check
-    const investorCheck = isInvestor || user?.role === 'investor';
-    if (investorCheck && user?.userId) {
-      const inv = await db.collection('den_investors').findOne(
-        { _id: new ObjectId(user.userId) },
-        { projection: { allowedDocIds: 1 } },
-      );
-      const allowed = inv?.allowedDocIds;
-      if (allowed && allowed.length > 0) {
-        const idSet = new Set(allowed.map(id => id.toString()));
-        if (!idSet.has(req.params.id)) return res.status(403).json({ error: 'Access denied' });
-      }
-    }
+    // Entitlement check — enforced for ALL non-admin principals (members too), not
+    // just investor-role tokens. Closes the IDOR where a member could view any
+    // investor's restricted document by id (2026-07-06 audit).
+    const gate = await buildDocGate(db, { ...user, role: user?.role || resolveRole(user?.email) });
+    if (!gate.isAdmin && !gate.canSee(req.params.id)) return res.status(403).json({ error: 'Access denied' });
 
     // Log view for investors and track in event log (non-blocking)
     const investorDetected = isInvestor || user?.role === 'investor' || user?.isInvestor;

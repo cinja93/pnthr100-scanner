@@ -469,16 +469,24 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
     if (String(e.side || '').toUpperCase() !== 'SLD') continue;           // sells only
     const t = (e.symbol || '').toUpperCase();
     if (!AI_META[t] || excl.has(t)) continue;                             // Tree-managed names only
-    if (e.time && !String(e.time).replace(/[^0-9]/g, '').startsWith(ymd)) continue;  // today's fills only (feed can carry a prior session)
+    // Capture EVERY sell in the feed window (idempotent by execId), not just today's — a
+    // liquidation that filled while the engine mode was off/toggling must not be lost when
+    // the feed rolls to the next day (the 2026-06-23 $0-P&L / NAV-corruption root cause).
     const ctx = lastHeld[t] || curHeld[t] || {};
     const exitPrice = +e.price || 0, sharesSold = +e.shares || 0;
-    const stop = ctx.stop ?? null, avgCost = ctx.avgCost ?? null;
+    const stop = ctx.stop ?? null;
+    // avgCost: prefer live context; else derive from the recorded BOT fills for this name
+    // in the fill ledger, so a sell whose position context is gone still books real P&L
+    // instead of null (the corruption fixed here).
+    let avgCost = ctx.avgCost ?? null;
+    if (!(avgCost > 0)) avgCost = await avgCostFromFills(db, t);
     const stopHit = (stop > 0 && exitPrice > 0) ? exitPrice <= stop * 1.01 : null;   // at/below the stop (1% slack for gaps)
     const r = await db.collection(EXITS).updateOne(
       { execId: e.execId },
       { $setOnInsert: {
           execId: e.execId, ticker: t, exitPrice, shares: sharesSold, avgCost, stop, stopHit,
-          pnl: (avgCost != null && exitPrice > 0) ? +((exitPrice - avgCost) * sharesSold).toFixed(0) : null,
+          pnl: (avgCost != null && avgCost > 0 && exitPrice > 0) ? +((exitPrice - avgCost) * sharesSold).toFixed(0) : null,
+          pnlSource: (ctx.avgCost > 0) ? 'live_context' : (avgCost > 0 ? 'fill_ledger' : 'unknown'),
           company: AI_META[t]?.name || null, sector: AI_META[t]?.sector || null,
           mode: cfg.mode, execTime: e.time || null, recordedAt: new Date(),
         } },
@@ -502,25 +510,47 @@ async function captureTreeStopOuts(db, cfg, snap, lows, excl) {
 // fast 3-day flurry before this can't be reconstructed and is intentionally not backfilled).
 const FILLS = 'pnthr_tree_fills';
 async function captureTreeFills(db, cfg, snap) {
-  const ymd = etDateStr().replaceAll('-', '');
   let n = 0;
   for (const e of (snap.latestExecutions || [])) {
     const side = String(e.side || '').toUpperCase();                       // BOT (buy) | SLD (sell)
     if (side !== 'BOT' && side !== 'SLD') continue;
     const t = (e.symbol || '').toUpperCase();
     if (!AI_META[t]) continue;                                             // Tree universe (AI-300) only — what the strategy also trades
-    if (e.time && !String(e.time).replace(/[^0-9]/g, '').startsWith(ymd)) continue;   // today's fills only (feed can carry a prior session)
+    // Capture EVERY fill in the feed window (idempotent by execId), not just today's — the
+    // ledger must survive a day where the writer/mode was off, or the scorecard + realized
+    // P&L develop permanent holes (2026-06-23 corruption class).
+    const execDate = e.time ? `${String(e.time).slice(0, 4)}-${String(e.time).slice(4, 6)}-${String(e.time).slice(6, 8)}` : etDateStr();
     const r = await db.collection(FILLS).updateOne(
       { execId: e.execId },
       { $setOnInsert: {
           execId: e.execId, ticker: t, side, price: +e.price || 0, shares: Math.abs(+e.shares || 0),
-          date: etDateStr(), execTime: e.time || null, mode: cfg.mode, recordedAt: new Date(),
+          date: execDate, execTime: e.time || null, mode: cfg.mode, recordedAt: new Date(),
         } },
       { upsert: true },
     );
     if (r.upsertedCount) n++;
   }
   return n;
+}
+
+// Derive an average entry cost for a ticker from the recorded BOT fills that are still
+// "open" (net of prior SLD shares) — the fallback when the live position context is gone
+// (mode was off during a liquidation). Share-weighted over the most recent open buys.
+async function avgCostFromFills(db, ticker) {
+  const fills = await db.collection(FILLS).find({ ticker, side: { $in: ['BOT', 'SLD'] } })
+    .sort({ execTime: 1, recordedAt: 1 }).toArray().catch(() => []);
+  if (!fills.length) return null;
+  let openShares = 0, buys = [];
+  for (const f of fills) {
+    if (f.side === 'BOT') { buys.push({ shares: +f.shares || 0, price: +f.price || 0 }); openShares += +f.shares || 0; }
+    else {   // SLD reduces the oldest open buys (FIFO)
+      let sell = +f.shares || 0; openShares = Math.max(0, openShares - sell);
+      while (sell > 0 && buys.length) { const b = buys[0]; const take = Math.min(sell, b.shares); b.shares -= take; sell -= take; if (b.shares <= 0) buys.shift(); }
+    }
+  }
+  const totSh = buys.reduce((s, b) => s + b.shares, 0);
+  if (totSh <= 0) return null;
+  return +(buys.reduce((s, b) => s + b.shares * b.price, 0) / totSh).toFixed(4);
 }
 
 // ── ATTACK trigger-time ledger ───────────────────────────────────────────────
@@ -636,8 +666,30 @@ async function fetchDailyBarsFMP(ticker) {
 // ── Engine tick — paper records / live places orders on new 42wk highs ───────
 export async function runPnthrTreeTick(db) {
   const cfg = await getPnthrTreeConfig(db);
-  if (!cfg.mode || cfg.mode === 'off') return { mode: 'off', actions: [] };
-  const nav = await getNav(db);
+  // LEDGER CAPTURE RUNS IN EVERY MODE — including 'off'. It only READS your real IBKR
+  // execution feed (idempotent by execId, enqueues nothing), and it is exactly what was
+  // missing on 2026-06-23: with the capture behind the mode gate, a liquidation that filled
+  // while mode was off/toggling was never recorded and P&L booked $0/null, corrupting NAV.
+  // Now the fills/exits ledger is maintained regardless of mode, so it can never lose a fill.
+  if (!cfg.mode || cfg.mode === 'off') {
+    const snap = (await db.collection('pnthr_ibkr_positions').find({}).sort({ syncedAt: -1 }).limit(1).toArray())[0] || {};
+    const off = [];
+    try { const n = await captureTreeStopOuts(db, cfg, snap, {}, await engineExclusions(db)); if (n) off.push({ type: 'STOP_OUTS_RECORDED', count: n }); }
+    catch (e) { console.error('[Tree] off-mode stop-out capture failed:', e.message); }
+    try { const n = await captureTreeFills(db, cfg, snap); if (n) off.push({ type: 'FILLS_RECORDED', count: n }); }
+    catch (e) { console.error('[Tree] off-mode fill capture failed:', e.message); }
+    return { mode: 'off', actions: off };
+  }
+  const navInfo = await getNavInfo(db);
+  const nav = navInfo.nav;
+  // Fail loud on an UNTRUSTED default NAV: sizing real orders (and the 2× cap) off the
+  // hardcoded $80,200 default is the other half of the 2026-07-02 corruption. Skip the
+  // tick and surface it rather than trade on a fabricated NAV.
+  if (!navInfo.trusted) {
+    await db.collection(CFG).updateOne({}, { $set: { lastTick: new Date(), lastActions: [{ type: 'NAV_UNTRUSTED_SKIP', source: navInfo.source }] } }, { upsert: true });
+    console.error('[Tree] NAV source untrusted (default) — tick skipped to avoid sizing on a fabricated NAV');
+    return { mode: cfg.mode, actions: [{ type: 'NAV_UNTRUSTED_SKIP', source: navInfo.source }] };
+  }
   const excl = await engineExclusions(db);
   const noBuyback = await getNoBuybackSet(db);
   await ensureMirrorMigration(db, cfg, excl);   // one-time: switch to the live-mirror model

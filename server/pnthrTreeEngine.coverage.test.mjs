@@ -1,6 +1,6 @@
 // Unit tests for the naked-position stop-coverage math (run: node pnthrTreeEngine.coverage.test.mjs).
 // Pure functions only, no DB. Proves the 2-week-low stop + safety gate before it places real stops.
-import { tenDayLowStop, coverageStopDecision } from './pnthrTreeEngine.js';
+import { tenDayLowStop, coverageStopDecision, coverageScope } from './pnthrTreeEngine.js';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -26,6 +26,16 @@ eq('skip when stop >= price (would sell out instantly)', coverageStopDecision({ 
 eq('skip when no price', coverageStopDecision({ stop: 10, lastPrice: 0, lastClose: 12 }).place, false);
 eq('skip when price split-suspect vs last close (>50%)', coverageStopDecision({ stop: 10, lastPrice: 13, lastClose: 50 }).place, false);
 eq('place when price within sane band of last close', coverageStopDecision({ stop: 10, lastPrice: 13, lastClose: 12 }).place, true);
+
+// ── coverageScope (which naked longs fall to the coverage path) ──
+eq('in-scope WITH band → trail loop covers it, coverage skips',
+  coverageScope({ inUniverse: true, excluded: false, hasBand: true }), { cover: false, nakedNoBands: false });
+eq('in-scope with NO band → coverage takes it AND flags NAKED_NO_BANDS (the 2026-07-06 audit hole)',
+  coverageScope({ inUniverse: true, excluded: false, hasBand: false }), { cover: true, nakedNoBands: true });
+eq('excluded in-scope name (split re-sync pending) → coverage as designed',
+  coverageScope({ inUniverse: true, excluded: true, hasBand: false }), { cover: true, nakedNoBands: false });
+eq('off-universe name (GLD) → coverage as designed',
+  coverageScope({ inUniverse: false, excluded: false, hasBand: false }), { cover: true, nakedNoBands: false });
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

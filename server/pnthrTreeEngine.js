@@ -573,6 +573,19 @@ export function tenDayLowStop(bars, todayStr) {
   return { ok: true, barCount: clean.length, low, lastClose: +clean[clean.length - 1].close, stop: +(low - 0.01).toFixed(2) };
 }
 
+// ── PURE: does a naked long fall to the COVERAGE path, and is it a band gap? ─
+// The trail loop manages an in-scope (AI-300, non-excluded) long ONLY when priorBands
+// produced a 2-week-low band for it. With no band (candle doc missing/empty) the trail
+// loop silently skips it, so coverage MUST take it — flagged nakedNoBands so the gap in
+// the candle store is surfaced, not just silently patched. (2026-07-06 audit, critical #1.)
+export function coverageScope({ inUniverse, excluded, hasBand }) {
+  if (inUniverse && !excluded) {
+    return hasBand ? { cover: false, nakedNoBands: false }   // trail loop really covers it
+                   : { cover: true,  nakedNoBands: true };   // bandless in-scope → cover + surface
+  }
+  return { cover: true, nakedNoBands: false };               // off-universe / excluded → coverage as designed
+}
+
 // ── PURE: should we auto-place this coverage stop? ───────────────────────────
 // Gates so we NEVER place a dangerous stop on untrusted data — the safety the engine-exclusion
 // gave us, kept as a per-stop check instead of a blanket skip. The stop must be a real number
@@ -901,7 +914,14 @@ export async function runPnthrTreeTick(db) {
       for (const p of (snap.positions || [])) {
         const t = (p.ticker || p.symbol || '').toUpperCase(); const sh = p.position ?? p.shares;
         if (!(sh > 0) || haveStop.has(t)) continue;                 // not a naked long
-        if (AI_META[t] && !excl.has(t)) continue;                   // in-scope name → already covered by the trail loop above
+        // In-scope names are covered by the trail loop above ONLY when it has a 2-week-low band
+        // for them. A held AI-300 name with NO stored bands (candle doc missing/empty — e.g. a
+        // new universe member bought before its backfill landed, or a wiped doc) silently falls
+        // out of the trail loop (target=0 → continue) — so it MUST fall through to this coverage
+        // path, which re-derives the stop from the candle store or a fresh FMP pull and gates it.
+        const scope = coverageScope({ inUniverse: !!AI_META[t], excluded: excl.has(t), hasBand: lows[t] > 0 });
+        if (!scope.cover) continue;
+        if (scope.nakedNoBands) actions.push({ type: 'NAKED_NO_BANDS', ticker: t });
         if ((pendingStop[t] || 0) > 0) { actions.push({ type: 'COVERAGE_INFLIGHT_SKIP', ticker: t }); continue; }
         // 2-week low: AI candle store first (covers excluded in-universe names like SPCX, which
         // priorBands skips), else a fresh FMP pull (non-universe names like GLD).

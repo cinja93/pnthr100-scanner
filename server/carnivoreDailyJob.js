@@ -27,7 +27,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { connectToDatabase } from './database.js';
-import { fetchHistorical, normalizeBar, aggregateToWeekly } from './aiUniverseDailyJob.js';
+import {
+  fetchHistorical, normalizeBar, aggregateToWeekly,
+  lastCompleteTradingDate, isoMinusDays, mergeBarsWithRepair, detectScaleMismatch, OVERLAP_DAYS,
+} from './aiUniverseDailyJob.js';
 import { fetchFMP } from './stockService.js';
 
 const HISTORY_START = '2018-12-31';   // earliest 679 candle anchor
@@ -36,12 +39,6 @@ const FMP_API_KEY = process.env.FMP_API_KEY;
 const BATCH_DELAY = 250;   // ms between tickers — same FMP-courtesy pacing as the AI job
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function todayISO() { return new Date().toISOString().split('T')[0]; }
-function nextDayISO(iso) {
-  const d = new Date(iso + 'T12:00:00Z');
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().split('T')[0];
-}
 // Robust last-stored date: prefer the toDate field, else the max date in the
 // daily array (17 legacy docs in this collection have no toDate field).
 function lastStoredDate(doc) {
@@ -68,9 +65,10 @@ export async function runCarnivoreDailyUpdate() {
 
   // Refresh whatever was seeded (the chart's FMP fallback covers anything absent).
   const tickers = await dailyCol.distinct('ticker');
-  const today   = todayISO();
+  // Closed bars only + overlap repair — same discipline as the AI job (2026-07-06 audit).
+  const safeEnd = lastCompleteTradingDate();
 
-  console.log(`[Carnivore Daily] starting — ${tickers.length} tickers, target date ${today}`);
+  console.log(`[Carnivore Daily] starting — ${tickers.length} tickers, target date ${safeEnd} (last complete session)`);
   const startTime = Date.now();
 
   let appended = 0, alreadyCurrent = 0, missing = 0, failed = 0, weeklyRebuilt = 0, suspect = 0;
@@ -82,41 +80,36 @@ export async function runCarnivoreDailyUpdate() {
       const existing   = await dailyCol.findOne({ ticker }, { projection: { daily: 1, toDate: 1 } });
       const lastStored = lastStoredDate(existing);
 
-      if (lastStored && lastStored >= today) { alreadyCurrent++; continue; }
+      if (lastStored && lastStored >= safeEnd) { alreadyCurrent++; continue; }
 
-      const fromDate = lastStored ? nextDayISO(lastStored) : '2018-12-31';
-      const rawBars  = await fetchHistorical(ticker, fromDate, today);
+      const fromDate = lastStored ? isoMinusDays(lastStored, OVERLAP_DAYS) : '2018-12-31';
+      const rawBars  = await fetchHistorical(ticker, fromDate, safeEnd);
 
       if (!rawBars || rawBars.length === 0) { missing++; await sleep(BATCH_DELAY); continue; }
 
-      const existingDates = new Set((existing?.daily || []).map(b => b.date));
-      const cleanNew = rawBars
+      const fresh = rawBars
         .map(normalizeBar)
-        .filter(b => b.date && !existingDates.has(b.date) && b.close > 0 && b.high >= b.low && b.high > 0);
-
-      if (cleanNew.length === 0) { alreadyCurrent++; await sleep(BATCH_DELAY); continue; }
+        .filter(b => b.date && b.date <= safeEnd && b.close > 0 && b.high >= b.low && b.high > 0);
 
       // SPLIT/DATA GUARD: never stitch a different price scale onto the stored
       // series (post-split bars onto pre-split history would poison the chart +
       // every consumer). Flag for re-sync and skip — the re-sync swaps the whole
       // series wholesale once FMP's history is split-adjusted. Same guard the AI job uses.
-      const lastStoredBar = (existing?.daily || []).reduce((m, b) => (!m || b.date > m.date ? b : m), null);
-      if (lastStoredBar?.close > 0) {
-        const oldestNew = cleanNew.reduce((m, b) => (!m || b.date < m.date ? b : m), null);
-        const r = oldestNew.close / lastStoredBar.close;
-        if (r < 0.6 || r > 1.67) {
-          suspect++; suspectTickers.push(ticker);
-          console.warn(`[Carnivore Daily] ${ticker}: new bar ${oldestNew.date} $${oldestNew.close} vs stored ${lastStoredBar.date} $${lastStoredBar.close} — scale mismatch, append blocked (needs split re-sync)`);
-          try {
-            const { flagSuspectSplit } = await import('./splitMaintenanceService.js');
-            await flagSuspectSplit(db, ticker, `Carnivore daily append blocked: new $${oldestNew.close} vs stored $${lastStoredBar.close}`);
-          } catch { /* flag is best-effort */ }
-          await sleep(BATCH_DELAY);
-          continue;
-        }
+      const mismatch = detectScaleMismatch(existing?.daily, fresh);
+      if (mismatch) {
+        suspect++; suspectTickers.push(ticker);
+        console.warn(`[Carnivore Daily] ${ticker}: ${mismatch} — scale mismatch, append blocked (needs split re-sync)`);
+        try {
+          const { flagSuspectSplit } = await import('./splitMaintenanceService.js');
+          await flagSuspectSplit(db, ticker, `Carnivore daily append blocked: ${mismatch}`);
+        } catch { /* flag is best-effort */ }
+        await sleep(BATCH_DELAY);
+        continue;
       }
 
-      const merged    = [...cleanNew, ...(existing?.daily || [])].sort((a, b) => b.date.localeCompare(a.date));
+      const { merged, appendedCount, replacedCount } = mergeBarsWithRepair(existing?.daily, fresh);
+      if (!merged) { alreadyCurrent++; await sleep(BATCH_DELAY); continue; }
+      if (replacedCount) console.log(`[Carnivore Daily] ${ticker}: repaired ${replacedCount} stored bar(s) in the overlap window`);
       const sortedAsc = [...merged].sort((a, b) => a.date.localeCompare(b.date));
 
       await dailyCol.updateOne(
@@ -157,7 +150,7 @@ export async function runCarnivoreDailyUpdate() {
       }
 
       appended++;
-      totalBarsAdded += cleanNew.length;
+      totalBarsAdded += appendedCount + replacedCount;
     } catch (err) {
       failed++;
       console.error(`[Carnivore Daily] ${ticker}:`, err.message);
@@ -184,7 +177,7 @@ export async function runCarnivoreDailyUpdate() {
 // seam. Returns {ready,action,bars} or {ready:false,note}. Safe to re-run.
 export async function resyncCarnivoreSplit(db, ticker, opts = {}) {
   const t = (ticker || '').toUpperCase();
-  const today = todayISO();
+  const today = lastCompleteTradingDate();   // closed bars only — a re-sync run intraday must not swap in today's partial bar
   const dailyCol = db.collection('pnthr_bt_candles');
   const old = await dailyCol.findOne({ ticker: t });
   const fetchFrom = (old?.fromDate && old.fromDate < HISTORY_START) ? old.fromDate : HISTORY_START;

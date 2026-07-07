@@ -38,7 +38,7 @@
 import { connectToDatabase } from './database.js';
 import { fetchFMP } from './stockService.js';
 import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
-import { fetchHistorical, normalizeBar, aggregateToWeekly } from './aiUniverseDailyJob.js';
+import { fetchHistorical, normalizeBar, aggregateToWeekly, lastCompleteTradingDate } from './aiUniverseDailyJob.js';
 import { clearAiUniverseCache } from './aiUniverseService.js';
 import { clearAiStockChartCache } from './aiUniverseStockChartService.js';
 
@@ -136,7 +136,10 @@ export async function flagSuspectSplit(db, ticker, note) {
 //      close move < 50%) and roughly the old bar count.
 async function resyncTicker(db, split) {
   const t = split.ticker;
-  const today = etDateStr();
+  // Closed bars only (2026-07-06 audit): a re-sync running intraday must not swap in
+  // today's partial bar — the daily appender's overlap repair can't touch a doc whose
+  // toDate already reads today, so a partial bar here would sit until tomorrow.
+  const today = lastCompleteTradingDate();
 
   const old = await db.collection(DAILY_COLL).findOne({ ticker: t });
 

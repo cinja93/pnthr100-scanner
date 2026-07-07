@@ -650,11 +650,14 @@ class PNTHRBridge(EWrapper, EClient):
         orders"), but they stay UNTAGGED, so the tag-only sweep (cancel_pnthr_protective_stops)
         would leave them and stack a 2nd full-size stop on the next trail → over-sell/flip.
 
-        Rule, same `action` side only (so we never touch opposite-side pyramid lot triggers):
-          • PNTHR-tagged stop  -> cancel (ours; the new one replaces it).
-          • untagged + BOUND   -> cancel IFF it is NOT tighter than new_stop_price (an orphan
-                                  of ours, or a looser manual stop; the new stop supersedes it).
-          • untagged + TIGHTER -> KEEP (a genuine manual tighten — tightest-wins, never loosen).
+        Rule, same `action` side only (so we never touch opposite-side pyramid lot triggers) —
+        TIGHTEST-WINS applies to EVERY stop, tagged or not (2026-07-06 audit: a PNTHR-tagged
+        stop Scott manually TIGHTENED in TWS keeps the tag, and the old rule cancelled tagged
+        stops unconditionally — an in-flight MODIFY enqueued before the tighten became visible
+        would have swept his raise and loosened the stop):
+          • TIGHTER than new_stop_price -> KEEP exactly the tightest one (tightest-wins, never
+                                  loosen); the caller must then SKIP its place (keptTighter).
+          • not tighter + BOUND -> cancel (superseded; the new stop replaces it).
           • UNBOUND (orderId 0) -> KEEP + report (API can't cancel it; shouldn't occur under
                                   client 0, but never silently drop it).
         tighter = higher stop for a LONG exit (SELL), lower for a SHORT cover (BUY).
@@ -663,7 +666,7 @@ class PNTHRBridge(EWrapper, EClient):
             return {'ok': False, 'error': 'BRIDGE_DISCONNECTED'}
         ticker = ticker.upper()
         is_long = (action == 'SELL')
-        cancelled, failures, kept = [], [], []
+        stops = []
         for k, o in list(self.open_orders.items()):
             if o.get('symbol') != ticker:
                 continue
@@ -671,22 +674,35 @@ class PNTHRBridge(EWrapper, EClient):
                 continue
             if action and o.get('action') and o.get('action') != action:
                 continue  # opposite side (lot-trigger add) — not a protective stop
+            stops.append(o)
+        # The single tightest resting stop that beats the new level (if any) is the survivor.
+        def _tighter(price):
+            return (price is not None and new_stop_price is not None and
+                    (price > new_stop_price if is_long else price < new_stop_price))
+        survivor = None
+        for o in stops:
+            if not _tighter(o.get('stopPrice')):
+                continue
+            if survivor is None or (o.get('stopPrice') > survivor.get('stopPrice') if is_long
+                                    else o.get('stopPrice') < survivor.get('stopPrice')):
+                survivor = o
+        cancelled, failures, kept = [], [], []
+        for o in stops:
             ref   = (o.get('orderRef') or '').strip()
             oid   = o.get('orderId') or 0
             price = o.get('stopPrice')
-            if ref != self.PNTHR_ORDER_REF:
-                if not oid:
-                    kept.append({'permId': o.get('permId'), 'stopPrice': price, 'reason': 'UNBOUND_UNCANCELLABLE'})
-                    continue
-                tighter = (price is not None and new_stop_price is not None and
-                           (price > new_stop_price if is_long else price < new_stop_price))
-                if tighter:
-                    kept.append({'permId': o.get('permId'), 'stopPrice': price, 'reason': 'MANUAL_TIGHTER_KEPT'})
-                    continue
+            if survivor is not None and o.get('permId') == survivor.get('permId'):
+                kept.append({'permId': o.get('permId'), 'stopPrice': price,
+                             'reason': 'TIGHTER_KEPT_TAGGED' if ref == self.PNTHR_ORDER_REF else 'TIGHTER_KEPT_MANUAL'})
+                continue
+            if not oid:
+                kept.append({'permId': o.get('permId'), 'stopPrice': price, 'reason': 'UNBOUND_UNCANCELLABLE'})
+                continue
             res = self.cancel_order_by_perm_id(o['permId'])
             (cancelled if res['ok'] else failures).append(
                 {'permId': o['permId'], 'orderId': oid, 'stopPrice': price, 'ref': ref, 'result': res})
-        return {'ok': len(failures) == 0, 'cancelled': cancelled, 'failures': failures, 'kept': kept}
+        return {'ok': len(failures) == 0, 'cancelled': cancelled, 'failures': failures, 'kept': kept,
+                'keptTighter': survivor is not None}
 
     def sell_position(self, ticker, action, shares, order_type='MKT',
                       limit_price=None, tif='DAY', rth=True):
@@ -771,6 +787,20 @@ class PNTHRBridge(EWrapper, EClient):
         top of a restart orphan. A genuinely tighter MANUAL stop is still kept (tightest-wins).
         old_perm_id is advisory only."""
         cancel = self.cancel_superseded_protective_stops(ticker, action, new_stop_price)
+        # TIGHTEST-WINS: a resting stop TIGHTER than the requested level survived the sweep
+        # (a manual tighten in TWS — tagged or not — that raced this command). Placing the
+        # requested stop now would STACK a second full-size order on top of it (over-sell/
+        # flip risk) or effectively loosen protection. The position is protected by the
+        # tighter stop; this modify is superseded — report success and place nothing.
+        if cancel.get('keptTighter'):
+            print(f"[STOPS] {ticker}: resting stop tighter than requested {new_stop_price} — kept it, place skipped (tightest-wins)")
+            return {
+                'ok':           True,
+                'phase':        'SUPERSEDED_BY_TIGHTER',
+                'cancelResult': cancel,
+                'placeResult':  None,
+                'naked':        False,
+            }
         place = self.place_protective_stop(
             ticker, action, shares, new_stop_price,
             tif=tif, rth=rth, order_type=order_type, limit_price=limit_price,
@@ -916,7 +946,16 @@ def _outbox_post(path, body=None):
             },
             timeout=10,
         )
-        return r.status_code == 200
+        if r.status_code != 200:
+            return False
+        # The /executing endpoint is a compare-and-set lock: HTTP 200 with ok:false means
+        # ANOTHER bridge process already claimed this command. Treating any 200 as "lock
+        # acquired" is how two bridges would BOTH place the same live order (2026-07-06
+        # audit, critical #2). ok defaults True for endpoints that don't return it.
+        try:
+            return r.json().get('ok', True)
+        except Exception:
+            return True
     except Exception as e:
         print(f"[OUTBOX] ✗ POST {path} failed: {e}")
         return False
@@ -1187,7 +1226,14 @@ def _ambush_post(path, body=None):
             },
             timeout=10,
         )
-        return r.status_code == 200
+        if r.status_code != 200:
+            return False
+        # Same compare-and-set lock semantics as _outbox_post: ok:false on /executing means
+        # another bridge already owns this command — do NOT execute it (double-order guard).
+        try:
+            return r.json().get('ok', True)
+        except Exception:
+            return True
     except Exception as e:
         print(f"[AMBUSH] ✗ POST {path} failed: {e}")
         return False
@@ -1264,9 +1310,15 @@ def _execute_ambush_command(app, rate_limiter, cmd):
             if not stop_result.get('ok'):
                 print(f"[AMBUSH] ⚠ {ticker} entry OK but protective stop FAILED — position NAKED")
 
+        # stopFailed rides in the DONE payload so the server/engine can SEE a naked entry
+        # (2026-07-06 audit: this used to be only a console print on the bridge Mac). The
+        # engine's trail + naked-coverage loops self-heal it within a tick or two; this flag
+        # makes the incident visible in the outbox record instead of silent.
+        stop_failed = bool(stop_price) and not (stop_result or {}).get('ok')
         return True, {
             'entry': entry_result,
             'stop': stop_result,
+            'stopFailed': stop_failed,
             'command': command,
         }, None
 
@@ -1393,7 +1445,11 @@ def ambush_outbox_poller_loop(app, rate_limiter, stop_event):
                         else:
                             created_dt = created_at
                         age_sec = (datetime.now(timezone.utc) - created_dt).total_seconds()
-                        if age_sec > 300:  # 5 min stale guard for Ambush
+                        # 180s (was 300): must be MEANINGFULLY shorter than the engine's 5-min
+                        # in-flight dedup window minus fill→snapshot lag (~120s), or a command
+                        # executed at age 4:59 can fill AFTER the engine's dedup expires and a
+                        # second BUY_ENTRY slips through (2026-07-06 audit — the AMD shape).
+                        if age_sec > 180:  # stale guard for Ambush/Tree commands
                             _ambush_post(f"/api/admin/ambush-outbox/{cmd_id}/failed",
                                          body={'error': f'STALE:{int(age_sec)}s'})
                             print(f"[AMBUSH] ⏰ STALE {cmd['command']} {cmd.get('request', {}).get('ticker', '?')} — {int(age_sec)}s old")

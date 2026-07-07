@@ -50,6 +50,32 @@ export async function sendApprovalRequestEmail({ applicantName, applicantEmail, 
   });
 }
 
+// Generic operations alert (bridge down, stuck orders, failed closes). No-ops
+// when SMTP isn't configured — callers must ALSO surface the alert durably
+// (config banner / alert collection); email is best-effort notification only.
+export async function sendOpsAlertEmail({ subject, lines = [] }) {
+  const transporter = createTransport();
+  const to = [ADMIN_EMAIL, ...(process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim()).filter(Boolean)];
+  if (!transporter) {
+    console.warn(`[EMAIL] SMTP not configured — ops alert not emailed: ${subject}`);
+    return false;
+  }
+  await transporter.sendMail({
+    from: `"PNTHR Ops" <${SMTP_USER}>`,
+    to: [...new Set(to)].join(','),
+    subject: `[PNTHR ALERT] ${subject}`,
+    html: `
+      <div style="background:#0a0a0a;color:#fff;padding:30px;font-family:Arial;max-width:600px;">
+        <h1 style="color:#D4A017;margin:0 0 8px;">PNTHR FUNDS</h1>
+        <h2 style="color:#dc3545;margin:0 0 24px;">${subject}</h2>
+        ${lines.map(l => `<p style="margin:4px 0;">${l}</p>`).join('')}
+        <p style="color:#888;margin-top:24px;">${new Date().toISOString()}</p>
+      </div>
+    `,
+  });
+  return true;
+}
+
 export async function sendWelcomeEmail({ to, name }) {
   const transporter = createTransport();
   if (!transporter) {

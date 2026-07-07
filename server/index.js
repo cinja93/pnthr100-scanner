@@ -6664,6 +6664,22 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
   finally { pnthrTreeTickRunning = false; }
 }, { timezone: 'America/New_York' });
 
+// Bridge/outbox HEALTH ALARM (2026-07-06 audit) — every 2 min during market hours.
+// Detects a dead/zombied bridge (stale IBKR snapshot while the engine is on), promotes
+// EXECUTING>5min commands to STUCK server-side (the old promoter ran on the bridge itself —
+// the component whose death it was supposed to report), and alarms on FAILED streaks.
+// Surfaces via pnthr_tree_config.bridgeHealth (page banner), pnthr_ops_alerts (durable),
+// and a best-effort ops email. Observe-and-alarm only — never places/retries orders.
+cron.schedule('*/2 9-16 * * 1-5', async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;
+  try {
+    const db = await connectToDatabase();
+    const { runBridgeHealthCheck } = await import('./bridgeHealthMonitor.js');
+    const h = await runBridgeHealthCheck(db);
+    if (!h.ok) console.warn('[BridgeHealth] ' + h.problems.join(' | '));
+  } catch (err) { console.error('[BridgeHealth] check failed:', err.message); }
+}, { timezone: 'America/New_York' });
+
 // PNTHR Tree — hands-off (no-intervention) RECONSTRUCTION band refresh. Nightly at 8:00pm ET
 // (after the daily candle pipeline lands the completed session), recompute the hypothetical
 // 06-22→last-complete-session band from the LOCKED treeSim engine and store it for the

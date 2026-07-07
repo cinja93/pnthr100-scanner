@@ -12431,7 +12431,15 @@ setInterval(async () => {
     const etWeekday = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long' });
     const etHour = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }), 10);
     if (etWeekday === 'Friday' && etHour >= 16 && etHour <= 20) {
-      console.log('⏰ Friday scheduler: forcing fresh scan for auto-save...');
+      // Only FORCE a fresh 679-scan if this Friday's ranking hasn't been saved yet
+      // (2026-07-06 audit: this used to force up to 9 full scans every Friday evening).
+      // Once the auto-save lands, subsequent ticks skip — one scan, with retries only
+      // if the save is still missing.
+      const etDate = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const db = await connectToDatabase();
+      const already = db && await db.collection('rankings').findOne({ date: etDate }, { projection: { _id: 1 } });
+      if (already) return;   // this Friday already saved → no need to force another scan
+      console.log('⏰ Friday scheduler: no ranking saved yet for', etDate, '— forcing one fresh scan...');
       await getStocksCache(true);
     }
   } catch (err) {

@@ -117,9 +117,15 @@ export async function runDailySignalJob() {
   }
 
   // ── 6. Persist ───────────────────────────────────────────────────────────
-  await db.collection('pnthr_daily_signals').deleteMany({});
+  // Staged swap (2026-07-06 audit): insert this run under a runId, then delete the
+  // prior run — so a Pulse reader mid-write never sees an EMPTY collection (the old
+  // deleteMany-then-insertMany left a seconds-wide zero-signal window). If there are
+  // no docs this run, keep the prior data rather than blanking the page.
   if (docs.length > 0) {
+    const runId = runDate + ':' + Date.now();
+    for (const d of docs) d.runId = runId;
     await db.collection('pnthr_daily_signals').insertMany(docs);
+    await db.collection('pnthr_daily_signals').deleteMany({ runId: { $ne: runId } });
   }
 
   await db.collection('pnthr_daily_pulse_snapshot').updateOne(

@@ -168,15 +168,25 @@ export async function fetchQuotes(tickers) {
 //              intraday move, so a fresh breakout never registers (it stays "approaching").
 //   lows[t]  = min low of the prior ≤10 bars    → the 2-week trailing-stop reference.
 // Excluding today makes the live trigger identical to the backtest (prior-bars-only).
+// Trading decisions must never be computed off FROZEN candle data (an FMP symbol change,
+// a persistent 403, a missed backfill). If a name's newest stored bar is older than this
+// many CALENDAR days (~10 trading days), we DROP its bands — no entry, no stop trailing off
+// a stale 42wk-high / 10-day-low — and surface it so the freeze gets fixed. (2026-07-06 audit.)
+const STALE_DATA_DAYS = 14;
 export async function priorBands(db, tickers, excl) {
   const today = etDateStr();
-  const highs = {}, lows = {}, lastClose = {}, adv = {};
+  const staleCutoff = new Date(Date.parse(today) - STALE_DATA_DAYS * 86400000).toISOString().slice(0, 10);
+  const highs = {}, lows = {}, lastClose = {}, adv = {}, stale = [];
   const docs = await db.collection('pnthr_ai_bt_candles').find({ ticker: { $in: tickers } }).toArray();
   for (const d of docs) {
     if (excl?.has(d.ticker)) continue;   // manual-only (IPO seasoning / split re-sync pending) → no bands → no entry/manage
     const bars = (d.daily || []).filter(b => b.date < today && +b.high > 0 && +b.low > 0)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!bars.length) continue;
+    if (bars[bars.length - 1].date < staleCutoff) {   // candles froze → don't trade off them
+      stale.push({ ticker: d.ticker, lastBar: bars[bars.length - 1].date });
+      continue;
+    }
     const hi = bars.slice(-ENTRY_HIGH_LOOKBACK), lo = bars.slice(-STOP_LOOKBACK);
     // A real 42-week high needs the full ~42 weeks (210 bars) of history. Without this guard a fresh IPO
     // (e.g. QNT, ~6 bars) would set its "42wk high" to a few-days high and falsely
@@ -191,7 +201,7 @@ export async function priorBands(db, tickers, excl) {
     for (const b of av) { const v = +b.volume || 0; if (v > 0) { vol += v; n++; } }
     if (n) adv[d.ticker] = vol / n;
   }
-  return { highs, lows, lastClose, adv };
+  return { highs, lows, lastClose, adv, stale };
 }
 
 export function sizeFor(nav, price, stop) {
@@ -727,6 +737,10 @@ export async function runPnthrTreeTick(db) {
     actions.push({ type: 'DATA_SANITY_EXCLUDE', ticker: f.ticker, price: f.price, lastClose: f.lastClose });
     await flagSuspectSplit(db, f.ticker, `Tree tick: live $${f.price} vs stored close $${f.lastClose}`).catch(() => {});
   }
+  for (const s of (bands.stale || [])) {   // frozen candles → don't trade/trail off stale data
+    excl.set(s.ticker, `candles stale (last bar ${s.lastBar})`);
+    actions.push({ type: 'DATA_STALE_EXCLUDE', ticker: s.ticker, lastBar: s.lastBar });
+  }
   const { highs, lows, adv } = bands;
 
   // held set + current GROSS exposure (for the 2× leverage cap). Read your REAL account
@@ -880,7 +894,7 @@ export async function runPnthrTreeTick(db) {
     const greenHour = await fetchGreenHourMap([...new Set(active.map(p => p.ticker))]).catch(() => ({}));
     for (const p of active) {
       const q = quotes[p.ticker]; if (!q) continue;
-      const price = +q.price, dayLow = +q.dayLow || price;
+      const price = +q.price, dayLow = +q.dayLow || price, dayOpen = +q.open || +q.dayOpen || price;
       const sh = p.totalShares || p.shares || 0;
       const newStop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : p.stop;
       // Breakeven snap: ≥ $100 open profit AND last completed hour green → raise stop to avg cost.
@@ -900,7 +914,10 @@ export async function runPnthrTreeTick(db) {
       const armedToday = (raisedAboveLow ? todayStr : p.beArmedDate) === todayStr;
       const stopHit = armedToday ? (price <= trailed) : (dayLow <= trailed);
       if (stopHit) {
-        const exitPx = trailed;
+        // GAP-THROUGH (2026-07-06 audit): a non-armed stop that the day GAPPED past fills near
+        // the open, not at the stop — fill at min(stop, open) (matches treeSim). Armed forward-
+        // only stops exit at the current price, already the achievable level.
+        const exitPx = armedToday ? Math.min(trailed, price) : Math.min(trailed, dayOpen);
         const pnl = +((exitPx - p.avgCost) * p.totalShares).toFixed(2);
         await db.collection(POS).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitDate: new Date().toISOString().slice(0, 10), pnl, closedAt: new Date() } });
         await db.collection(TRADES).insertOne({ ticker: p.ticker, direction: 'LONG', entryPrice: p.entryPrice, exitPrice: exitPx, shares: p.totalShares, pnl, exitReason: 'STOP', mode: 'paper', entryDate: p.entryDate, exitDate: new Date().toISOString().slice(0, 10), createdAt: new Date() });

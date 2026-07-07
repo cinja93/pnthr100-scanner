@@ -232,7 +232,7 @@ export async function runPaperBookTick(db, ownerId) {
   const greenHour = await fetchGreenHourMap([...new Set(active.map(p => p.ticker))]).catch(() => ({}));
   for (const p of active) {
     const q = quotes[p.ticker]; if (!q) continue;
-    const price = +q.price, dayLow = +q.dayLow || price;
+    const price = +q.price, dayLow = +q.dayLow || price, dayOpen = +q.open || +q.dayOpen || price;
     const sh = p.totalShares || p.shares || 0;
     const newStop = lows[p.ticker] ? +(lows[p.ticker] - 0.01).toFixed(2) : p.stop;
     const openPnl = (price - p.avgCost) * sh;
@@ -247,7 +247,11 @@ export async function runPaperBookTick(db, ownerId) {
     const armedToday = (raisedAboveLow ? todayStr : p.beArmedDate) === todayStr;
     const stopHit = armedToday ? (price <= trailed) : (dayLow <= trailed);
     if (stopHit) {
-      const exitPx = trailed;
+      // GAP-THROUGH (2026-07-06 audit): if the day OPENED below the stop, the real fill is
+      // near the open, not the stop — fill at min(stop, open) for a long (matches treeSim).
+      // Only applies to a non-armed (intraday-touch) exit; an armed forward-only stop exits
+      // at the current price which is already the achievable level.
+      const exitPx = armedToday ? Math.min(trailed, price) : Math.min(trailed, dayOpen);
       const pnl = +((exitPx - p.avgCost) * sh).toFixed(2);
       await db.collection(cols.POS).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitDate: new Date().toISOString().slice(0, 10), pnl, closedAt: new Date() } });
       await db.collection(cols.TRADES).insertOne({ ticker: p.ticker, direction: 'LONG', entryPrice: p.entryPrice, exitPrice: exitPx, shares: sh, pnl, exitReason: 'STOP', mode: 'paper', entryDate: p.entryDate, exitDate: new Date().toISOString().slice(0, 10), createdAt: new Date() });

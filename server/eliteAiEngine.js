@@ -18,6 +18,7 @@ import { connectToDatabase, getUserProfile } from './database.js';
 import { getReentrySignals } from './reentrySignalService.js';
 import { getSectorName, getSizingMultiplier, getSizingTierLabel } from './ambush/ambushEngine.js';
 import { LOT_OFFSETS } from './lotMath.js';
+import { calcCommission, calcSlippage } from './backtest/costEngine.js';
 
 const COLL = 'pnthr_elite_positions';
 const TRADES = 'pnthr_elite_trades';
@@ -227,13 +228,17 @@ export async function manageEliteAiDryRun({ ownerId } = {}) {
     let nextLot = p.nextLot || 1, totalShares = p.totalShares || 0, avgCost = +p.avgCost || anchor, stop = +p.stop || +p.stopPrice, atBE = !!p.atBE;
     let changed = false;
 
-    // (a) lot fills — paper-fill at the trigger as price clears it
+    // (a) lot fills — paper-fill as price clears the trigger. GAP-THROUGH (2026-07-06 audit):
+    // a resting buy-stop that gaps past its trigger fills at the OPEN/live price, not the
+    // trigger — so a name that jumped straight through a lot level costs the worse price, not
+    // the perfect one. (matches treeSim's max(trigger, open) convention.)
     while (nextLot < 5) {
       const trig = isLong ? +(anchor * (1 + LOT_OFFSETS[nextLot])).toFixed(2) : +(anchor * (1 - LOT_OFFSETS[nextLot])).toFixed(2);
       const cleared = isLong ? px >= trig : px <= trig;
       if (!cleared) break;
+      const fillPx = isLong ? Math.max(trig, px) : Math.min(trig, px);
       const addSh = (p.lotPlan || [])[nextLot] || 0;
-      if (addSh > 0) { avgCost = (avgCost * totalShares + trig * addSh) / (totalShares + addSh); totalShares += addSh; }
+      if (addSh > 0) { avgCost = (avgCost * totalShares + fillPx * addSh) / (totalShares + addSh); totalShares += addSh; }
       nextLot += 1; fills++; changed = true;
     }
 
@@ -245,14 +250,20 @@ export async function manageEliteAiDryRun({ ownerId } = {}) {
       atBE = true;
     }
 
-    // (c) exit on stop hit (paper)
+    // (c) exit on stop hit (paper). GAP-THROUGH: fill at the WORSE of the stop and the live
+    // price — a day that opened below the stop fills near the open, not at the stop (the old
+    // exitPx=stop flattered every losing exit). Round-trip commission + slippage are netted
+    // from P&L so the paper track carries real friction (2026-07-06 audit).
     const stopHit = isLong ? px <= stop : px >= stop;
     if (stopHit) {
-      const exitPx = stop;
-      const pnl = isLong ? (exitPx - avgCost) * totalShares : (avgCost - exitPx) * totalShares;
+      const exitPx = isLong ? Math.min(stop, px) : Math.max(stop, px);
+      const gross = isLong ? (exitPx - avgCost) * totalShares : (avgCost - exitPx) * totalShares;
+      const friction = calcCommission(totalShares, avgCost) + calcSlippage(totalShares, avgCost)
+                     + calcCommission(totalShares, exitPx) + calcSlippage(totalShares, exitPx);
+      const pnl = gross - friction;
       const now = new Date();
-      await db.collection(COLL).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitReason: 'STOP', pnl: +pnl.toFixed(2), nextLot, totalShares, avgCost: +avgCost.toFixed(4), stop, closedAt: now, updatedAt: now } });
-      await db.collection(TRADES).insertOne({ ticker: p.ticker, direction: p.direction, entryPrice: p.entryPrice, exitPrice: exitPx, avgCost: +avgCost.toFixed(4), shares: totalShares, pnl: +pnl.toFixed(2), exitReason: 'STOP', entryDate: p.entryDate, exitDate: todayET(), dryRun: true, createdAt: now });
+      await db.collection(COLL).updateOne({ _id: p._id }, { $set: { status: 'CLOSED', exitPrice: exitPx, exitReason: 'STOP', pnl: +pnl.toFixed(2), pnlGross: +gross.toFixed(2), friction: +friction.toFixed(2), nextLot, totalShares, avgCost: +avgCost.toFixed(4), stop, closedAt: now, updatedAt: now } });
+      await db.collection(TRADES).insertOne({ ticker: p.ticker, direction: p.direction, entryPrice: p.entryPrice, exitPrice: exitPx, avgCost: +avgCost.toFixed(4), shares: totalShares, pnl: +pnl.toFixed(2), pnlGross: +gross.toFixed(2), friction: +friction.toFixed(2), exitReason: 'STOP', entryDate: p.entryDate, exitDate: todayET(), dryRun: true, createdAt: now });
       exits++; continue;
     }
 

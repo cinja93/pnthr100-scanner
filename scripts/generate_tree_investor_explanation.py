@@ -3,7 +3,7 @@
 generateInvestorExplanation.py - PNTHR Tree Fund Investor Explanation PDF
 
 Black-background PDF with yellow headings matching IR styling.
-Output: ~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.2_2026.pdf
+Output: ~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.3_2026.pdf
 v2.1: SPY benchmark corrected to measure from first trade date (Jun 13, 2022).
 """
 
@@ -163,7 +163,7 @@ def on_page(canvas, doc):
 
 # -- Build document -----------------------------------------------------------
 def build():
-    out_path = os.path.expanduser('~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.2_2026.pdf')
+    out_path = os.path.expanduser('~/Downloads/PNTHR_Tree_Fund_Investor_Explanation_v2.3_2026.pdf')
     doc = SimpleDocTemplate(out_path, pagesize=letter,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=0.6*inch)
@@ -243,22 +243,25 @@ def build():
     s.append(hl_tbl)
     s.append(Spacer(1, 6))
 
-    # Summary paragraph accentuating dominance
+    # Summary paragraph — numbers interpolated from the locked engine (T), never hand-typed,
+    # so they can't drift from the baseline again (2026-07-06 audit).
+    _fn = T['filet']['net']
     s.append(Paragraph(
-        'PNTHR Tree is built for return, not for smoothness. At the Filet tier the backtested net CAGR of '
-        '<b>+60.4%</b> is nearly <b>3x</b> the S&amp;P 500\'s +21.2% over the same period, and the strategy\'s '
-        'Sharpe (1.05) and Calmar (1.15) modestly exceed the market\'s. That return comes with materially higher '
-        'volatility and much deeper drawdowns: the net maximum drawdown was approximately <b>-52%</b>, versus '
-        '-19% for the S&amp;P 500, and the Sortino ratio and recovery factor are in line with or below the market\'s. '
-        'This is a high-conviction, high-volatility momentum strategy for investors who can tolerate large drawdowns '
-        'in pursuit of high long-run compounding. It is not a low-volatility or absolute-return product.',
+        f"PNTHR Tree is built for return, not for smoothness. At the Filet tier the backtested net CAGR of "
+        f"<b>{_fn['cagr']}</b> is about <b>2.5x</b> the S&amp;P 500's {SPY['cagr']} over the same period. That return "
+        f"comes with materially higher volatility and much deeper drawdowns: the net maximum drawdown was approximately "
+        f"<b>{_fn['maxDD']}</b>, versus {SPY['maxDD']} for the S&amp;P 500. On a risk-adjusted basis the strategy's "
+        f"Calmar ({_fn['calmar']}) and Sharpe ({_fn['sharpe']}) are in line with or below the market's over this window "
+        f"({SPY['calmar']} / {SPY['sharpe']}) — the edge is in absolute compounding, not in smoother risk-adjusted returns. "
+        f"This is a high-conviction, high-volatility momentum strategy for investors who can tolerate large drawdowns "
+        f"in pursuit of high long-run compounding. It is not a low-volatility or absolute-return product.",
         bold_body_style()))
 
     s.append(Spacer(1, 4))
-    s.append(Paragraph('<i>Backtest period: January 3, 2023 through June 11, 2026 (~3.45 years), frozen at go-live. S&amp;P 500 benchmark measured from the first trade date. '
-        'Net returns include IBKR commissions, 5 bps slippage, and fund fees. '
-        '1,333 long trades (Filet tier; survivorship-flattered). "Avg L/S Hedge Fund" and "Top Rated Hedge Fund" benchmarks sourced from BarclayHedge, '
-        'HFR, and Preqin industry composites.</i>', note_style()))
+    s.append(Paragraph(f"<i>Backtest period: January 3, 2023 through June 11, 2026 (~3.45 years), frozen at go-live. S&amp;P 500 benchmark measured from the first trade date. "
+        f"Net returns include IBKR commissions, 5 bps slippage, margin financing on the 2x leverage, and fund fees. "
+        f"{T['filet']['trades']['count']} long trades (Filet tier; survivorship-flattered). \"Avg L/S Hedge Fund\" and \"Top Rated Hedge Fund\" benchmarks sourced from BarclayHedge, "
+        f"HFR, and Preqin industry composites.</i>", note_style()))
 
     # Growth chart at bottom of page 1
     chart_path = os.path.join(TMP_DIR, 'cover_growth.png')
@@ -391,12 +394,12 @@ def build():
     ))
     s.append(Spacer(1, 10))
     s.append(Paragraph(
-        "1,333 long trades at the Filet tier over about 3.45 years. The win rate is low, around 28%, with a "
-        "profit factor near 1.8 net of trading costs: the strategy cuts losers quickly and lets a minority of large "
-        "winners carry the return. That return profile comes with large drawdowns. The net maximum drawdown was "
-        "roughly -52%, far deeper than the S&amp;P 500 at -19%, and the strategy's Sortino ratio and recovery "
-        "factor are in line with or below the market. The Tree trades higher long-run return for materially higher "
-        "volatility and drawdown.",
+        f"{T['filet']['trades']['count']} long trades at the Filet tier over about 3.45 years. The win rate is low, around "
+        f"{T['filet']['trades']['winRate']}, with a profit factor near {T['filet']['trades']['pf']} net of trading costs: the strategy cuts losers quickly and lets a minority of large "
+        f"winners carry the return. That return profile comes with large drawdowns. The net maximum drawdown was "
+        f"roughly {T['filet']['net']['maxDD']}, far deeper than the S&amp;P 500 at {SPY['maxDD']}, and the strategy's Sortino ratio and recovery "
+        f"factor are in line with or below the market. The Tree trades higher long-run return for materially higher "
+        f"volatility and drawdown.",
         body_style()))
     s.append(Spacer(1, 10))
     s.append(make_table(
@@ -422,10 +425,12 @@ def build():
         "rule, applied to every name, every day.",
         body_style()))
     s.append(Paragraph(
-        "It is built for return, not for smoothness. In the hypothetical backtest the Filet class compounded at a "
-        "<b>+60.4% net CAGR</b>, nearly 3x the S&amp;P 500, and the Wagyu class at +44.7% net. Those returns exist "
-        "only in the backtest, and they are accompanied by large drawdowns, on the order of -52% net, that "
-        "recovered within the backtest window but may not recover in the future.",
+        f"It is built for return, not for smoothness. In the hypothetical backtest the Filet class compounded at a "
+        f"<b>{T['filet']['net']['cagr']} net CAGR</b>, about 2.5x the S&amp;P 500, and the Wagyu class at {T['wagyu']['net']['cagr']} net "
+        f"(larger tiers earn a lower percentage return because the 2% average-daily-volume cap limits how much capital can "
+        f"be deployed into the less-liquid names). Those returns exist "
+        f"only in the backtest, and they are accompanied by large drawdowns, on the order of {T['filet']['net']['maxDD']} net, that "
+        f"recovered within the backtest window but may not recover in the future.",
         body_style()))
     s.append(Paragraph(
         "This is a high-volatility, high-conviction strategy for investors who can withstand deep drawdowns in "

@@ -32,7 +32,7 @@ from tree_perf_data import T  # numbers from the locked engine (no hardcoding)
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
-VERSION    = "v2.2"
+VERSION    = "v2.3"
 DATE_DISP  = "June 2026"
 
 OUT_PATH = os.path.expanduser(

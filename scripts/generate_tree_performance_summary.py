@@ -9,7 +9,7 @@ chained year-end) and SPY from the same source. Reproduce the numbers with
 server/_tree_perfsummary_numbers.mjs. v2.2 (2026-06-23): regenerated after the baseline
 drift fix (PSTG/PRO/BITF delisting + split re-syncs) corrected the Tree return.
 
-Output: ~/Downloads/PNTHR_Tree_Fund_Performance_Summary_v2.2_2026.pdf
+Output: ~/Downloads/PNTHR_Tree_Fund_Performance_Summary_v2.3_2026.pdf
 """
 
 import os
@@ -36,7 +36,7 @@ from tree_perf_data import T, SPY, ANNUAL  # numbers from the locked engine (no 
 
 FUND       = "PNTHR Tree Fund, LP"
 FUND_UPPER = "PNTHR TREE FUND"
-VERSION    = "v2.2"
+VERSION    = "v2.3"
 DATE_DISP  = "June 2026"
 
 OUT_PATH = os.path.expanduser(
@@ -293,8 +293,8 @@ def build():
     story.append(direction_table())
     story.append(spacer(4))
     story.append(P(
-        "Backtest period: January 2023 through June 2026 (frozen at go-live; ~3.45 years). "
-        "1,333 to 1,807 long trades by tier across the PNTHR AI 300 Universe (~300 names).",
+        f"Backtest period: January 2023 through June 2026 (frozen at go-live; ~3.45 years). "
+        f"{T['filet']['trades']['count']} to {T['wagyu']['trades']['count']} long trades by tier across the PNTHR AI 300 Universe (~300 names).",
         SMALL))
 
     # ── Annual Performance ────────────────────────────────────────────────
@@ -315,7 +315,7 @@ def build():
         f"approach delivered a {T['wagyu']['net']['cagr']} net CAGR at the Wagyu tier (transforming $1,000,000 "
         f"into {T['wagyu']['net']['end']}) and a {T['filet']['net']['cagr']} net CAGR at the Filet tier, while the S&amp;P 500 "
         f"returned {SPY['cagr']} CAGR over the same period. These returns are accompanied by large "
-        f"drawdowns: the net maximum drawdown was roughly -52% on a "
+        f"drawdowns: the net maximum drawdown reached {T['filet']['net']['maxDD']} on a "
         f"daily mark-to-market basis, materially deeper than the S&amp;P 500's {SPY['maxDD']}. This "
         "is a high-volatility momentum strategy; per-trade risk is capped at 2% of NAV and "
         "single-name exposure at 10%, but the Fund's overall drawdown is not capped and can "

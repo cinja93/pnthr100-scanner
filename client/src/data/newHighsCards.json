@@ -5,39 +5,39 @@
     "rows": [
       [
         "Net return",
-        "+742%"
+        "+598%"
       ],
       [
         "CAGR",
-        "85.9%"
+        "76%"
       ],
       [
         "Sharpe",
-        "1.34"
+        "1.26"
       ],
       [
         "Sortino",
-        "1.94"
+        "1.83"
       ],
       [
         "Profit factor",
-        "1.84x"
+        "1.79x"
       ],
       [
         "Calmar",
-        "1.77"
+        "1.54"
       ],
       [
         "Max drawdown",
-        "48.5%"
+        "49.5%"
       ],
       [
         "Win rate",
-        "27% (4.94x payoff)"
+        "28% (4.68x payoff)"
       ],
       [
         "Trades",
-        "1,385"
+        "1,341"
       ],
       [
         "S&P 500 (same window)",
@@ -45,41 +45,41 @@
       ],
       [
         "Outperformance vs S&P",
-        "+649%"
+        "+504%"
       ]
     ],
     "asOf": "2026-06-11",
-    "inputHash": "292ace7bbd2901ed1f56de17eaf6f82bce427531"
+    "inputHash": "828ffed6415ef11f1440602ba71687dae125b819"
   },
   "carn": {
     "rows": [
       [
         "Net return",
-        "+591%"
+        "+328%"
       ],
       [
         "CAGR",
-        "30.1%"
+        "21.8%"
       ],
       [
         "Sharpe",
-        "0.84"
+        "0.69"
       ],
       [
         "Sortino",
-        "1.19"
+        "0.97"
       ],
       [
         "Profit factor",
-        "1.37x"
+        "1.33x"
       ],
       [
         "Calmar",
-        "0.55"
+        "0.39"
       ],
       [
         "Max drawdown",
-        "54.7%"
+        "55.5%"
       ],
       [
         "Win rate",
@@ -87,7 +87,7 @@
       ],
       [
         "Trades",
-        "1,909"
+        "1,886"
       ],
       [
         "S&P 500 (same window)",
@@ -95,11 +95,11 @@
       ],
       [
         "Outperformance vs S&P",
-        "+418%"
+        "+155%"
       ]
     ],
     "asOf": "2026-06-11",
-    "inputHash": "8b37de70f36c3b68c80e87471df485981f6dda79",
+    "inputHash": "eb89f524ab6702ba82b949489e4bc551e69ba2c6",
     "inputNames": 541
   }
 }

@@ -178,10 +178,23 @@ export function sizeFor(nav, price, stop) {
 export async function getPnthrTreeConfig(db) {
   return (await db.collection(CFG).findOne({})) || { mode: 'off' };
 }
-export async function setPnthrTreeMode(db, mode) {
+export async function setPnthrTreeMode(db, mode, actor = {}) {
   if (!['off', 'paper', 'live'].includes(mode)) throw new Error('bad mode');
-  await db.collection(CFG).updateOne({}, { $set: { mode, modeSetAt: new Date() } }, { upsert: true });
-  return { mode };
+  // Audit trail (2026-07-06): the live/paper/off toggle is the control that corrupted
+  // the NAV on 6/23, and it used to overwrite itself with no history and no record of
+  // WHO changed it. Append an immutable log entry on every change (regulated fund: an
+  // auditor must be able to answer "who set this live, and when").
+  const prev = (await db.collection(CFG).findOne({}, { projection: { mode: 1 } }))?.mode || 'off';
+  await db.collection(CFG).updateOne({}, { $set: { mode, modeSetAt: new Date(), modeSetBy: actor.email || null } }, { upsert: true });
+  if (prev !== mode) {
+    await db.collection('pnthr_tree_mode_log').insertOne({
+      from: prev, to: mode,
+      adminEmail: actor.email || null, adminId: actor.userId || null,
+      via: actor.via || 'api', at: new Date(),
+    }).catch(e => console.error('[Tree] mode-log write failed:', e.message));
+    console.log(`[Tree] mode ${prev} -> ${mode} by ${actor.email || 'unknown'}`);
+  }
+  return { mode, from: prev };
 }
 
 // ── One-time migration to the live-mirror paper model ───────────────────────

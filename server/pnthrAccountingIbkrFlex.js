@@ -175,7 +175,14 @@ export async function getFlexStatement(token, referenceCode, baseUrl = GET_URL, 
 // This keeps the monthly close from ever failing on an IBKR propagation hiccup, and it
 // auto-upgrades to the primary the moment it serves. Real errors (expired token, etc.)
 // are NOT swallowed — only 1014 triggers the fallback.
-export async function pullFlexStatement({ token, queryId, retries, delayMs } = {}) {
+// IBKR Flex transient/throttle error codes that should be RETRIED with backoff
+// rather than failing the monthly close. 1025 = too many requests (rate limit —
+// the exact code that silently killed a close per the 2026-07-06 audit); 1018/1020
+// are IBKR-side "try again" conditions. A close missing entirely on a regulated fund
+// is worse than waiting a few minutes.
+const FLEX_TRANSIENT_CODES = new Set(['1025', '1018', '1020']);
+
+export async function pullFlexStatement({ token, queryId, retries, delayMs, throttleRetries = 5, throttleBaseMs = 20000 } = {}) {
   const t = token || process.env.IBKR_FLEX_TOKEN;
   const primary = queryId || process.env.IBKR_FLEX_QUERY_ID;
   const fallback = process.env.IBKR_FLEX_QUERY_ID_FALLBACK;
@@ -186,19 +193,31 @@ export async function pullFlexStatement({ token, queryId, retries, delayMs } = {
   let lastErr;
   for (let i = 0; i < queue.length; i++) {
     const q = queue[i];
-    try {
-      const { referenceCode, url } = await sendFlexRequest(t, q);
-      const { xml, statement } = await getFlexStatement(t, referenceCode, url, { retries, delayMs });
-      const parsed = parseFlexStatement(statement);
-      return { xml, parsed, summary: summarizeFlex(parsed), queryIdUsed: q, usedFallback: i > 0 };
-    } catch (e) {
-      lastErr = e;
-      if (e.code === '1014' && i < queue.length - 1) {
-        console.warn(`[IBKR Flex] query ${q} unavailable (1014 — not yet active); falling back to ${queue[i + 1]}`);
-        continue;
+    // Throttle-retry loop around this query: a 1025/transient code backs off and
+    // retries the SAME query (exponential: 20s, 40s, 80s, ...) before giving up.
+    for (let attempt = 0; attempt <= throttleRetries; attempt++) {
+      try {
+        const { referenceCode, url } = await sendFlexRequest(t, q);
+        const { xml, statement } = await getFlexStatement(t, referenceCode, url, { retries, delayMs });
+        const parsed = parseFlexStatement(statement);
+        return { xml, parsed, summary: summarizeFlex(parsed), queryIdUsed: q, usedFallback: i > 0, throttleAttempts: attempt };
+      } catch (e) {
+        lastErr = e;
+        if (FLEX_TRANSIENT_CODES.has(String(e.code)) && attempt < throttleRetries) {
+          const wait = throttleBaseMs * Math.pow(2, attempt);
+          console.warn(`[IBKR Flex] query ${q} throttled ([${e.code}] ${e.message}); retry ${attempt + 1}/${throttleRetries} in ${wait / 1000}s`);
+          await sleep(wait);
+          continue;
+        }
+        break;   // non-transient, or throttle retries exhausted → try fallback query (or rethrow)
       }
-      throw e;
     }
+    if (lastErr && lastErr.code === '1014' && i < queue.length - 1) {
+      console.warn(`[IBKR Flex] query ${q} unavailable (1014 — not yet active); falling back to ${queue[i + 1]}`);
+      continue;
+    }
+    if (lastErr && FLEX_TRANSIENT_CODES.has(String(lastErr.code)) && i < queue.length - 1) continue;   // throttled out on primary → try fallback
+    if (lastErr && lastErr.code !== '1014' && !FLEX_TRANSIENT_CODES.has(String(lastErr.code))) throw lastErr;
   }
   throw lastErr;
 }

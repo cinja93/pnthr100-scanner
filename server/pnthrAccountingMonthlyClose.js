@@ -330,8 +330,13 @@ async function loadStatementHistory(db, period) {
   };
 }
 
-// Pending closes that need the GP's bank-balance input (drives the page banner).
+// Pending closes that need GP action — awaiting bank balance OR a failed stage that
+// must be re-run (the stage_failed status is surfaced so a throttled/failed Flex pull
+// can never silently skip a month; 2026-07-06 audit).
 export async function pendingCloses() {
   const db = await connectToDatabase();
-  return db.collection(CLOSE_COLL).find({ status: 'awaiting_bank_balance' }).project({ period: 1, income: 1, flexFrom: 1, flexTo: 1, stagedAt: 1, _id: 0 }).toArray();
+  return db.collection(CLOSE_COLL)
+    .find({ status: { $in: ['awaiting_bank_balance', 'stage_failed'] } })
+    .project({ period: 1, status: 1, income: 1, flexFrom: 1, flexTo: 1, stagedAt: 1, stageError: 1, stageFailedAt: 1, _id: 0 })
+    .toArray();
 }

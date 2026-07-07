@@ -2792,8 +2792,18 @@ app.get('/api/pnthr-tree/projection', authenticateJWT, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/mode', authenticateJWT, requireAdmin, async (req, res) => {
-  try { const db = await connectToDatabase(); res.json(await setPnthrTreeMode(db, (req.body || {}).mode)); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const db = await connectToDatabase();
+    res.json(await setPnthrTreeMode(db, (req.body || {}).mode, { email: req.user?.email, userId: req.user?.userId, via: 'admin-page' }));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Immutable mode-change history for the audit trail (admin only).
+app.get('/api/admin/pnthr-tree/mode-log', authenticateJWT, requireAdmin, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const logs = await db.collection('pnthr_tree_mode_log').find({}).sort({ at: -1 }).limit(200).toArray();
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/admin/pnthr-tree/reset', authenticateJWT, requireAdmin, async (req, res) => {
   try { const db = await connectToDatabase(); res.json(await resetPnthrTreePaper(db)); }
@@ -6437,8 +6447,8 @@ app.use('/api/compliance', authenticateJWT, complianceRouter);
 app.use('/api/pnthr-accounting', authenticateJWT, pnthrAccountingRouter);
 
 // Investor portal routes
-app.use('/auth/investor', investorAuthRouter);                          // unauthenticated login
-app.use('/auth/vip', vipAuthRouter);                                   // VIP login (no login limit)
+app.use('/auth/investor', authLimiter, investorAuthRouter);            // rate-limited login (2026-07-06 audit — was unthrottled)
+app.use('/auth/vip', authLimiter, vipAuthRouter);                      // rate-limited VIP login (was unthrottled)
 app.use('/api/investors', authenticateJWT, requireAdmin, investorAdminRouter); // admin management
 app.use('/api/investor', authenticateJWT, investorSelfRouter);          // investor self-service
 
@@ -6708,7 +6718,27 @@ cron.schedule('0 6 3 * *', async () => {
     const { stageClose } = await import('./pnthrAccountingMonthlyClose.js');
     const r = await stageClose(period);
     console.log(`[PNTHR Accounting] monthly close staged for ${period}: ${r.status} (broker NAV ${r.brokerNAV})`);
-  } catch (err) { console.error('[PNTHR Accounting] monthly stage-close failed:', err.message); }
+  } catch (err) {
+    console.error('[PNTHR Accounting] monthly stage-close failed:', err.message);
+    // A silently-missing monthly close is a compliance problem. Write a durable
+    // stage_failed marker (surfaced in pendingCloses/the page banner) and alert,
+    // so the GP knows to re-run POST /close/:period/stage (2026-07-06 audit).
+    try {
+      const db = await connectToDatabase();
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+      let y = +parts.find(p => p.type === 'year').value, m = +parts.find(p => p.type === 'month').value;
+      m -= 1; if (m === 0) { m = 12; y -= 1; }
+      const period = `${y}-${String(m).padStart(2, '0')}`;
+      await db.collection('pnthr_acct_monthly_close').updateOne(
+        { period },
+        { $set: { period, status: 'stage_failed', stageError: err.message, stageFailedAt: new Date() } },
+        { upsert: true },
+      );
+      await db.collection('pnthr_ops_alerts').insertOne({ kind: 'ACCOUNTING_CLOSE_FAILED', period, error: err.message, at: new Date() });
+      const { sendOpsAlertEmail } = await import('./emailService.js');
+      await sendOpsAlertEmail({ subject: `Monthly accounting close FAILED for ${period}`, lines: [err.message, 'Re-run from the PNTHR Accounting page (POST /close/:period/stage) once the cause clears.'] }).catch(() => {});
+    } catch (e2) { console.error('[PNTHR Accounting] stage-failed marker write failed:', e2.message); }
+  }
 }, { timezone: 'America/New_York' });
 
 // PNTHR Tree — EOD daily trade log, 4:35pm ET Mon–Fri (after the close, before

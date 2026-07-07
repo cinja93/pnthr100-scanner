@@ -92,6 +92,17 @@ async function getAmbushIrData(tierKey) {
     } : null,
     marketCorrelation: { spy: spyCorr, qqq: qqqCorr, observations: spyCorr?.observations || 0, fromDate: CORR_FROM },
     generatedAt: new Date().toISOString(),
+    // METHODOLOGY STATUS (2026-07-06 audit): the 2026-06-08 look-ahead review found the
+    // intraday green-confirm entry uses within-bar information, so these backtest numbers
+    // (the ~+789% era) are NOT a defensible track record and must not be shown to an
+    // investor as one until the engine is re-run look-ahead-clean. Ambush stays live/under
+    // test per Scott — the data keeps serving, but every payload now carries this banner so
+    // the number can never be mistaken for a validated result.
+    methodologyStatus: {
+      status: 'UNDER_REVISION',
+      reason: 'Intraday green-confirm entry contains look-ahead (2026-06-08 audit). Backtest figures are provisional and are NOT a validated track record.',
+      since: '2026-06-08', hypothetical: true,
+    },
   };
 
   cache[tierKey] = { data: result, ts: Date.now() };

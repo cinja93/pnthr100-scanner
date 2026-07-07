@@ -3,8 +3,17 @@ server/node_modules
 client/node_modules
 server/.env
 client/.env
+# Secrets — glob EVERY .env variant and every backup/save copy anywhere in the
+# tree (2026-07-06 audit: .env.bridge.bak-* files carried live credentials and
+# were NOT ignored — one `git add -A` from being pushed). .env.example stays
+# tracked via the negations below.
 .env
-.env.bridge
+.env.*
+*.bak
+*.bak-*
+*.save
+!.env.example
+!server/.env.example
 .DS_Store
 dist
 

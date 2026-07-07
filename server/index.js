@@ -6578,11 +6578,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ── Cron: PNTHR Kill scoring pipeline every Friday at 4:15pm ET ─────────────
-// Runs right after market close to pre-compute Kill scores and persist to MongoDB.
-// The Command Center's /api/kill-pipeline reads from this data for instant response.
+// ── Cron: PNTHR Kill scoring pipeline every Friday at 4:50pm ET ─────────────
+// Moved from 4:15pm (2026-07-06 audit): it USED to fire at the exact same minute as
+// the daily candle/index chain (`15 16 * * 1-5`), and step 7b reads the AI weekly
+// candles + PAI300 index THAT chain is still rewriting — so the archived Friday
+// snapshot could be a non-deterministic mix of tickers with/without Friday's bar.
+// 4:50pm runs AFTER the ~5-8 min chain and its 16:30-16:45 dependents have landed.
 let fridayKillRunning = false;
-cron.schedule('15 16 * * 5', async () => {
+cron.schedule('50 16 * * 5', async () => {
   if (fridayKillRunning) return;
   fridayKillRunning = true;
   try {
@@ -9282,9 +9285,14 @@ cron.schedule('0 20 * * 5', async () => {
   signalArchiveRunning = true;
   try {
     console.log('[Signal Archive] Saving weekly snapshot...');
-    const jungleData = await getJungleStocks();
-    const tickers = (jungleData.stocks || []).map(s => s.ticker);
-    const signals  = await getSignals(tickers);
+    // getJungleStocks returns an ARRAY, not { stocks } — the old `jungleData.stocks`
+    // was always undefined, so this cron archived 0 records every week (2026-07-06
+    // audit). Use the same pattern as /api/jungle-stocks, with the sectorMap so the
+    // archived signals use OpEMA, not the default 21W.
+    const [specLongs, specShorts] = await Promise.all([getSp400Longs().catch(() => []), getSp400Shorts().catch(() => [])]);
+    const stocks   = await getJungleStocks(specLongs, specShorts);
+    const sectorMap = Object.fromEntries(stocks.map(s => [s.ticker, s.sector]).filter(([, s]) => s));
+    const signals  = await getSignals(stocks.map(s => s.ticker), { sectorMap });
     const count    = await saveWeeklySnapshot(signals);
     console.log(`[Signal Archive] Saved ${count} signal records for week of ${getCurrentWeekOf()}.`);
   } catch (err) {
@@ -9307,9 +9315,10 @@ app.post('/api/admin/signal-history/snapshot', authenticateJWT, requireAdmin, as
       console.log(`[Signal Archive] Using cached signals for snapshot (${Object.keys(signals).length} tickers)`);
     } else {
       console.log('[Signal Archive] Cache cold — fetching signals from FMP (this may take a few minutes)...');
-      const jungleData = await getJungleStocks();
-      const tickers = (jungleData.stocks || []).map(s => s.ticker);
-      signals = await getSignals(tickers);
+      const [specLongs, specShorts] = await Promise.all([getSp400Longs().catch(() => []), getSp400Shorts().catch(() => [])]);
+      const stocks = await getJungleStocks(specLongs, specShorts);   // returns an ARRAY (not { stocks })
+      const sectorMap = Object.fromEntries(stocks.map(s => [s.ticker, s.sector]).filter(([, s]) => s));
+      signals = await getSignals(stocks.map(s => s.ticker), { sectorMap });
     }
     const count = await saveWeeklySnapshot(signals);
     res.json({ ok: true, count, weekOf: getCurrentWeekOf() });

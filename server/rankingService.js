@@ -1,5 +1,5 @@
 import { getMostRecentRanking, getRankingBeforeDate, saveRanking, getRankingByDate, cleanupOldRankings } from './database.js';
-import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, getAiRankingByDate, cleanupOldAiRankings, connectToDatabase } from './database.js';
+import { getMostRecentAiRanking, getAiRankingBeforeDate, saveAiRanking, mergeAiRanking, getAiRankingByDate, cleanupOldAiRankings, connectToDatabase } from './database.js';
 import { getMostRecentAiRankingWithShorts, getAiRankingBeforeDateWithShorts } from './database.js';
 
 // US Eastern timezone for market close
@@ -297,19 +297,16 @@ export async function autoSaveAiRankingIfFriday(longStocks, shortStocks = null) 
     const existingLongs  = existing?.rankings || [];
     const existingShorts = existing?.shortRankings || [];
     const needLongUpgrade = (longStocks?.length || 0) > existingLongs.length;   // a larger (universe) long set arrived
-    const needShortAdd    = (shortStocks?.length || 0) > 0 && existingShorts.length === 0;   // shorts arrived where there were none
+    const needShortAdd    = (shortStocks?.length || 0) > 0;                     // any incoming shorts overwrite/refresh
     if (existing && !needLongUpgrade && !needShortAdd) {
       console.log(`✅ AI ranking already complete for ${rankingDate} (${existingLongs.length} long, ${existingShorts.length} short)`);
       return;
     }
-    const mergedLongs  = needLongUpgrade ? longStocks : (existingLongs.length ? existingLongs : longStocks);
-    const mergedShorts = (shortStocks?.length) ? shortStocks : (existingShorts.length ? existingShorts : null);
-    if (existing) {
-      const db = await connectToDatabase();
-      await db.collection('ai_rankings').deleteOne({ date: rankingDate });
-    }
-    console.log(`💾 Auto-saving/merging AI ranking for Friday ${rankingDate} (${mergedLongs.length} long, ${mergedShorts?.length || 0} short)...`);
-    await saveAiRanking(rankingDate, mergedLongs, mergedShorts);
+    // ATOMIC merge — one upsert, no read→delete→insert gap (2026-07-06 audit). Order-
+    // independent: the two Friday producers can interleave and neither drops the other's
+    // half. mergeAiRanking keeps the larger long set and preserves/refreshes shorts.
+    console.log(`💾 Auto-merging AI ranking for Friday ${rankingDate} (incoming ${longStocks?.length || 0} long, ${shortStocks?.length || 0} short)...`);
+    await mergeAiRanking(rankingDate, longStocks, shortStocks);
     await cleanupOldAiRankings(12);
   } catch (error) {
     console.error('Error in AI auto-save:', error);

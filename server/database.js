@@ -578,6 +578,39 @@ export async function saveAiRanking(date, rankings, shortRankings = null) {
   }
 }
 
+// ATOMIC merge for the shared ai_rankings date doc (2026-07-06 audit). Two Friday
+// producers write the SAME date key — the AI-100 scanner (100 long + 100 short) and
+// the ~316-member universe snapshot (long-only). The old read → deleteOne → insertOne
+// sequence had a race: both could read stale state, and the delete left a window where
+// the doc didn't exist. This does the whole merge in ONE upsert via an aggregation
+// pipeline update, so it is atomic and order-independent:
+//   • rankings      → keep whichever LONG set is larger (new wins ties / empty existing)
+//   • shortRankings → NEW shorts win when provided; else keep existing (never dropped)
+export async function mergeAiRanking(date, rankings, shortRankings = null) {
+  try {
+    const database = await connectToDatabase();
+    if (!database) return null;
+    const collection = database.collection('ai_rankings');
+    const normLongs  = sortRankingsByYtdAndAssignRank(rankings || []);
+    const normShorts = (shortRankings?.length) ? sortShortRankingsByYtdAndAssignRank(shortRankings) : null;
+    const setStage = {
+      date, timestamp: new Date(),
+      // keep existing longs only if they are STRICTLY larger than the incoming set
+      rankings: { $cond: [{ $gt: [{ $size: { $ifNull: ['$rankings', []] } }, normLongs.length] }, '$rankings', normLongs] },
+    };
+    // shorts: new set wins when we HAVE one; otherwise preserve whatever is already stored
+    setStage.shortRankings = normShorts
+      ? normShorts
+      : { $ifNull: ['$shortRankings', null] };
+    const result = await collection.updateOne({ date }, [{ $set: setStage }], { upsert: true });
+    console.log(`✅ Merged AI ranking for ${date} (incoming ${normLongs.length} long, ${normShorts?.length || 0} short)`);
+    return result;
+  } catch (error) {
+    console.error('Error merging AI ranking:', error.message);
+    return null;
+  }
+}
+
 export async function getMostRecentAiRanking() {
   try {
     const database = await connectToDatabase();

@@ -35,8 +35,14 @@ export async function computeInputHash(db) {
       .filter(b => +b.low > 0 && +b.close > 0 && b.date <= END)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (bars.length < MIN_BARS) continue;
+    // Include VOLUME (2026-07-06 audit): volume now drives BOTH the ADV cap and the
+    // MOST_LIQUID entry priority — i.e. WHICH trades get capital. A volume-only vendor
+    // revision changes the trade set with unchanged OHLC, so hashing OHLC alone let it
+    // slip past on the engineError fallback path. NOTE: adding volume changes the hash,
+    // so the committed baseline must be regenerated to stamp the new fingerprint (done
+    // in the margin-financing regen); until then it reads as a cosmetic (non-material) drift.
     parts.push((d.ticker || '') + '|' + bars.map(b =>
-      `${b.date}:${(+b.open).toFixed(4)},${(+b.high).toFixed(4)},${(+b.low).toFixed(4)},${(+b.close).toFixed(4)}`).join(';'));
+      `${b.date}:${(+b.open).toFixed(4)},${(+b.high).toFixed(4)},${(+b.low).toFixed(4)},${(+b.close).toFixed(4)},${+b.volume || 0}`).join(';'));
   }
   parts.sort();
   return { hash: crypto.createHash('sha1').update(parts.join('\n')).digest('hex'), names: parts.length };
@@ -45,6 +51,8 @@ export async function computeInputHash(db) {
 // Tolerances above the 1-decimal precision the baseline stores, so floating noise never trips.
 const NET_TOL = 0.5;    // pts of total-return %
 const CAGR_TOL = 0.3;   // pts of CAGR %
+const MAXDD_TOL = 0.5;  // pts of max-drawdown %  (on investor docs, was unguarded)
+const TRADES_TOL = 0;   // closed-trade COUNT — any change is material
 
 // Re-run the LOCKED engine on CURRENT data and return the headline NET return + CAGR. This is the
 // single thing that decides whether the displayed track record is actually stale. Identical engine
@@ -58,6 +66,8 @@ async function recomputeHeadline(db) {
   return {
     net: +(((endEq - 100000) / 100000) * 100).toFixed(1),
     cagr: +(((Math.pow(endEq / 100000, 1 / years)) - 1) * 100).toFixed(1),
+    maxDD: +(Math.abs(sim.maxDDfrac) * 100).toFixed(2),   // NET max drawdown %
+    totalClosed: (sim.closed || []).length,
     names: Object.keys(data.T).length,
   };
 }
@@ -80,14 +90,23 @@ export async function checkTreeBaselineDrift(db) {
   const inputChanged = storedHash != null && storedHash !== hash;
   const storedNet = stored.metrics?.netReturnPct ?? null;
   const storedCagr = stored.metrics?.cagrPct ?? null;
+  const storedMaxDD = stored.metrics?.maxDDPct != null ? Math.abs(stored.metrics.maxDDPct) : null;
+  const storedTrades = stored.metrics?.totalClosed ?? stored.metrics?.trades ?? null;
 
-  // The decisive test: did the displayed numbers move? Re-run the locked engine on current data.
-  let currentNet = null, currentCagr = null, material = null, engineError = null;
+  // The decisive test: did any DISPLAYED number move? Re-run the locked engine on current
+  // data and compare net, CAGR, AND max-drawdown + trade count — the latter two are on
+  // investor documents but were previously unguarded, so a path-reshaping data revision
+  // landing within 0.5pt of net used to pass silently (2026-07-06 audit).
+  let currentNet = null, currentCagr = null, currentMaxDD = null, currentTrades = null, material = null, engineError = null;
   try {
     const cur = await recomputeHeadline(db);
-    currentNet = cur.net; currentCagr = cur.cagr;
-    material = storedNet != null &&
-      (Math.abs(currentNet - storedNet) > NET_TOL || Math.abs(currentCagr - (storedCagr ?? 0)) > CAGR_TOL);
+    currentNet = cur.net; currentCagr = cur.cagr; currentMaxDD = cur.maxDD; currentTrades = cur.totalClosed;
+    material = storedNet != null && (
+      Math.abs(currentNet - storedNet) > NET_TOL ||
+      Math.abs(currentCagr - (storedCagr ?? 0)) > CAGR_TOL ||
+      (storedMaxDD != null && Math.abs(currentMaxDD - storedMaxDD) > MAXDD_TOL) ||
+      (storedTrades != null && Math.abs(currentTrades - storedTrades) > TRADES_TOL)
+    );
   } catch (e) { engineError = e.message; }
 
   // Banner fires on MATERIAL drift only. If the engine can't recompute, fall back to the raw-input
@@ -98,7 +117,8 @@ export async function checkTreeBaselineDrift(db) {
   const result = {
     drifted, material, cosmeticOnly, inputChanged,
     hasStoredHash: storedHash != null, storedHash, currentHash: hash, names,
-    storedNet, currentNet, storedCagr, currentCagr, engineError,
+    storedNet, currentNet, storedCagr, currentCagr,
+    storedMaxDD, currentMaxDD, storedTrades, currentTrades, engineError,
     checkedAt: new Date().toISOString(),
   };
 

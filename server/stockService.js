@@ -11,11 +11,13 @@ dotenv.config();
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
-// Get the last trading day of the previous year (Dec 31, 2025)
-function getYearStartDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  return `${year - 1}-12-31`; // December 31st of previous year format: YYYY-MM-DD
+// Get the WINDOW for the last trading day of the previous year. Fetching exactly
+// Dec 31 fails when Dec 31 is a weekend/holiday (e.g. Dec 31 2028 = Sunday → FMP
+// returns no bar → every stock filtered out of the scanners). Fetch the last week
+// of December and take the final bar. (2026-07-06 audit — latent, detonates Jan 2029.)
+function getYearStartWindow() {
+  const year = new Date().getFullYear();
+  return { from: `${year - 1}-12-24`, to: `${year - 1}-12-31` };
 }
 
 // Fetch data from FMP API with retry on rate limit (429)
@@ -51,7 +53,7 @@ let yearStartPriceCache = { year: null, prices: {} };
 // Already-cached tickers are returned immediately; only missing ones hit FMP.
 export async function getYearStartPrices(tickers) {
   const currentYear = new Date().getFullYear();
-  const yearStart = getYearStartDate();
+  const yearStartWindow = getYearStartWindow();
 
   // Reset on new year
   if (yearStartPriceCache.year !== currentYear) {
@@ -67,9 +69,12 @@ export async function getYearStartPrices(tickers) {
       const chunk = missing.slice(i, i + concurrency);
       await Promise.all(chunk.map(async (ticker) => {
         try {
-          const historical = await fetchFMP(`/historical-price-full/${ticker}?from=${yearStart}&to=${yearStart}`);
+          const historical = await fetchFMP(`/historical-price-full/${ticker}?from=${yearStartWindow.from}&to=${yearStartWindow.to}`);
           if (historical?.historical?.length > 0) {
-            yearStartPriceCache.prices[ticker] = historical.historical[historical.historical.length - 1].close;
+            // FMP returns newest-first; the LAST trading day of the window is the
+            // year-start reference (index 0), robust to Dec 31 being a non-trading day.
+            const asc = [...historical.historical].sort((a, b) => a.date.localeCompare(b.date));
+            yearStartPriceCache.prices[ticker] = asc[asc.length - 1].close;
           }
         } catch (err) {
           console.error(`Year-start price error for ${ticker}:`, err.message);

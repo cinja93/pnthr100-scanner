@@ -43,7 +43,10 @@ export function computeWilderATR(bars, period = 3) {
   atr /= period;
   atrArr[period] = atr;
   for (let i = period + 1; i < n; i++) {
-    atr = (atr * 2 + trs[i]) / 3;
+    // Wilder smoothing must use `period`, not a hardcoded 3 (was `(atr*2 + tr)/3`, correct
+    // ONLY for period=3). All current callers pass 3 so this is behavior-identical today,
+    // but the first caller to pass 14 would have got silently-wrong ATR feeding stop math.
+    atr = (atr * (period - 1) + trs[i]) / period;
     atrArr[i] = atr;
   }
   return atrArr;
@@ -113,9 +116,17 @@ export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride 
         }
       }
 
+      // EXIT PRICE = the ratcheted protective stop (position.pnthrStop), NOT the raw
+      // structural level. Unified with signalService.js (2026-07-06 audit): the two
+      // "mirrored" state machines disagreed here — signalService already exits at
+      // pnthrStop, this file exited at twoBarLow-0.01. Since pnthrStop = max(structural,
+      // ATR floor) and only ratchets up, the two could report different profit for the
+      // SAME trade (Perch's Trade-of-the-Week vs the chart events), even flipping a
+      // marginal loser/winner. pnthrStop is the execution-faithful price — it is what a
+      // live resting stop actually fills at.
       if (position.type === 'BL') {
         if (current.low < twoBarLow) {
-          const exitPrice    = parseFloat((twoBarLow - 0.01).toFixed(2));
+          const exitPrice    = position.pnthrStop;
           const profitDollar = parseFloat((exitPrice - position.entryPrice).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'BE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });
@@ -125,7 +136,7 @@ export function detectAllSignals(bars, period = 21, isETF = false, dPctOverride 
         }
       } else {
         if (current.high > twoBarHigh) {
-          const exitPrice    = parseFloat((twoBarHigh + 0.01).toFixed(2));
+          const exitPrice    = position.pnthrStop;
           const profitDollar = parseFloat((position.entryPrice - exitPrice).toFixed(2));
           const profitPct    = parseFloat(((profitDollar / position.entryPrice) * 100).toFixed(2));
           events.push({ time: current.time, signal: 'SE', barLow: current.low, barHigh: current.high, profitDollar, profitPct });

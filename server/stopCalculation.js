@@ -46,9 +46,10 @@ export function computeWilderATR(weeklyBars, period = 3) {
   atr /= period;
   atrArr[period] = atr;
 
-  // Wilder smoothing forward
+  // Wilder smoothing forward — use `period`, not a hardcoded 3 (identical when
+  // period=3, which every current caller uses; correct for any other period). 2026-07-06 audit.
   for (let i = period + 1; i < n; i++) {
-    atr = (atr * 2 + trs[i]) / 3;
+    atr = (atr * (period - 1) + trs[i]) / period;
     atrArr[i] = atr;
   }
 

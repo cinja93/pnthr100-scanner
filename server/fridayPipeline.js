@@ -711,8 +711,12 @@ export async function runFridayKillPipeline() {
               .sort({ weekOf: 1 })
               .toArray();
             if (allWeekly.length >= 21) {
-              const last21 = allWeekly.slice(-21);
-              pai300Ema21 = last21.reduce((s, c) => s + (c.close || 0), 0) / 21;
+              // TRUE 21-week EMA (was a 21-bar SMA mislabeled as EMA — 2026-07-06 audit).
+              // Every other PAI300 regime read uses a real EMA, so the snapshot value used
+              // to disagree with the live regime gate near a crossover. calculateEMA seeds
+              // on the first 21 closes then recurses over the whole series → warmed EMA.
+              const series = calculateEMA(allWeekly.map(c => ({ time: c.weekOf, close: c.close || 0 })), 21);
+              pai300Ema21 = series.length ? series[series.length - 1].value : null;
             }
           }
         } catch { /* non-fatal */ }

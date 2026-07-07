@@ -76,7 +76,11 @@ export async function runDailySignalJob() {
   // ── 3. Run signal state machine ──────────────────────────────────────────
   // getSignals invalidates its cache daily and fetches through today's close,
   // so the developing weekly candle (Mon→today) is always included.
-  const signals = await getSignals(tickers);
+  // PASS the sectorMap: without it, after a server restart (Render redeploys) the
+  // in-memory _globalSectorMap is empty and every ticker falls back to the default
+  // 21W EMA instead of its sector-optimized OpEMA (18-26W) — persisting WRONG signals
+  // to pnthr_daily_signals / the Pulse snapshot. (2026-07-06 audit.)
+  const signals = await getSignals(tickers, { sectorMap });
   console.log(`[dailySignalJob] Signals computed for ${Object.keys(signals).length} tickers`);
 
   // ── 4. Build per-stock docs ──────────────────────────────────────────────

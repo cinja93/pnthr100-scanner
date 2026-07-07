@@ -1096,10 +1096,17 @@ export async function runPnthrTreeTick(db) {
 // the collection carries a mode; the seen/attack-seen/no-buyback collections are
 // ticker-keyed funnel state with no live counterpart while flat).
 export async function resetPnthrTreePaper(db) {
+  // NO_BUYBACK is NOT paper-only — it gates LIVE entries too (a name you deliberately
+  // sold stays sold). Wiping it while mode='live' would let the engine re-buy every
+  // blocked name with REAL money on the next ATTACK tick (2026-07-06 audit). So the
+  // paper reset only clears the no-buyback list when the engine is NOT live.
+  const cfg = await getPnthrTreeConfig(db);
   const a = await db.collection(POS).deleteMany({ mode: 'paper' });          // held paper cards
   const b = await db.collection(TRADES).deleteMany({ mode: 'paper' });       // paper trade log
   const c = await db.collection(EXITS).deleteMany({ mode: 'paper' });        // 24h "recently stopped" paper cards
-  const d = await db.collection(NO_BUYBACK).deleteMany({});                  // un-block every NO BUYBACK toggle
+  const d = cfg.mode === 'live'
+    ? { deletedCount: 0 }                                                     // live: keep every no-buyback block intact
+    : await db.collection(NO_BUYBACK).deleteMany({});                        // paper/off: un-block every NO BUYBACK toggle
   const e = await db.collection('pnthr_tree_seen').deleteMany({});           // clear NEW-badge history
   const f = await db.collection('pnthr_tree_attack_seen').deleteMany({});    // clear attack-since timestamps
   return {
@@ -1107,6 +1114,7 @@ export async function resetPnthrTreePaper(db) {
     trades:     b.deletedCount,
     exits:      c.deletedCount,
     noBuyback:  d.deletedCount,
+    noBuybackKept: cfg.mode === 'live',
     seen:       e.deletedCount,
     attackSeen: f.deletedCount,
   };

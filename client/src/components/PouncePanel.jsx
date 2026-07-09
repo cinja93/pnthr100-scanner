@@ -107,9 +107,10 @@ export default function PouncePanel() {
   const funnel = data?.funnel || [];
   const positions = data?.positions || [];
   const byLiq = (a, b) => (b.adv || 0) - (a.adv || 0);   // most-liquid first = buy priority (same as Tree)
-  const pounce = funnel.filter(f => f.state === 'pounce').sort(byLiq);
-  const approaching = funnel.filter(f => f.state === 'approaching').sort(byLiq);
-  const stalkingN = funnel.filter(f => f.state === 'stalking').length;
+  // Held names live in the paper book, not the funnel — a name shows once (candidate → position), same as Tree.
+  const pounce = funnel.filter(f => f.state === 'pounce' && !f.held).sort(byLiq);
+  const approaching = funnel.filter(f => f.state === 'approaching' && !f.held).sort(byLiq);
+  const stalkingN = funnel.filter(f => f.state === 'stalking' && !f.held).length;
   const pounceTk = pounce.map(x => x.ticker), apprTk = approaching.map(x => x.ticker), posTk = positions.map(x => x.ticker);
   const bookPnl = positions.reduce((a, p) => a + (p.pnl || 0), 0);
 

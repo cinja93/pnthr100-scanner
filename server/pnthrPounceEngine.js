@@ -34,6 +34,8 @@ const NEAR_BAND = 0.02;   // "pounce" = price within 2% of the weekly OpEMA
 const APPROACH  = 0.05;   // "approaching" = within 5% above the OpEMA (pulling back toward it)
 const GATE_N    = 11;     // AI-300 index 11-week EMA regime gate
 const BE_SNAP   = 250;    // breakeven snap: ≥ $250 open profit → stop to entry (same as Tree)
+const RSI_FLOOR = 50;     // daily RSI-14 momentum floor — skip falling-knife dips (backtest-validated 2026-07-09)
+const RSI_N     = 14;
 const SIG_CACHE_MS = 5 * 60 * 1000;
 
 // ticker → sector-id (for the OpEMA period), built once from the universe
@@ -80,17 +82,46 @@ async function pounceSignals(db) {
       gateOn = state === 'IN';
     }
   } catch { /* gate defaults ON (never blocks on a data hiccup; entries have their own guards) */ }
-  const data = { opema, upTrend, gateOn };
+
+  // daily RSI-14 (Wilder) per name — as of the last CLOSED daily bar (no look-ahead), the exact
+  // definition validated in _pounce_rsi.mjs. Gates entries: RSI ≥ 50 = an orderly pullback (the edge);
+  // RSI < 50 = a falling-knife dip (the drag). Sort ascending like priorBands — stored order isn't guaranteed.
+  const rsi = {};
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  const ddocs = await db.collection('pnthr_ai_bt_candles').find({}, { projection: { ticker: 1, daily: 1 } }).toArray();
+  for (const d of ddocs) {
+    const t = (d.ticker || '').toUpperCase();
+    const closes = (d.daily || []).filter(b => b.date < today && +b.close > 0)
+      .sort((a, b) => a.date.localeCompare(b.date)).map(b => +b.close);
+    const r = wilderRSI(closes, RSI_N);
+    const last = r.length ? r[r.length - 1] : null;
+    if (last != null) rsi[t] = last;
+  }
+
+  const data = { opema, upTrend, gateOn, rsi };
   _sig = { data, ts: Date.now() };
   return data;
 }
 export function clearPounceSignalCache() { _sig = null; }
 
-// classify a name's funnel state from its distance to the OpEMA + the gate
-function pounceState(price, opema, up, gateOn) {
+// Wilder RSI-14 — identical formula to the backtest harness (_pounce_rsi.mjs) so the live
+// gate can never drift from the validated rule. out[i] = RSI as of close[i].
+function wilderRSI(closes, n = RSI_N) {
+  const out = new Array(closes.length).fill(null);
+  if (closes.length < n + 1) return out;
+  let g = 0, l = 0;
+  for (let i = 1; i <= n; i++) { const d = closes[i] - closes[i - 1]; if (d >= 0) g += d; else l -= d; }
+  let aG = g / n, aL = l / n;
+  out[n] = aL === 0 ? 100 : 100 - 100 / (1 + aG / aL);
+  for (let i = n + 1; i < closes.length; i++) { const d = closes[i] - closes[i - 1], gg = d > 0 ? d : 0, ll = d < 0 ? -d : 0; aG = (aG * (n - 1) + gg) / n; aL = (aL * (n - 1) + ll) / n; out[i] = aL === 0 ? 100 : 100 - 100 / (1 + aG / aL); }
+  return out;
+}
+
+// classify a name's funnel state from its distance to the OpEMA + the gate + the RSI floor
+function pounceState(price, opema, up, gateOn, rsi) {
   if (!(opema > 0) || !up) return 'stalking';
   const dist = (price - opema) / opema;
-  if (Math.abs(dist) <= NEAR_BAND) return gateOn ? 'pounce' : 'approaching';   // at the line, but gated → hold at approaching
+  if (Math.abs(dist) <= NEAR_BAND) return (gateOn && rsi >= RSI_FLOOR) ? 'pounce' : 'approaching';   // at the line, but gated / weak momentum → hold at approaching
   if (dist > 0 && dist <= APPROACH) return 'approaching';
   return 'stalking';
 }
@@ -131,12 +162,13 @@ export async function getPnthrPounceState(db) {
     const q = quotes[t]; if (!q) continue;
     const price = +q.price; if (!(price > 0)) continue;
     const opema = sig.opema[t] || null;
-    const state = pounceState(price, opema, sig.upTrend[t], sig.gateOn);
+    const state = pounceState(price, opema, sig.upTrend[t], sig.gateOn, sig.rsi[t]);
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const sz = stop ? sizeFor(nav, price, stop) : { shares: 0, risk: 0 };
     funnel.push({
       ticker: t, sector: AI_META[t]?.sector || null, company: AI_META[t]?.name || null,
       price, opema, pctToEma: opema ? +(((price - opema) / opema) * 100).toFixed(2) : null,
+      rsi: sig.rsi[t] != null ? +sig.rsi[t].toFixed(0) : null,
       changePct: +q.changesPercentage || 0, state, held: held.has(t), gateOn: sig.gateOn,
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
       adv: adv[t] ?? null, manual: excl.has(t) || !AI_META[t], note: excl.get(t) || null,
@@ -230,6 +262,7 @@ export async function runPnthrPounceTick(db) {
       const price = +q.price, opema = sig.opema[t];
       if (!(price > 0) || !(opema > 0) || !sig.upTrend[t]) continue;
       if (Math.abs((price - opema) / opema) > NEAR_BAND) continue;              // not at the line
+      if (!(sig.rsi[t] >= RSI_FLOOR)) continue;                                 // RSI floor — skip falling-knife dips (backtest-validated RSI≥50)
       const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
       if (!stop || stop >= price) continue;
       const { shares } = sizeFor(nav, price, stop);

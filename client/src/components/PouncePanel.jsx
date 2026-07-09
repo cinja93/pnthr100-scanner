@@ -38,6 +38,7 @@ function PounceBadge({ f, rank, isPounce, detail = true, onClick }) {
       <b style={{ fontWeight: 800 }}>{f.ticker}</b>
       <span style={{ color: '#e6e6e6' }}>${num(f.price)}</span>
       {f.pctToEma != null && <span style={{ color: GOLD_DIM }}>{f.pctToEma > 0 ? '+' : ''}{f.pctToEma}%</span>}
+      {detail && f.rsi != null && <span title="daily RSI-14 — must be ≥ 50 to pounce (skips falling-knife dips)" style={{ color: f.rsi >= 50 ? '#4ade80' : '#f87171', fontSize: 10, fontWeight: 700 }}>RSI {f.rsi}</span>}
       {detail && rank != null && <span style={{ background: '#000', color: GOLD_DIM, borderRadius: 5, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>#{rank}{f.adv != null ? ` (${fmtVol(f.adv)})` : ''}</span>}
       {detail && f.shares > 0 && <span style={{ background: '#000', color: '#e6e6e6', borderRadius: 5, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{f.shares}sh</span>}
       {detail && f.stop != null && <span style={{ color: isPounce ? '#fca5a5' : '#f87171', fontSize: 11 }}>stop ${num(f.stop)}</span>}

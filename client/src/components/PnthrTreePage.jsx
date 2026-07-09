@@ -483,6 +483,9 @@ export default function PnthrTreePage() {
            the whole page flickering (reported on Cash Ledger, 2026-06-12). */
         .pnthr-tree-root:has(.pnthr-overlay) .tree-pulse { animation: none !important; }`}</style>
 
+      {/* PNTHR POUNCE — its own top section (admin only); the Tree header + content follow below */}
+      {!data?.readOnly && <PouncePanel />}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0b3d2e', paddingBottom: 10 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, color: '#22c55e' }}>🌳 PNTHR Tree</h1>
@@ -537,8 +540,6 @@ export default function PnthrTreePage() {
         </div>
       )}
 
-      {/* PNTHR POUNCE — sister pullback strategy, PAPER book, admin view only (black/yellow) */}
-      {!data?.readOnly && <PouncePanel />}
       {mode === 'paper' && simCount > 0 && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
           📝 PAPER TRADE mode — {simCount} simulated would-buy{simCount === 1 ? '' : 's'} shown below (dashed blue cards with a “PAPER” tag). These are hypothetical, place NO real orders, and are NOT positions in your IBKR account. {realCount === 0 ? 'Your real IBKR account is currently flat.' : 'Your real holdings are the solid-bordered cards.'}

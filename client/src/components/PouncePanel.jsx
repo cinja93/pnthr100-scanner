@@ -135,36 +135,31 @@ export default function PouncePanel() {
   const g = arr => arr.map(x => x.ticker);   // ticker group for chart nav
 
   return (
-    <div style={{ background: PANEL_BG, border: `2px solid ${GOLD}`, borderRadius: 12, padding: 16, margin: '16px 0' }}>
+    <div style={{ background: PANEL_BG, border: `2px solid ${GOLD}`, borderRadius: 12, padding: 16, margin: '0 0 16px 0' }}>
       <style>{`@keyframes pounceflash { 0%,100% { box-shadow: 0 0 0 0 ${GOLD}00; } 50% { box-shadow: 0 0 9px 2px ${GOLD}; } }`}</style>
 
-      {/* header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-        <span style={{ background: GOLD, color: '#000', fontWeight: 900, padding: '3px 10px', borderRadius: 6, letterSpacing: '0.06em' }}>POUNCE</span>
-        <span style={{ color: GOLD, fontSize: 16, fontWeight: 800 }}>Pullback Ambush</span>
-        <span style={{ color: '#8a8a8a', fontSize: 12 }}>buys the dip to the weekly OpEMA while the AI-300 holds its 11-week trend · PAPER</span>
-        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: data?.gateOn ? GOLD : '#ef4444' }}>
-          {data ? (data.gateOn ? '● REGIME ON — hunting' : '○ REGIME OFF — in cash') : '…'}
-        </span>
+      {/* top-level POUNCE header — mirrors the Tree header (title left, execution control right) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, color: GOLD }}>🐾 PNTHR Pounce</h1>
+          <div style={{ color: '#8a8a8a', fontSize: 12 }}>AI-300 · pullback to the weekly OpEMA · 11-week regime gate · 2-week-low trailing stop · PAPER</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {busy && <span style={{ color: GOLD_DIM, fontSize: 11 }}>saving…</span>}
+          <ModeBtn label="OFF" active={mode === 'off'} onClick={() => setMode('off')} />
+          <ModeBtn label="PAPER" active={mode === 'paper'} onClick={() => setMode('paper')} />
+          <ModeBtn label="LIVE POUNCE" active={false} disabled title="Phase 5 — live wiring not built yet" />
+          <ModeBtn label="LIVE BOTH" active={false} disabled title="Phase 5 — live wiring not built yet" />
+          <button onClick={resetPaper} disabled={busy} style={{ fontSize: 11, color: '#8a8a8a', background: 'none', border: '1px solid #333', borderRadius: 6, padding: '7px 10px', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }}>↺ Reset Paper Book</button>
+        </div>
       </div>
 
-      {/* execution control */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ color: '#8a8a8a', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2 }}>Execute:</span>
-        <ModeBtn label="OFF" active={mode === 'off'} onClick={() => setMode('off')} />
-        <ModeBtn label="PAPER" active={mode === 'paper'} onClick={() => setMode('paper')} />
-        <ModeBtn label="LIVE POUNCE" active={false} disabled title="Phase 5 — live wiring not built yet" />
-        <ModeBtn label="LIVE BOTH" active={false} disabled title="Phase 5 — live wiring not built yet" />
-        <span style={{ color: '#5a5a5a', fontSize: 10 }}>live modes arrive in Phase 5</span>
-        {busy && <span style={{ color: GOLD_DIM, fontSize: 11 }}>saving…</span>}
-        <button onClick={resetPaper} disabled={busy} style={{ marginLeft: 'auto', fontSize: 11, color: '#8a8a8a', background: 'none', border: '1px solid #333', borderRadius: 6, padding: '5px 10px', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }}>↺ Reset paper book</button>
-      </div>
-
-      {/* summary line — mirrors Tree's funnel-count strip */}
-      <div style={{ display: 'flex', gap: 16, color: '#888', fontSize: 11, marginBottom: 6, flexWrap: 'wrap' }}>
+      {/* regime + summary strip */}
+      <div style={{ display: 'flex', gap: 16, color: '#888', fontSize: 11, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, color: data?.gateOn ? GOLD : '#ef4444' }}>{data ? (data.gateOn ? '● REGIME ON — hunting' : '○ REGIME OFF — in cash') : '…'}</span>
         <span>Book <b style={{ color: '#e6e6e6' }}>{positions.length}</b> · P&amp;L <b style={{ color: bookPnl >= 0 ? '#22c55e' : '#ef4444' }}>{bookPnl >= 0 ? '+' : ''}${bookPnl.toLocaleString()}</b></span>
         <span>Pouncing {pounce.length} · Approaching {approaching.length} · Stalking {stalking.length}</span>
-        <span style={{ color: '#555' }}>Paper · hypothetical · survivorship-flattered AI-300. Not a track record.</span>
+        <span style={{ color: '#5a5a5a' }}>live modes in Phase 5 · Paper, hypothetical, survivorship-flattered AI-300. Not a track record.</span>
       </div>
 
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 10 }}>Error: {err}</div>}

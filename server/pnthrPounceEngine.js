@@ -163,9 +163,17 @@ export async function getPnthrPounceState(db) {
   };
   positions.forEach(enrich);
 
+  // recently stopped — closed paper trades in the last 24h (red cards, like Tree)
+  let recentStops = [];
+  try {
+    const since = new Date(Date.now() - 24 * 3600 * 1000);
+    recentStops = (await db.collection(PTRADES).find({ exitAt: { $gte: since } }).sort({ exitAt: -1 }).toArray())
+      .map(t => ({ ticker: t.ticker, shares: t.shares, entryPrice: t.entryPrice, exitPrice: t.exitPrice, pnl: t.pnl, reason: t.reason || 'STOP', exitAt: t.exitAt, company: AI_META[t.ticker]?.name || null, sector: AI_META[t.ticker]?.sector || null }));
+  } catch { /* non-fatal */ }
+
   return {
     strategy: 'pounce', mode: cfg.mode || 'off', nav, navSource: navInfo.source, navTrusted: navInfo.trusted,
-    gateOn: sig.gateOn, funnel, positions, manualTrades: [], lastTick: cfg.lastTick || null,
+    gateOn: sig.gateOn, funnel, positions, recentStops, manualTrades: [], lastTick: cfg.lastTick || null,
     generatedAt: new Date().toISOString(),
   };
 }

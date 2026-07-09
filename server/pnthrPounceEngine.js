@@ -192,6 +192,7 @@ export async function getPnthrPounceState(db) {
     p.riskPct = nav > 0 ? +((p.riskNow / nav) * 100).toFixed(2) : 0;
     p.company = AI_META[p.ticker]?.name || null;
     p.sector = AI_META[p.ticker]?.sector || null;
+    p.rsi = sig.rsi[p.ticker] != null ? +sig.rsi[p.ticker].toFixed(0) : null;   // current daily RSI-14 (live momentum read)
   };
   positions.forEach(enrich);
 

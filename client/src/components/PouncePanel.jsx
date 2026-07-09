@@ -70,6 +70,7 @@ function PounceCard({ p, onClick }) {
         <div><span style={lbl}>Stop </span><span style={{ color: prot ? '#22c55e' : '#e6e6e6', fontWeight: 700 }}>${num(p.stop)}</span></div>
         <div><span style={lbl}>Risk/sh </span><span style={{ color: GOLD, fontWeight: 700 }}>${num(riskPerSh)}</span></div>
         <div><span style={lbl}>Total risk </span><span style={{ color: '#f59e0b', fontWeight: 700 }}>${(p.riskNow || 0).toLocaleString()}</span><span style={{ color: '#f59e0b' }}> · {p.riskPct}% NAV</span></div>
+        <div><span style={lbl}>RSI </span><span title="current daily RSI-14 (Wilder) — entered ≥ 50" style={{ color: (p.rsi ?? 0) >= 50 ? '#4ade80' : '#f87171', fontWeight: 700 }}>{p.rsi ?? '—'}</span></div>
       </div>
       {fmtWhen(p.createdAt) && <div style={{ color: '#6a6a6a', fontSize: 12, marginTop: 8 }}>Bought {fmtWhen(p.createdAt)}</div>}
     </div>

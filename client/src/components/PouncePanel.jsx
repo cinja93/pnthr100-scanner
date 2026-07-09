@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
+import { AumTracker, ForwardProjection } from './AmbushPage';
 
 // PNTHR POUNCE — the pullback (ambush) strategy, PAPER book. Sister to PNTHR Tree,
 // shown on the same page in the fund's black-and-gold, mirroring Tree's section order:
@@ -23,6 +24,23 @@ function ModeBtn({ label, active, onClick, disabled, title }) {
   );
 }
 const SectionHead = ({ color, children }) => <h3 style={{ color, fontSize: 13, letterSpacing: '0.08em', margin: '0 0 8px' }}>{children}</h3>;
+
+// Collapsible section wrapper (remembers open/closed per panel) — mirrors the Tree page.
+function Collapsible({ title, storageKey, children }) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(storageKey) !== '0'; } catch { return true; } });
+  const toggle = () => setOpen(o => { const n = !o; try { localStorage.setItem(storageKey, n ? '1' : '0'); } catch { /* */ } return n; });
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: open ? 2 : 0, fontFamily: 'inherit' }}>
+        <span style={{ color: '#3b82f6', fontSize: 12 }}>{open ? '▼' : '▶'}</span>
+        {open
+          ? <span style={{ color: '#555', fontSize: 11, fontWeight: 400 }}>hide {title.toLowerCase()}</span>
+          : <span style={{ color: '#9aa0aa', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em' }}>{title}</span>}
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 // Funnel badge — mirrors Tree's ATTACK/APPROACHING badge: ticker, price, %-to-line,
 // and (for pounce/approaching) liquidity rank + 20-day volume, share size, stop.
@@ -166,6 +184,18 @@ export default function PouncePanel() {
 
       {err && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 10 }}>Error: {err}</div>}
       {mode !== 'paper' && <div style={{ color: '#666', fontSize: 12, margin: '10px 0' }}>Flip to PAPER to start tracking Pounce forward.</div>}
+
+      {/* PROJECTED vs ACTUAL AUM + PNTHR GOALS — Pounce's OWN backtest, above the funnel cards */}
+      {data?.projection && (
+        <div style={{ margin: '14px 0' }}>
+          <Collapsible title="PROJECTED vs ACTUAL AUM" storageKey="pounce_collapse_aum">
+            <AumTracker projection={data.projection} hideForward cashLedger={data.projection.cashLedger} />
+          </Collapsible>
+          <Collapsible title="PNTHR GOALS" storageKey="pounce_collapse_goals">
+            <ForwardProjection forward={data.projection.forward} />
+          </Collapsible>
+        </div>
+      )}
 
       {/* PROTECT */}
       <div style={{ marginTop: 16 }}>

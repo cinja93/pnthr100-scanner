@@ -17,9 +17,10 @@
 //   pnthr_pounce_positions  — the paper book (status ACTIVE|CLOSED)
 //   pnthr_pounce_trades     — closed paper trades (P&L ledger)
 
+import fs from 'fs';
 import {
   getNavInfo, sizeFor, fetchQuotes, priorBands, engineExclusions,
-  applyPriceSanity, AI_TICKERS, AI_META, MAX_GROSS_X,
+  applyPriceSanity, AI_TICKERS, AI_META, MAX_GROSS_X, etDateStr,
 } from './pnthrTreeEngine.js';
 import { calculateEMA } from './signalDetection.js';
 import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
@@ -28,6 +29,7 @@ import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 const PCFG    = 'pnthr_pounce_config';
 const PPOS    = 'pnthr_pounce_positions';
 const PTRADES = 'pnthr_pounce_trades';
+const PAUM    = 'pnthr_pounce_aum';       // daily actual-AUM series (paper equity) for the projection
 
 // ── locked signal params (mirror the backtest champion: 2% band, 11W gate) ───
 const NEAR_BAND = 0.02;   // "pounce" = price within 2% of the weekly OpEMA
@@ -137,7 +139,102 @@ export async function setPnthrPounceMode(db, mode, actor = {}) {
 export async function resetPnthrPouncePaper(db) {
   await db.collection(PPOS).deleteMany({ mode: 'paper' });
   await db.collection(PTRADES).deleteMany({});
+  await db.collection(PAUM).deleteMany({});   // clear the actual-AUM series
+  await db.collection(PCFG).updateOne({}, { $unset: { projectionStartDate: '', projectionStartAum: '' } });   // re-anchor the projection on next call
   return { reset: true };
+}
+
+// ── FORWARD PROJECTION — renders Pounce's OWN backtest baseline through the shared
+// AumTracker/ForwardProjection (same shape as getPnthrTreeProjection). Paper equity =
+// anchor AUM + cumulative paper P&L. Helpers duplicated from the Tree engine (module-private there).
+const _pounceBaselinePath = new URL('./data/pounceProjectionBaseline.json', import.meta.url).pathname;
+let _pounceBaseline;
+function loadPounceBaseline() {
+  if (!_pounceBaseline) {
+    try { _pounceBaseline = JSON.parse(fs.readFileSync(_pounceBaselinePath, 'utf8')); }
+    catch { _pounceBaseline = { factors: [], metrics: null, backtestStartNav: 100000, backtestEndNav: 0 }; }
+  }
+  return _pounceBaseline;
+}
+function weekdaysBetween(startISO, endISO) {
+  if (!endISO || endISO <= startISO) return 0;
+  const e = new Date(endISO + 'T12:00:00'); const d = new Date(startISO + 'T12:00:00');
+  let n = 0; while (d < e) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; } return n;
+}
+const FWD_WD_THRESHOLD = 2_000_000, FWD_WD_AMOUNT = 1_000_000;
+const FWD_HORIZONS = [
+  { label: '6 mo', years: 0.5, days: 126 }, { label: '1 yr', years: 1, days: 252 },
+  { label: '18 mo', years: 1.5, days: 378 }, { label: '2 yr', years: 2, days: 504 },
+  { label: '3 yr', years: 3, days: 756 }, { label: '5 yr', years: 5, days: 1260 },
+  { label: '10 yr', years: 10, days: 2520 },
+];
+function simulateForward(startBalance, N, elapsed, dailyCagrRate, horizons) {
+  const maxDays = horizons[horizons.length - 1].days;
+  const byDay = new Map(horizons.map(h => [h.days, h]));
+  let balance = startBalance, banked = 0; const snaps = {};
+  for (let k = 1; k <= maxDays; k++) {
+    if (balance >= FWD_WD_THRESHOLD) { balance -= FWD_WD_AMOUNT; banked += FWD_WD_AMOUNT; }
+    if (dailyCagrRate > 0 && isFinite(dailyCagrRate)) balance *= dailyCagrRate;
+    if (byDay.has(k)) snaps[k] = { balance: Math.round(balance), banked, total: Math.round(balance + banked), extrapolated: (elapsed + k) >= N };
+  }
+  return snaps;
+}
+export async function getPnthrPounceProjection(db, opts = {}) {
+  const proj = loadPounceBaseline();
+  const factors = proj.factors || [];
+  const baseNav = opts.nav != null ? opts.nav : (await getNavInfo(db)).nav;
+  const paperPnL = opts.paperPnL || 0;
+  const todayISO = etDateStr();
+
+  const cfg = (await db.collection(PCFG).findOne({})) || {};
+  let startDate = cfg.projectionStartDate, startAum = cfg.projectionStartAum;
+  if (!startDate || !startAum) {
+    startDate = todayISO; startAum = baseNav;
+    await db.collection(PCFG).updateOne({}, { $set: { projectionStartDate: startDate, projectionStartAum: startAum } }, { upsert: true });
+  }
+  const actualAum = +(startAum + paperPnL).toFixed(0);   // paper equity = anchor + cumulative paper P&L
+  await db.collection(PAUM).updateOne({ date: todayISO }, { $set: { date: todayISO, actualAum } }, { upsert: true });
+  const actualSeries = await db.collection(PAUM).find({}).sort({ date: 1 }).toArray();
+
+  const N = factors.length;
+  const cagrPct = proj.metrics?.cagrPct || 0;
+  const dailyCagr = cagrPct > 0 ? Math.pow(1 + cagrPct / 100, 1 / 252) : 1;
+  const dates = N ? [startDate] : [];
+  { const d = new Date(startDate + 'T12:00:00'); for (let i = 1; i < N; i++) { do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6); dates.push(d.toISOString().split('T')[0]); } }
+  const projected = dates.map((date, i) => ({ date, value: +(startAum * Math.pow(dailyCagr, i)).toFixed(0) }));
+  const elapsed = Math.min(weekdaysBetween(startDate, todayISO), Math.max(0, N - 1));
+  const actualProjected = projected.slice(elapsed).map((p, k) => ({ date: p.date, value: +(actualAum * Math.pow(dailyCagr, k)).toFixed(0) }));
+  const projectedToday = +(startAum * Math.pow(dailyCagr, elapsed)).toFixed(0);
+  const onTrackPct = projectedToday > 0 ? +(((actualAum / projectedToday) - 1) * 100).toFixed(1) : 0;
+  let paceIdx = projected.findIndex(p => p.value >= actualAum);
+  if (paceIdx < 0) paceIdx = projected.length - 1;
+  const aheadOfSchedule = (projected.length && paceIdx >= 0) ? { date: projected[paceIdx].date, tradingDays: paceIdx - elapsed, ahead: (paceIdx - elapsed) >= 0 } : null;
+  const projFwd = N ? simulateForward(projectedToday, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
+  const actFwd = N ? simulateForward(actualAum, N, elapsed, dailyCagr, FWD_HORIZONS) : {};
+  const forward = {
+    cagrPct,
+    withdrawalRule: { threshold: FWD_WD_THRESHOLD, amount: FWD_WD_AMOUNT },
+    horizons: FWD_HORIZONS.map(h => ({ label: h.label, years: h.years, days: h.days, projected: projFwd[h.days] || null, actual: actFwd[h.days] || null, extrapolated: (actFwd[h.days]?.extrapolated) || false })),
+  };
+  return {
+    anchor: { startDate, startAum: +(+startAum).toFixed(0) },
+    current: { date: todayISO, projectedAum: projectedToday, actualAum, onTrackPct, aheadOfSchedule },
+    projected,
+    actual: actualSeries.map(s => ({ date: s.date, value: s.actualAum })),
+    actualProjected,
+    forward,
+    metrics: proj.metrics || null,
+    metricsGross: proj.metricsGross || null,
+    metricsNetFees: proj.metricsNetFees || null,
+    cashLedger: null,   // paper book — no cash movements
+    meta: {
+      backtestStart: proj.backtestStart || null, backtestEnd: proj.backtestEnd || null,
+      avgHoldDays: proj.avgHoldDays ?? null, medianHoldDays: proj.medianHoldDays ?? null,
+      actualStart: actualSeries.length ? actualSeries[0].date : null,
+      backtestEndNav: projected.length ? projected[projected.length - 1].value : proj.backtestEndNav,
+      tradingDays: factors.length, basis: 'pure compounding (no withdrawals)', disclosure: proj.disclosure,
+    },
+  };
 }
 
 // ── Live snapshot the page polls: funnel + paper book (mirror of Tree's shape) ─
@@ -204,9 +301,18 @@ export async function getPnthrPounceState(db) {
       .map(t => ({ ticker: t.ticker, shares: t.shares, entryPrice: t.entryPrice, exitPrice: t.exitPrice, pnl: t.pnl, reason: t.reason || 'STOP', exitAt: t.exitAt, company: AI_META[t.ticker]?.name || null, sector: AI_META[t.ticker]?.sector || null }));
   } catch { /* non-fatal */ }
 
+  // forward projection — Pounce's OWN baseline; paper equity = anchor + cumulative paper P&L
+  let projection = null;
+  try {
+    const cl = await db.collection(PTRADES).find({}, { projection: { pnl: 1 } }).toArray();
+    const realizedPnL = cl.reduce((a, t) => a + (t.pnl || 0), 0);
+    const openPnL = positions.reduce((a, p) => a + (p.pnl || 0), 0);
+    projection = await getPnthrPounceProjection(db, { nav, paperPnL: realizedPnL + openPnL });
+  } catch { /* projection is non-critical to the funnel */ }
+
   return {
     strategy: 'pounce', mode: cfg.mode || 'off', nav, navSource: navInfo.source, navTrusted: navInfo.trusted,
-    gateOn: sig.gateOn, funnel, positions, recentStops, manualTrades: [], lastTick: cfg.lastTick || null,
+    gateOn: sig.gateOn, funnel, positions, recentStops, manualTrades: [], projection, lastTick: cfg.lastTick || null,
     generatedAt: new Date().toISOString(),
   };
 }

@@ -128,6 +128,29 @@ function pounceState(price, opema, up, gateOn, rsi) {
   return 'stalking';
 }
 
+// Plain-English explanation of what a funnel name still needs to reach the next stage (hover tooltip).
+// APPROACHING → what it needs to become POUNCING; POUNCING → what it needs to become DEVOUR (a fill).
+function pounceWaiting(f, { inSession, capRoom }) {
+  const px = v => (typeof v === 'number' ? v.toFixed(2) : v);
+  if (f.state === 'pounce') {
+    if (f.stop == null) return `Qualifies to pounce, but there's no valid 2-week-low stop for it yet (its candle data is insufficient or stale), so it can't be sized or bought until that fills in.`;
+    if (!(f.shares >= 1)) return `Qualifies to pounce, but it rounds to 0 shares under the 2% risk / 10% cap / 2% ADV sizing (stop $${px(f.stop)} vs price $${px(f.price)}). It stays in Pouncing until it's sizeable.`;
+    if (f.posValue > 0 && capRoom < f.posValue) return `Ready to buy (~${f.shares} sh), but the book is at its 2× leverage cap — it needs ~$${Math.max(0, Math.round(f.posValue - capRoom)).toLocaleString()} of room, i.e. an existing position must exit first.`;
+    if (!inSession) return `Qualifies to buy (~${f.shares} sh @ ~$${px(f.price)}, stop $${px(f.stop)}). Waiting on market hours — buys only fire 9:30am-4:00pm ET; the next in-session tick moves it to Devour.`;
+    return `Ready — everything checks out (~${f.shares} sh, stop $${px(f.stop)}). The next tick (every minute during market hours) buys it and it moves to Devour.`;
+  }
+  if (f.state === 'approaching') {
+    const need = [];
+    if (f.pctToEma != null && f.opema && f.pctToEma > NEAR_BAND * 100) need.push(`pull back to within 2% of its OpEMA — price needs to reach ≤ $${px(f.opema * (1 + NEAR_BAND))} (OpEMA $${px(f.opema)}); it's +${f.pctToEma}% above right now`);
+    else if (f.pctToEma != null && f.opema && f.pctToEma < -NEAR_BAND * 100) need.push(`recover to within 2% of its OpEMA — it's ${f.pctToEma}% below the line`);
+    if (!(f.rsi >= RSI_FLOOR)) need.push(`daily RSI-14 ≥ ${RSI_FLOOR} for healthy momentum (now ${f.rsi ?? 'n/a'})`);
+    if (!f.gateOn) need.push(`the AI-300 regime gate to switch back ON (the index is under its 11-week trend, so Pounce is in cash)`);
+    if (!need.length) return `At the line and qualified — it should promote to Pouncing Now on the next refresh.`;
+    return `To reach Pouncing Now it still needs: ${need.join('; and ')}.`;
+  }
+  return null;
+}
+
 export async function getPnthrPounceConfig(db) {
   return (await db.collection(PCFG).findOne({})) || { mode: 'off' };
 }
@@ -253,6 +276,10 @@ export async function getPnthrPounceState(db) {
       .map(p => ({ ticker: p.ticker, shares: p.shares, avgCost: p.entryPrice, entryPrice: p.entryPrice, createdAt: p.createdAt, stop: p.stop, sim: true }));
   }
   const held = new Set(simRaw.map(p => p.ticker));
+  // context for the per-name "what's it waiting for" hover explanation
+  const inSession = inCashSession();
+  const bookGross = simRaw.reduce((a, p) => a + (p.shares || 0) * (+quotes[p.ticker]?.price || p.entryPrice || 0), 0);
+  const capRoom = MAX_GROSS_X * nav - bookGross;
 
   const funnel = [];
   for (const t of AI_TICKERS) {
@@ -262,14 +289,16 @@ export async function getPnthrPounceState(db) {
     const state = pounceState(price, opema, sig.upTrend[t], sig.gateOn, sig.rsi[t]);
     const stop = lows[t] ? +(lows[t] - 0.01).toFixed(2) : null;
     const sz = stop ? sizeFor(nav, price, stop) : { shares: 0, risk: 0 };
-    funnel.push({
+    const entry = {
       ticker: t, sector: AI_META[t]?.sector || null, company: AI_META[t]?.name || null,
       price, opema, pctToEma: opema ? +(((price - opema) / opema) * 100).toFixed(2) : null,
       rsi: sig.rsi[t] != null ? +sig.rsi[t].toFixed(0) : null,
       changePct: +q.changesPercentage || 0, state, held: held.has(t), gateOn: sig.gateOn,
       stop, shares: sz.shares, risk: sz.risk, posValue: +(sz.shares * price).toFixed(0),
       adv: adv[t] ?? null, manual: excl.has(t) || !AI_META[t], note: excl.get(t) || null,
-    });
+    };
+    entry.waitingFor = pounceWaiting(entry, { inSession, capRoom });
+    funnel.push(entry);
   }
   // closest to the OpEMA (about to pounce) first; extended names + no-data last
   funnel.sort((a, b) => (Math.abs(a.pctToEma ?? 999)) - (Math.abs(b.pctToEma ?? 999)));

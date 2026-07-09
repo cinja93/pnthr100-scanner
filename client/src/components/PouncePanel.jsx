@@ -46,7 +46,7 @@ function Collapsible({ title, storageKey, children }) {
 // and (for pounce/approaching) liquidity rank + 20-day volume, share size, stop.
 function PounceBadge({ f, rank, isPounce, detail = true, onClick }) {
   return (
-    <button onClick={onClick} title={`${f.company || f.ticker} — view chart`}
+    <button onClick={onClick} title={f.waitingFor ? `${f.ticker}${f.company ? ' · ' + f.company : ''}\n\n${f.waitingFor}\n\n(click to open the chart)` : `${f.company || f.ticker} — view chart`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit', cursor: 'pointer', margin: '0 6px 6px 0',
         background: '#141207', color: GOLD, borderRadius: 8, padding: '5px 10px', fontSize: 12,

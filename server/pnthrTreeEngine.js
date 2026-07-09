@@ -286,6 +286,26 @@ async function ensureMirrorMigration(db, cfg, excl) {
 }
 
 // ── Live snapshot the page polls: funnel + sizing/stops + positions ──────────
+// Plain-English explanation of what a funnel name still needs to reach the next stage (hover tooltip).
+// APPROACHING → what it needs to become ATTACK (a new 42wk high); ATTACK → what it needs to become DEVOUR (a fill).
+function treeWaiting(f, { inSession, capRoom, mode }) {
+  const px = v => (typeof v === 'number' ? v.toFixed(2) : v);
+  if (f.state === 'attack') {
+    if (f.noBuyback) return `At a new 42-week high, but it's on your NO-BUYBACK list (you manually exited it), so Tree won't re-enter until you toggle buyback back on for it.`;
+    if (f.stop == null) return `At a new high, but there's no valid 2-week-low stop for it yet (its candle data is insufficient or stale), so it can't be sized or bought until that fills in.`;
+    if (!(f.shares >= 1)) return `At a new high, but it rounds to 0 shares under the 2% risk / 10% cap / 2% ADV sizing (stop $${px(f.stop)} vs price $${px(f.price)}). It stays in Attack until it's sizeable.`;
+    if (mode === 'off') return `At a new 42-week high and sizeable (~${f.shares} sh), but the engine is OFF — switch to PAPER or AUTO-EXECUTE for it to be bought.`;
+    if (f.posValue > 0 && capRoom < f.posValue) return `Ready to buy (~${f.shares} sh), but the book is at its 2× leverage cap — it needs ~$${Math.max(0, Math.round(f.posValue - capRoom)).toLocaleString()} of room, i.e. an existing position must exit first.`;
+    if (!inSession) return `At a new high and ready (~${f.shares} sh @ ~$${px(f.price)}, stop $${px(f.stop)}). Waiting on market hours — buys only fire 9:30am-4:00pm ET; the next in-session tick moves it to Devour.`;
+    return `Ready — new 42-week high, sizeable (~${f.shares} sh, stop $${px(f.stop)}). The next tick (every minute during market hours) buys it and it moves to Devour.`;
+  }
+  if (f.state === 'approaching') {
+    if (f.priorHigh && f.pctToHigh != null) return `To reach Attack it needs to break its 42-week high of $${px(f.priorHigh)} — it's ${f.pctToHigh}% below that right now (inside the 1% approach band).`;
+    return `Approaching a new 42-week high.`;
+  }
+  return null;
+}
+
 export async function getPnthrTreeState(db) {
   const cfg = await getPnthrTreeConfig(db);
   const navInfo = await getNavInfo(db);
@@ -462,6 +482,15 @@ export async function getPnthrTreeState(db) {
   const counts = funnel.reduce((a, f) => { a[f.state] = (a[f.state] || 0) + 1; return a; }, {});
   const allBook = [...positions, ...manualTrades];   // leverage counts the whole displayed book
   const grossUsed = allBook.reduce((a, p) => a + (p.last || 0) * (p.shares || p.totalShares || 0), 0);
+  // per-name "what's it waiting for" hover explanation (Attack + Approaching), session + cap-room aware.
+  // Purely additive display metadata — wrapped so it can NEVER break the live Tree state.
+  try {
+    const _wp = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' }).formatToParts(new Date());
+    const _wo = {}; for (const x of _wp) _wo[x.type] = x.value; let _wh = parseInt(_wo.hour, 10); if (_wh === 24) _wh = 0;
+    const _wmin = _wh * 60 + parseInt(_wo.minute, 10);
+    const wCtx = { inSession: isTradingDay() && _wmin >= 570 && _wmin <= 960, capRoom: MAX_GROSS_X * nav - grossUsed, mode: cfg.mode };
+    for (const f of funnel) f.waitingFor = treeWaiting(f, wCtx);
+  } catch { /* tooltips are non-critical — never break the state */ }
   // Categorized P&L, all from IBKR's own marks so they match your account to the dollar:
   //   treePnl   = TREE strategy positions (Devour + Protect)
   //   manualPnl = your manual / off-strategy holdings (Manual box, e.g. SPCX) — "IBKR P&L"

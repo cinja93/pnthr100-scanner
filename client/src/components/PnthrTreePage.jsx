@@ -186,9 +186,11 @@ function Badge({ f, onClick, onToggleBuyback, liqFrac, rank }) {
   else if (f.state === 'approaching') style = { ...base, background: liqBg, border: '1px dashed #86efac', color: '#fff', fontWeight: 600, animation: 'treeflash 1s ease-in-out infinite' };
   else style = { ...base, background: 'transparent', border: '1px solid #2f6b46', color: '#7fcf9f' };
   return (
-    <span className="tree-pulse" style={style} onClick={onClick} title={f.manual
-      ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 42wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
-      : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 42wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
+    <span className="tree-pulse" style={style} onClick={onClick} title={f.waitingFor
+      ? `${f.ticker} · $${f.price?.toFixed(2)}\n\n${f.waitingFor}\n\n(click to open the chart)`
+      : f.manual
+        ? `${f.ticker} · $${f.price?.toFixed(2)} · MANUAL ONLY — ${f.note || 'no 42wk-high trigger yet (new IPO seasoning or data re-sync)'}; the engine never trades it`
+        : `${f.ticker} · $${f.price?.toFixed(2)} · ${f.pctToHigh}% to 42wk high${f.shares > 0 ? ` · buy ${f.shares}sh · stop $${f.stop?.toFixed(2)} · risk $${f.risk}` : ''}`}>
       <b>{f.ticker}</b><span style={{ opacity: 0.8 }}>${f.price?.toFixed(2)}</span>
       {rank != null && (f.state === 'attack' || f.state === 'approaching') && (
         <span style={{ background: '#0009', padding: '1px 6px', borderRadius: 5, fontSize: 11, fontWeight: 700 }}

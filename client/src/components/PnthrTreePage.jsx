@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../services/api';
+import PouncePanel from './PouncePanel';
 import AiTickerChartModal from './AiTickerChartModal';
 import { AumTracker, ForwardProjection } from './AmbushPage';
 
@@ -535,6 +536,9 @@ export default function PnthrTreePage() {
           📝 This is your PNTHR Tree paper book, sized to {fmt(data.baseCapital || data.nav || 0)}. The strategy runs automatically: every new 42-week high is a simulated buy with a 2-week-low trailing stop and a $250 breakeven snap. These are hypothetical paper trades, place NO real orders, and are not held in any brokerage account. When you connect your own brokerage down the road, this can switch to live trading.
         </div>
       )}
+
+      {/* PNTHR POUNCE — sister pullback strategy, PAPER book, admin view only (black/yellow) */}
+      {!data?.readOnly && <PouncePanel />}
       {mode === 'paper' && simCount > 0 && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
           📝 PAPER TRADE mode — {simCount} simulated would-buy{simCount === 1 ? '' : 's'} shown below (dashed blue cards with a “PAPER” tag). These are hypothetical, place NO real orders, and are NOT positions in your IBKR account. {realCount === 0 ? 'Your real IBKR account is currently flat.' : 'Your real holdings are the solid-bordered cards.'}

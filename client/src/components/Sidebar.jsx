@@ -68,7 +68,7 @@ const NAV_GROUPS = [
     groupLabel: 'PNTHR Live',
     info: 'pnthrLive',
     items: [
-      { key: 'pnthrTree', label: 'PNTHR Tree', badge: 'LIVE' },
+      { key: 'pnthrTree', label: 'TREE/POUNCE', badge: 'LIVE' },
       { key: 'eliteAi',   label: 'Elite AI', badge: 'NEW' },
       { key: 'fundComparison', label: 'Fund Compare', badge: 'COMPARE' },
     ],

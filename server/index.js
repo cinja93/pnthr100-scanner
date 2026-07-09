@@ -44,6 +44,7 @@ import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDry
 import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
 import { getFundComparison, getFundComparisonForMember } from './fundCompareService.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog, setTreeNoBuyback } from './pnthrTreeEngine.js';
+import { getPnthrPounceState, setPnthrPounceMode, resetPnthrPouncePaper, runPnthrPounceTick } from './pnthrPounceEngine.js';   // PNTHR Pounce (pullback strategy) — PAPER book, sister to Tree
 import { getNewHighsLows } from './newHighsLowsService.js';
 import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks, listPaperBooks } from './treePaperBook.js';
 import { refreshHandsOffBand } from './backtest/treePaperReconstruction.js';
@@ -2835,6 +2836,27 @@ app.get('/api/pnthr-tree/scorecard', authenticateJWT, async (req, res) => {
     if (req.user?.role !== 'admin') return res.json(null);   // "your management vs the strategy" = Scott's real trades only (N/A for an auto paper book)
     const db = await connectToDatabase(); const { getPnthrTreeScorecard } = await import('./pnthrTreeScorecard.js'); res.json(await getPnthrTreeScorecard(db));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── PNTHR POUNCE (pullback strategy) — PAPER book, admin-only for now ─────────
+app.get('/api/pnthr-pounce', authenticateJWT, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    if (req.user?.role === 'admin') res.json(await getPnthrPounceState(db));
+    else res.json({ strategy: 'pounce', funnel: [], positions: [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-pounce/mode', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await setPnthrPounceMode(db, (req.body || {}).mode, { email: req.user?.email, userId: req.user?.userId })); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-pounce/reset', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await resetPnthrPouncePaper(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/admin/pnthr-pounce/tick', authenticateJWT, requireAdmin, async (req, res) => {
+  try { const db = await connectToDatabase(); res.json(await runPnthrPounceTick(db)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Standalone auto-execute trigger (runs against latest existing orders doc)
@@ -6658,6 +6680,12 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
     const db = await connectToDatabase();
     const r = await runPnthrTreeTick(db);
     if (r.actions && r.actions.length) console.log('[PNTHR Tree] ' + r.mode + ' tick:', JSON.stringify(r.actions.slice(0, 10)));
+    // PNTHR Pounce PAPER book (pullback strategy) — mode off/paper only, ZERO live orders. Same cadence/writer-gate.
+    // Isolated so a Pounce error can never disrupt the live Tree tick or the member paper books below it.
+    try {
+      const rp = await runPnthrPounceTick(db);
+      if (rp.actions && rp.actions.length) console.log('[PNTHR Pounce] ' + rp.mode + ' tick:', JSON.stringify(rp.actions.slice(0, 10)));
+    } catch (e) { console.error('[PNTHR Pounce] tick failed:', e.message); }
     // Member paper books (e.g. Brennan $50k) — same strategy, simulated, no IBKR.
     const pb = await runAllPaperBookTicks(db);
     if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));

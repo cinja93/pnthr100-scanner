@@ -5,7 +5,7 @@
 // index or sector" by overlaying live FMP /quote constituents onto the stored
 // weights. Used by:
 //   • pnthrAi300Service       — PAI300 strip + chart modal
-//   • pnthrAiSectorsService   — 16 sector cards + sector chart modal
+//   • pnthrAiSectorsService   — 18 sector cards + sector chart modal
 //
 // Math is identical to the end-of-day cron rebuild, just substituting live
 // FMP fields for end-of-day closes:
@@ -29,7 +29,7 @@
 import { fetchFMP } from './stockService.js';
 
 // ── In-memory quote-batch cache shared across all overlay calls ─────────────
-// All AI Universe synthetic indices (PAI300 + 16 sectors) draw from the same
+// All AI Universe synthetic indices (PAI300 + 18 sectors) draw from the same
 // 297-name basket. One batched FMP call covers everything; cache it for 30s
 // so a request burst (strip + cards + multiple chart modals) hits FMP once.
 let quoteCache    = null;

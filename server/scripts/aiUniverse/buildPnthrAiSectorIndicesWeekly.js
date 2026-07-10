@@ -1,5 +1,5 @@
 // server/scripts/aiUniverse/buildPnthrAiSectorIndicesWeekly.js
-// ── PNTHR AI Sectors — Weekly aggregation (16 indices) ─────────────────────
+// ── PNTHR AI Sectors — Weekly aggregation (18 indices) ─────────────────────
 //
 // Reads daily bars from pnthr_ai_sector_candles, aggregates to Monday-anchored
 // weekly OHLCV bars, writes pnthr_ai_sector_candles_weekly.

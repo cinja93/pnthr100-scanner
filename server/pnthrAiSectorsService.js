@@ -81,12 +81,12 @@ export function clearPnthrAiSectorsCache() {
   cacheSectorWeights = null; cacheSectorWeightsAt = 0;
 }
 
-// Latest snapshot for all 16 sectors — for the AI Sectors grid page.
+// Latest snapshot for all 18 sectors — for the AI Sectors grid page.
 // Returns { ok, asOf, sectors: [{ id, ticker, name, value, dayChangePct, ytdPct, inceptionPct, ema21D, emaW, regime, ... }] }
 //
 // Each sector's value is recomputed live by overlaying constituent FMP quotes
 // on the most recent stored close using that sector's capped weights. One
-// batched FMP call covers all 16 sectors (the 297-name basket is shared
+// batched FMP call covers all 18 sectors (the 324-name basket is shared
 // across them via aiIntradayOverlay's quote cache). Sectors without weights
 // or quotes fall back cleanly to the stored close.
 export async function getPnthrAiSectorsLatest() {

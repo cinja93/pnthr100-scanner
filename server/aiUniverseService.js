@@ -59,7 +59,7 @@ export function getAiUniverseFundMeta() { return FUND_META; }
 
 // ── Static membership + per-name thesis (for the AI Members page) ────────────
 // Returns the full index roster with each name's PNTHR investment thesis and the
-// 16 sector definitions, straight from the canonical aiUniverseData.js — NO FMP
+// 18 sector definitions, straight from the canonical aiUniverseData.js — NO FMP
 // calls, so it returns instantly. Live prices / held-status are layered on by the
 // /api/ai-members route from the live IBKR snapshot. Excludes deactivated tickers
 // (delisted / unpriceable) so the roster matches the live index.

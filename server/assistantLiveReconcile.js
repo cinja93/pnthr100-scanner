@@ -865,7 +865,7 @@ export async function assistantLiveReconcile(req, res) {
       else sectorMap[sector].longTickers.push(ticker);
     }
     // Fetch live sector regime (bull/bear) for the breakdown badges.
-    // Two sources: AI sectors (16 synthetic indices) + 679 sectors (S&P ETF vs EMA).
+    // Two sources: AI sectors (18 synthetic indices) + 679 sectors (S&P ETF vs EMA).
     let sectorRegimeMap = {};
     try {
       const sectorsData = await getPnthrAiSectorsLatest();

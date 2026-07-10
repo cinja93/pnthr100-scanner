@@ -20,7 +20,7 @@
 //
 // Reads from:
 //   • pnthr_ai_index_candles_weekly         — PAI300 (D1)
-//   • pnthr_ai_sector_candles_weekly        — 16 sector indices (D2)
+//   • pnthr_ai_sector_candles_weekly        — 18 sector indices (D2)
 //   • pnthr_ai_bt_candles_weekly            — per-stock weekly bars (D3, D6)
 //
 // Zero touch to 679 collections. Cached 5 min.
@@ -329,7 +329,7 @@ export async function getAiUniverseKill({ refresh = false } = {}) {
     }
   }
 
-  // Pull all 16 sector index weekly bars (D2)
+  // Pull all 18 sector index weekly bars (D2)
   const sectorDocs = await db.collection('pnthr_ai_sector_candles_weekly').find({ ticker: /^PAI_S/ }).toArray();
   const aiSectorReturnsMap = {};
   for (const doc of sectorDocs) {

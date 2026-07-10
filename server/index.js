@@ -2283,7 +2283,7 @@ app.get('/api/jungle-stocks', async (req, res) => {
   }
 });
 
-// ── PNTHR AI Jungle (AI Universe — 304 holdings, 16 sectors) ────────────────
+// ── PNTHR AI Jungle (AI Universe — 324 holdings, 18 sectors) ────────────────
 // Mirrors /api/jungle-stocks: 5-min cache, ?refresh=1 bypass.
 // Returns { stocks, signals: {}, dailySignals: {}, sectors, fundMeta }.
 // Signal maps stay empty until AI Universe methodology is locked.
@@ -2382,7 +2382,7 @@ app.get('/api/bond-heat/fcf', async (req, res) => {
 });
 
 // ── PNTHR AI 300 (PAI300 — proprietary AI-economy index) ────────────────────
-// Capped market-cap weighted, monthly rebalance, 304 holdings, base 2022-11-30=1000.
+// Capped market-cap weighted, monthly rebalance, 324 holdings, base 2022-11-30=1000.
 // See server/data/pnthrAiIndexConfig.js + scripts/aiUniverse/buildPnthrAi300Index.js
 // for full methodology. Storage: pnthr_ai_index_candles (+ _weekly + _meta).
 // Refreshed daily by the 4:15pm AI Universe cron after constituent candles update.
@@ -2508,7 +2508,7 @@ app.get('/api/half-and-half', authenticateJWT, async (req, res) => {
   }
 });
 
-// ── PNTHR AI Sectors (16 synthetic sector indices, capped market-cap) ───────
+// ── PNTHR AI Sectors (18 synthetic sector indices, capped market-cap) ───────
 // Sister service to PAI300; storage is pnthr_ai_sector_candles* (separate from
 // PAI300's pnthr_ai_index_candles*). Same monthly rebalance dates, same caps,
 // renormalized within each sector. Tunable per-sector EMA periods —
@@ -6926,7 +6926,7 @@ cron.schedule('15 16 * * 1-5', async () => {
       console.log('[PAI300] starting daily rebuild...');
       await runPnthrAi300DailyAppend();
     } catch (e) { console.error('[CRON] PAI300 daily rebuild failed:', e.message); }
-    // 16 sector indices come last — they read the same fresh constituent
+    // 18 sector indices come last — they read the same fresh constituent
     // bars and use the same monthly rebalance dates as PAI300.
     try {
       console.log('[AI Sectors] starting daily rebuild...');
@@ -10829,7 +10829,7 @@ app.get('/api/pulse/ai300', authenticateJWT, async (req, res) => {
         }));
     }
 
-    // ── Signal counts by AI sector (16 sectors) ──
+    // ── Signal counts by AI sector (18 sectors) ──
     const sectorSignalMap = {};
     const sectorTotalStocks = {};
     let blCount = 0, ssCount = 0;

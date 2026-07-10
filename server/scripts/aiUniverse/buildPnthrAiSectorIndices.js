@@ -1,7 +1,7 @@
 // server/scripts/aiUniverse/buildPnthrAiSectorIndices.js
-// ── PNTHR AI Sectors — Backfill 16 synthetic sector indices ────────────────
+// ── PNTHR AI Sectors — Backfill 18 synthetic sector indices ────────────────
 //
-// One pass: for each of the 16 sectors in the AI Universe taxonomy, build a
+// One pass: for each of the 18 sectors in the AI Universe taxonomy, build a
 // capped market-cap weighted index restricted to that sector's constituents.
 // Same math as buildPnthrAi300Index.js but per-sector. Outputs:
 //
@@ -194,7 +194,7 @@ async function main() {
   const tickers = [...new Set(allTickers)];
 
   console.log('\n' + '═'.repeat(72));
-  console.log('  PNTHR AI Sectors — Backfill (16 synthetic sector indices)');
+  console.log('  PNTHR AI Sectors — Backfill (18 synthetic sector indices)');
   console.log(`  Universe:      ${tickers.length} constituents`);
   console.log(`  Base:          ${SECTOR_BASE_DATE} = ${SECTOR_BASE_VALUE.toFixed(2)}`);
   console.log(`  Caps:          ${(SECTOR_SINGLE_NAME_CAP*100).toFixed(2)}% / ${(SECTOR_HYPERSCALER_CAP*100).toFixed(2)}% hyperscaler`);
@@ -245,7 +245,7 @@ async function main() {
   }
 
   // 5) Build each sector index + persist
-  console.log('[5/5] Building 16 sector indices…');
+  console.log('[5/5] Building 18 sector indices…');
   const startTime = Date.now();
   const summary = [];
   for (const sec of SECTORS) {

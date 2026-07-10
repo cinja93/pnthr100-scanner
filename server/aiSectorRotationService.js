@@ -1,11 +1,14 @@
 // server/aiSectorRotationService.js
 // ── AI 300 — 5-day sector rotation engine (APEX v6 alpha layer) ─────────────
 //
-// For each trading day, ranks the 16 PAI_S{n} synthetic sectors by their
-// trailing 5-day total return and bucketizes them into:
-//   GO       (rank 1–6)   → 1.25× sizing on entries in this sector
-//   NEUTRAL  (rank 7–12)  → 1.00× sizing on entries
-//   NO_GO    (rank 13–16) → SKIP entries entirely
+// For each trading day, ranks the PAI_S{n} synthetic sectors (the full live AI
+// taxonomy, 18 today) by their trailing 5-day total return and bucketizes them:
+//   GO       (rank 1–6)         → 1.25× sizing on entries in this sector
+//   NEUTRAL  (rank 7 … N−4)     → 1.00× sizing on entries
+//   NO_GO    (bottom 4 ranks)   → SKIP entries entirely
+// The EXTREMES are fixed (GO = top 6, NO_GO = bottom 4); NEUTRAL flexes with the
+// sector count, which is read live from aiUniverseData.js (SECTORS) so adding or
+// removing a sector can never silently drop it from the ranking again.
 //
 // Storage: pnthr_ai_sector_rank_daily — one doc per trading date:
 //   {
@@ -13,7 +16,7 @@
 //     lookback:  'YYYY-MM-DD',  // 5 trading days back
 //     ranks: [
 //       { sectorId, name, rank, fiveDayReturn, tier },
-//       ...16 entries sorted by rank ASC
+//       ...one entry per sector (18 today), sorted by rank ASC
 //     ],
 //     builtAt:   ISODate
 //   }
@@ -40,10 +43,16 @@ import { SECTORS } from './scripts/aiUniverse/aiUniverseData.js';
 const COLL_SECTOR_DAILY = 'pnthr_ai_sector_candles';
 const COLL_SECTOR_RANK  = 'pnthr_ai_sector_rank_daily';
 
-// Tier thresholds — top 6 GO, mid 6 NEUTRAL, bottom 4 NO_GO (APEX v6 spec)
-const GO_TOP    = 6;
-const NEUT_TOP  = 12;     // ranks 7–12 are NEUTRAL
-const SECTOR_COUNT = 16;
+// Tier thresholds — top 6 GO, bottom 4 NO_GO (APEX v6 spec extremes, kept fixed),
+// everything between = NEUTRAL. SELF-HEALING: the sector universe is read live from
+// aiUniverseData.js so SECTOR_COUNT/NEUT_TOP track the taxonomy automatically — the
+// count can never go stale (the 16→18 hardcoded-constant bug that dropped sectors 17
+// & 18 from the ranking). Iterate the ACTUAL sector ids (robust to non-contiguous ids).
+const SECTOR_IDS = SECTORS.map(s => s.id);
+const SECTOR_COUNT = SECTOR_IDS.length;
+const GO_TOP    = 6;                                           // ranks 1–6 → GO
+const NO_GO_BOTTOM = 4;                                        // bottom 4 ranks → NO_GO
+const NEUT_TOP  = Math.max(GO_TOP, SECTOR_COUNT - NO_GO_BOTTOM); // ranks 7…NEUT_TOP → NEUTRAL
 const LOOKBACK_DAYS = 5;
 
 const SECTOR_NAME_BY_ID = {};
@@ -58,7 +67,7 @@ function tierFor(rank) {
   return 'NO_GO';
 }
 
-// ── Read all 16 sector daily series, sorted ascending by date ──────────────
+// ── Read all sector daily series, sorted ascending by date ─────────────────
 async function loadSectorDailyByDate(db) {
   const docs = await db.collection(COLL_SECTOR_DAILY)
     .find({ ticker: { $regex: /^PAI_S\d+$/ } }, { projection: { ticker: 1, daily: 1 } })
@@ -77,10 +86,10 @@ async function loadSectorDailyByDate(db) {
   return out;
 }
 
-// ── Build the 16-row rank for a given date (returns null if data unavailable)
+// ── Build the full-universe rank for a given date (returns null if data unavailable)
 function buildRankRowsForDate(date, sectorData, lookbackDate) {
   const rows = [];
-  for (let sid = 1; sid <= SECTOR_COUNT; sid++) {
+  for (const sid of SECTOR_IDS) {
     const sd = sectorData[sid];
     if (!sd) continue;
     const cur = sd.dateMap[date];
@@ -92,7 +101,7 @@ function buildRankRowsForDate(date, sectorData, lookbackDate) {
       fiveDayReturn: +(cur / lb - 1).toFixed(6),
     });
   }
-  if (rows.length < SECTOR_COUNT) return null; // require all 16
+  if (rows.length < SECTOR_COUNT) return null; // require every sector present
   rows.sort((a, b) => b.fiveDayReturn - a.fiveDayReturn);
   return rows.map((r, i) => ({
     ...r,

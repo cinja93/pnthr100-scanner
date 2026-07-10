@@ -1,5 +1,5 @@
 // server/data/pnthrAiSectorsConfig.js
-// ── PNTHR AI Sectors — 16 synthetic sector indices ──────────────────────────
+// ── PNTHR AI Sectors — 18 synthetic sector indices ──────────────────────────
 //
 // One synthetic index per sector in the AI Universe taxonomy. Same methodology
 // as the parent PNTHR AI 300 (capped market-cap, monthly rebalance), but the
@@ -9,7 +9,7 @@
 // Each sector index is treated as its own ticker for storage and chart purposes:
 // `PAI_S{id}` where `id` is the sectorId from aiUniverseData.js.
 //
-// Base date / value matches the parent (2022-11-30 = 1000.00) so all 16
+// Base date / value matches the parent (2022-11-30 = 1000.00) so all 18
 // sector lines anchor at the same point and you can read relative performance
 // straight off the chart.
 //
@@ -41,7 +41,7 @@ export function sectorTicker(sectorId) {
 
 // Per-sector EMA period. ONE number per sector — applied to weekly bars for
 // the weekly signal/EMA (e.g. 36W) and to the same-numbered daily EMA (36D).
-// Default 30 for all 16; per-sector overrides below are added one line at a
+// Default 30 for all 18; per-sector overrides below are added one line at a
 // time as Scott observes the charts and tunes.
 //   Format: sectorId → period
 //   Example: "AI Compute, try 35" → set 1: 35

@@ -42,6 +42,7 @@ import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks,
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
 import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
 import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
+import { runSectorRotationPaperTick, getSectorRotationPaperPositions, getSectorRotationPaperTrades, resetSectorRotationPaper } from './sectorRotationPaperEngine.js';
 import { getFundComparison, getFundComparisonForMember } from './fundCompareService.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog, setTreeNoBuyback } from './pnthrTreeEngine.js';
 import { getPnthrPounceState, setPnthrPounceMode, resetPnthrPouncePaper, runPnthrPounceTick } from './pnthrPounceEngine.js';   // PNTHR Pounce (pullback strategy) — PAPER book, sister to Tree
@@ -6699,6 +6700,7 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
         await runEliteAiDryRun({ ownerId: bk.ownerId });
         await manageEliteAiDryRun({ ownerId: bk.ownerId });
         await runAmbushPaperTick({ ownerId: bk.ownerId });
+        await runSectorRotationPaperTick({ ownerId: bk.ownerId });
       } catch (e) { console.error('[Member paper engines] tick failed for', bk.ownerId, e.message); }
     }
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
@@ -7136,6 +7138,21 @@ setInterval(async () => {
   } catch (e) { console.error('[Ambush Paper] tick failed:', e.message); }
   finally { ambushPaperRunning = false; }
 }, 10_000);
+
+// ── AI Sector Momentum (PAPER) — mark to live + quarterly rebalance, every 60s (writer only) ──
+// Isolated paper book (pnthr_sectrot_paper_*); no orders, no IBKR. The forward, survivorship-free
+// test of the 6mo-momentum top-2-per-sector candidate. Seeds itself on the first tick.
+let sectrotPaperRunning = false;
+setInterval(async () => {
+  if (!AMBUSH_CRON_IS_WRITER) return;
+  if (sectrotPaperRunning) return;
+  sectrotPaperRunning = true;
+  try {
+    const r = await runSectorRotationPaperTick();
+    if (r.action && r.action !== 'MARKED') console.log(`[Sector Rotation Paper] ${r.action} ${r.quarter} · ${r.positions ?? r.held} positions`);
+  } catch (e) { console.error('[Sector Rotation Paper] tick failed:', e.message); }
+  finally { sectrotPaperRunning = false; }
+}, 60_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
 // ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.

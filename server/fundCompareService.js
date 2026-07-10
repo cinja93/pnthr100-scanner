@@ -16,6 +16,7 @@ import { connectToDatabase, getUserProfile } from './database.js';
 import { computeSide, computeTradeStats } from './irLiveService.js';
 import { getElitePositions } from './eliteAiEngine.js';
 import { getAmbushPaperPositions } from './ambushPaperEngine.js';
+import { getSectorRotationPaperPositions } from './sectorRotationPaperEngine.js';
 import { getPnthrTreeState } from './pnthrTreeEngine.js';
 import { getPaperBookState } from './treePaperBook.js';
 import { getHandsOffBand } from './backtest/treePaperReconstruction.js';
@@ -122,6 +123,13 @@ export async function getFundComparison() {
   const ambTotalPnl = ambOpenPnl + ambRealized;
   const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
 
+  // AI Sector Momentum (PAPER) — 6mo momentum, top-2/sector, quarterly. Forward-live from 2026-07-10.
+  const srPos = await getSectorRotationPaperPositions().catch(() => []);
+  const srClosed = await db.collection('pnthr_sectrot_paper_trades').find({}).toArray();
+  const srOpenPnl = srPos.reduce((s, p) => s + (+p.livePnl || 0), 0);
+  const srRealized = srClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
+  const srTotalPnl = srOpenPnl + srRealized;
+
   // PNTHR Tree — HANDS-OFF PAPER book (house, no-intervention). Forward-live paper book
   // (reuses treePaperBook), included ONLY when the house treeOnly book is registered so a
   // read never auto-creates a mis-seeded book. Plus the stored hypothetical reconstruction band.
@@ -145,6 +153,7 @@ export async function getFundComparison() {
   const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : treeNav;
   const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
   const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
+  const sectrotEquity = started && cfg ? baselineNav + (srTotalPnl - (cfg.sectrotBaselinePnl || 0)) : baselineNav;
   // Hands-off Tree paper book is seeded at the $89,882 baseline and marks itself to market,
   // so its NAV IS its equity on the common scale (forward-only — begins the day it was stood up).
   const treePaperEquity = treePaperState ? treePaperNav : baselineNav;
@@ -180,7 +189,7 @@ export async function getFundComparison() {
   // Writer-gated, and the tree point is recorded ONLY off a trusted NAV with a
   // confirmed IBKR snapshot — a fallback/default NAV must never enter the history.
   if (started && IS_WRITER) {
-    const rows = [['elite', eliteEquity], ['ambush', ambushEquity]];
+    const rows = [['elite', eliteEquity], ['ambush', ambushEquity], ['sectrot', sectrotEquity]];
     if (treeNavTrusted && tree?.snapshotConfirmed) rows.push(['tree', treeEquity]);
     else console.warn(`[FundCompare] tree equity point SKIPPED — navTrusted=${treeNavTrusted} snapshotConfirmed=${tree?.snapshotConfirmed}`);
     if (treePaperState) rows.push(['treePaper', treePaperEquity]);   // only once the house book is live
@@ -208,7 +217,7 @@ export async function getFundComparison() {
   // simulations into the same collection with mode:'paper' (they belong to the hands-off
   // column's own suffixed collection, never here). Same filter treeJourneyCompare uses.
   const treeTrades = recent(await db.collection('pnthr_tree_trades').find({ mode: { $ne: 'paper' } }).toArray());
-  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
+  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed), srTr = recent(srClosed);
   const funds = [
     // Mode label follows the ENGINE's actual mode — hardcoding 'LIVE' showed paper-mode
     // periods (like right now) as live performance on an investor-facing page.
@@ -235,6 +244,12 @@ export async function getFundComparison() {
       riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slim),
       tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
       risk: riskMetrics(await series('ambush')) },
+    { id: 'sectrot', name: 'AI Sector Momentum', strategy: 'AI-300 top-2/sector · 6mo momentum · quarterly rebalance (long-only)', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(sectrotEquity), returnPct: pct(sectrotEquity), returnPctNet: pctNet(sectrotEquity),
+      pnlSinceStart: Math.round(sectrotEquity - baselineNav), openPnl: Math.round(srOpenPnl),
+      riskAtStop: 0, openCount: srPos.length, positions: srPos.map(slim),
+      tradeStats: computeTradeStats(srTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(srTr),
+      risk: riskMetrics(await series('sectrot')) },
   ];
 
   // 4th column — PNTHR Tree HANDS-OFF (paper). Two clearly-separated parts:
@@ -323,6 +338,13 @@ export async function getFundComparisonForMember(db, ownerId) {
   const ambTotalPnl = ambOpenPnl + ambRealized;
   const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
 
+  // AI Sector Momentum — the member's PAPER book (owner-scoped).
+  const srPos = await getSectorRotationPaperPositions({ ownerId: oid }).catch(() => []);
+  const srClosed = await db.collection(`pnthr_sectrot_paper_trades__${oid}`).find({}).toArray();
+  const srOpenPnl = srPos.reduce((s, p) => s + (+p.livePnl || 0), 0);
+  const srRealized = srClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
+  const srTotalPnl = srOpenPnl + srRealized;
+
   // Common baseline = the member's $50k, locked on/after Monday in his OWN config doc.
   let cfg = await db.collection(CFG_M).findOne({ key: 'fund_compare' });
   if (started && (!cfg || !cfg.locked) && IS_WRITER) {
@@ -335,6 +357,7 @@ export async function getFundComparisonForMember(db, ownerId) {
   const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : baselineNav;
   const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
   const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
+  const sectrotEquity = started && cfg ? baselineNav + (srTotalPnl - (cfg.sectrotBaselinePnl || 0)) : baselineNav;
   const pct = (eq) => baselineNav > 0 ? +(((eq / baselineNav) - 1) * 100).toFixed(2) : 0;
 
   const FEE_MGMT = 0.02, FEE_PERF = 0.30;
@@ -349,14 +372,14 @@ export async function getFundComparisonForMember(db, ownerId) {
   };
 
   if (started && IS_WRITER) {
-    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity]]) {
+    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity], ['sectrot', sectrotEquity]]) {
       await db.collection(DAILY_M).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
     }
   }
   const series = async (fund) => (await db.collection(DAILY_M).find({ fund }, { projection: { _id: 0, date: 1, equity: 1 } }).sort({ date: 1 }).toArray());
   const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
   const treeTrades = recent(await db.collection(treeTradesC).find({}).toArray());
-  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed);
+  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed), srTr = recent(srClosed);
 
   // ALL THREE are PAPER for a member (he has no live account).
   const funds = [
@@ -378,6 +401,12 @@ export async function getFundComparisonForMember(db, ownerId) {
       riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slimPos),
       tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
       risk: riskMetrics(await series('ambush')) },
+    { id: 'sectrot', name: 'AI Sector Momentum', strategy: 'AI-300 top-2/sector · 6mo momentum · quarterly rebalance (long-only)', mode: 'PAPER', simulated: true,
+      baselineNav, currentEquity: Math.round(sectrotEquity), returnPct: pct(sectrotEquity), returnPctNet: pctNet(sectrotEquity),
+      pnlSinceStart: Math.round(sectrotEquity - baselineNav), openPnl: Math.round(srOpenPnl),
+      riskAtStop: 0, openCount: srPos.length, positions: srPos.map(slimPos),
+      tradeStats: computeTradeStats(srTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(srTr),
+      risk: riskMetrics(await series('sectrot')) },
   ];
 
   const result = {

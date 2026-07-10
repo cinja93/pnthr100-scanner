@@ -40,9 +40,7 @@ import { getPnthrAi300Latest, getPnthrAi300Bars, getPnthrAi300Weights, rebalance
 import { getPnthrAiSectorsLatest, getPnthrAiSectorBars, getPnthrAiSectorConstituents, runPnthrAiSectorsDailyAppend, clearPnthrAiSectorsCache } from './pnthrAiSectorsService.js';
 import { backfillAiSectorRanks, updateAiSectorRankToday, getLatestAiSectorRanks, getAiSectorRanksOn } from './aiSectorRotationService.js';
 import { runAiOrdersPipeline, getLatestAiOrders, getAiOrdersHistory, refreshOrderGrades } from './aiOrdersPipeline.js';
-import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';
-import { runAmbushPaperTick, getAmbushPaperPositions, getAmbushPaperTrades, resetAmbushPaperDryRun } from './ambushPaperEngine.js';
-import { runSectorRotationPaperTick, getSectorRotationPaperPositions, getSectorRotationPaperTrades, resetSectorRotationPaper } from './sectorRotationPaperEngine.js';
+import { runEliteAiDryRun, getElitePositions, resetEliteDryRun, manageEliteAiDryRun, getEliteTrades, getEliteSizing, getEliteScorecard, getEliteProjection } from './eliteAiEngine.js';import { runSectorRotationPaperTick, getSectorRotationPaperPositions, getSectorRotationPaperTrades, resetSectorRotationPaper } from './sectorRotationPaperEngine.js';
 import { getFundComparison, getFundComparisonForMember } from './fundCompareService.js';
 import { getPnthrTreeState, getPnthrTreeConfig, setPnthrTreeMode, resetPnthrTreePaper, runPnthrTreeTick, getPnthrTreeProjection, recordTreeDailyLog, getTreeDailyLog, setTreeNoBuyback } from './pnthrTreeEngine.js';
 import { getPnthrPounceState, setPnthrPounceMode, resetPnthrPouncePaper, runPnthrPounceTick } from './pnthrPounceEngine.js';   // PNTHR Pounce (pullback strategy) — PAPER book, sister to Tree
@@ -91,9 +89,7 @@ import { getKill10Portfolio } from './ai300Kill10Portfolio.js';
 import { getKill679Portfolio } from './kill679Portfolio.js';
 import { rebuildAi300Kill } from './ai300KillBackfill.js';
 import { irLiveMetricsHandler, irLiveTradesHandler } from './irLiveService.js';
-import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';
-import { ambushIrMetricsHandler, ambushIrTradesHandler } from './ambushIrService.js';
-import { treeIrMetricsHandler, treeIrTradesHandler } from './treeIrService.js';
+import { carnivoreIrMetricsHandler, carnivoreIrTradesHandler } from './carnivoreIrService.js';import { treeIrMetricsHandler, treeIrTradesHandler } from './treeIrService.js';
 import { runAi300KillTestDailyUpdate } from './ai300KillTestDailyUpdate.js';
 import { ai300KillTestMonthlyGet, ai300KillTestMetricsGet, ai300KillTestMonthlyGenerate, generateAi300MonthlySnapshots } from './ai300KillTestMonthly.js';
 import {
@@ -2733,23 +2729,6 @@ app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── PNTHR Ambush V7.6 — PAPER engine (isolated pnthr_ambush_paper_*, no orders/IBKR) ──
-app.get('/api/ambush-paper/positions', authenticateJWT, async (req, res) => {
-  try { res.json(await getAmbushPaperPositions()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.get('/api/ambush-paper/trades', authenticateJWT, async (req, res) => {
-  try { res.json(await getAmbushPaperTrades()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.post('/api/admin/ambush-paper/tick', authenticateJWT, requireAdmin, async (req, res) => {
-  try { res.json(await runAmbushPaperTick()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.post('/api/admin/ambush-paper/reset', authenticateJWT, requireAdmin, async (req, res) => {
-  try { res.json(await resetAmbushPaperDryRun()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // ── 3-fund comparison (Tree LIVE vs Elite PAPER vs Ambush PAPER) — investor dashboard ──
 app.get('/api/fund-compare', authenticateJWT, async (req, res) => {
@@ -3316,10 +3295,6 @@ app.get('/api/ir-live/:tier/trades',  authenticateJWT, requireIrLiveAccess, irLi
 // ── Carnivore Quant Fund — Live Intelligence Report ─────────────────────────
 app.get('/api/carnivore-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, carnivoreIrMetricsHandler);
 app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, carnivoreIrTradesHandler);
-
-// ── PNTHR Ambush V7.6 — Intelligence Report (no-gate + 2-bar; 3 tiers) ───────
-app.get('/api/ambush-ir/:tier/metrics', authenticateJWT, requireIrLiveAccess, ambushIrMetricsHandler);
-app.get('/api/ambush-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess, ambushIrTradesHandler);
 
 // ── PNTHR Tree Fund — Intelligence Report (AI-300 42wk-high; 3 tiers) ────────
 // Gated by its OWN page key ('tree-ir-live') so a Tree-only investor can be granted
@@ -6698,9 +6673,7 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
       if (bk.treeOnly) continue;
       try {
         await runEliteAiDryRun({ ownerId: bk.ownerId });
-        await manageEliteAiDryRun({ ownerId: bk.ownerId });
-        await runAmbushPaperTick({ ownerId: bk.ownerId });
-        await runSectorRotationPaperTick({ ownerId: bk.ownerId });
+        await manageEliteAiDryRun({ ownerId: bk.ownerId });        await runSectorRotationPaperTick({ ownerId: bk.ownerId });
       } catch (e) { console.error('[Member paper engines] tick failed for', bk.ownerId, e.message); }
     }
   } catch (err) { console.error('[PNTHR Tree] tick failed:', err.message); }
@@ -6901,7 +6874,7 @@ cron.schedule('15 16 * * 1-5', async () => {
     // 679 / Carnivore candle refresh — keeps pnthr_bt_candles (+ weekly) current so the
     // per-ticker dual-pane chart draws continuous bars to today instead of a frozen tail
     // + one synthetic live bar (the phantom-gap Scott flagged 2026-06-16). Also refreshes
-    // the SPY/QQQ benchmark bars ambushIrService reads. Had NO recurring updater before.
+    // the SPY/QQQ benchmark bars the IR services read. Had NO recurring updater before.
     try {
       console.log('[Carnivore Daily] starting cron...');
       await runCarnivoreDailyUpdate();
@@ -7119,24 +7092,6 @@ setInterval(async () => {
     if ((e.created?.length || 0) || r.changed) console.log(`[Elite DryRun] ${e.created?.length || 0} new, ${r.fills} fill(s), ${r.exits} exit(s) / ${r.managed} positions`);
   } catch (e) { console.error('[Elite DryRun] tick failed:', e.message); }
   finally { eliteManageRunning = false; }
-}, 10_000);
-
-// ── Ambush V7.6 — PAPER engine tick — every 10s during market hours ───────────
-// Structurally isolated paper replica of the intraday Ambush strategy (Ambush trades
-// AT the breakout, so it must tick near-real-time). Writes ONLY to
-// pnthr_ambush_paper_* — imports NO order/IBKR/outbox code, CANNOT reach the real
-// account. Writer-gated (same as Elite) so it ticks once, server-side. The engine
-// self-skips weekends / off-hours / blackouts and caches FMP bars+quotes internally.
-let ambushPaperRunning = false;
-setInterval(async () => {
-  if (!AMBUSH_CRON_IS_WRITER) return;          // background paper book runs only on the always-on writer
-  if (ambushPaperRunning) return;              // re-entrancy guard: skip if the prior 10s tick is still running
-  ambushPaperRunning = true;
-  try {
-    const r = await runAmbushPaperTick();
-    if (r.changed) console.log(`[Ambush Paper] ${r.entries} new, ${r.reentries} re-entry, ${r.fills} fill(s), ${r.exits} exit(s) / ${r.managed} pos, ${r.candidates} candidates`);
-  } catch (e) { console.error('[Ambush Paper] tick failed:', e.message); }
-  finally { ambushPaperRunning = false; }
 }, 10_000);
 
 // ── AI Sector Momentum (PAPER) — mark to live + quarterly rebalance, every 60s (writer only) ──

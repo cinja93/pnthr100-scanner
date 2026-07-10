@@ -5,7 +5,7 @@
 // picks from the real evolving universe and marks true forward returns (the only
 // clean answer to "is the backtest edge real or hindsight", per the 2026-07-10 debate).
 //
-// ISOLATION (mirrors ambushPaperEngine / Elite):
+// ISOLATION (mirrors the Elite paper engine):
 //   • Writes ONLY pnthr_sectrot_paper_positions / _trades / _config (+ __ownerId variants).
 //   • Imports NO order / IBKR / bridge code. Cannot place a real trade. Pure simulation
 //     off the nightly AI candle store (ranking) + live FMP quotes (marks + fills).

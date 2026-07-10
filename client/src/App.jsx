@@ -41,9 +41,7 @@ import NewHighsLowsPage from './components/NewHighsLowsPage';
 import AiHeatPage from './components/AiHeatPage';
 import JungleHeatPage from './components/JungleHeatPage';
 import AiSectorsPage from './components/AiSectorsPage';
-import AiOrdersPage from './components/AiOrdersPage';
-import AmbushPage from './components/AmbushPage';
-import AiKillPage from './components/AiKillPage';
+import AiOrdersPage from './components/AiOrdersPage';import AiKillPage from './components/AiKillPage';
 import SearchPage from './components/SearchPage';
 import PreyPage from './components/PreyPage';
 import ApexPage from './components/ApexPage';
@@ -60,9 +58,7 @@ import KillTestPage from './components/KillTestPage';
 import IrLivePage from './components/IrLivePage';
 import TestPage from './components/TestPage';
 import TrendlineAlertBanner, { TRENDLINE_BANNER_HEIGHT } from './components/TrendlineAlertBanner';
-import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';
-import AmbushDiscrepancyBanner from './components/AmbushDiscrepancyBanner';
-import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
+import MoversAlertBanner, { MOVERS_BANNER_HEIGHT } from './components/MoversAlertBanner';import NowOrdersBanner, { NOW_BANNER_HEIGHT } from './components/NowOrdersBanner';
 import ReentryBanner from './components/ReentryBanner';
 import OrdersPage from './components/OrdersPage';
 import EliteAiPage from './components/EliteAiPage';
@@ -934,7 +930,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
   const effectiveAllowed = useMemo(() => {
     if (!rawAllowed) return null;
     const map = {
-      'ai-ir-live': 'ir-live', 'ambush-ir-live': 'ir-live', 'ai-data-room': 'data-room', 'aiPulse': 'pulse',
+      'ai-ir-live': 'ir-live', 'ai-data-room': 'data-room', 'aiPulse': 'pulse',
       'aiOrders': 'orders', 'aiKill': 'apex', 'aiJungle': 'jungle',
       'aiSectors': 'sectors', 'aiHeat': 'jungleHeat', 'ai-signal-history': 'signal-history',
     };
@@ -1314,15 +1310,7 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           setChartStocks([{ ticker }]);
           setChartIndex(0);
         }}
-      />}
-      {isAuthenticated && !isImpersonating && <AmbushDiscrepancyBanner
-        topOffset={(trendlineBannerVisible ? TRENDLINE_BANNER_HEIGHT : 0)
-          + (moversBannerVisible ? MOVERS_BANNER_HEIGHT : 0)
-          + (nowOrdersBannerVisible ? NOW_BANNER_HEIGHT : 0)
-          + reentryBannerHeight}
-        onLayout={setDiscBannerHeight}
-      />}
-      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
+      />}      <Sidebar activePage={activePage} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onLogout={onLogout} longStats={longBatchStats} shortStats={shortBatchStats} />
 
       {/* Floating back navigation button */}
       {canGoBack && (
@@ -1754,9 +1742,6 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* PNTHR AI Orders — APEX v6 weekly order sheet (PIN protected) */}
           {renderPage === 'aiOrders' && <AumShield block showDuration><AiOrdersPage /></AumShield>}
 
-          {/* PNTHR AMBUSH — V7.6 intraday Kanban dashboard (no regime gate, longs+shorts, 2-bar exit) */}
-          {renderPage === 'ambush' && <AumShield block showDuration><AmbushPage /></AumShield>}
-
           {/* PNTHR Elite AI — automated funnel for AI 300 Elite (read-only v1, new isolated page) */}
           {renderPage === 'eliteAi' && <EliteAiPage />}
           {renderPage === 'pnthrTree' && <PnthrTreePage />}
@@ -1810,12 +1795,6 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {/* Intelligence Report Live — AI Elite 300 variant */}
           {renderPage === 'ai-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
             ? <IrLivePage fund="ai300" />
-            : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
-          )}
-
-          {/* Intelligence Report Live — Ambush V7.6 variant */}
-          {renderPage === 'ambush-ir-live' && (isAdmin || effectiveAllowed?.includes('ir-live')
-            ? <IrLivePage fund="ambush" />
             : <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>Access restricted.</div>
           )}
 

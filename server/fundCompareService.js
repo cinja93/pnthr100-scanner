@@ -1,5 +1,5 @@
 // server/fundCompareService.js
-// ── 3-FUND COMPARISON — Tree (LIVE) vs Elite (PAPER) vs Ambush V7.6 (PAPER) ──
+// ── FUND COMPARISON — Tree (LIVE) vs Elite (PAPER) vs AI Sector Momentum (PAPER) ──
 //
 // Investor-facing side-by-side comparison. All three start from ONE common NAV
 // baseline locked on Monday 2026-06-22 (= Tree's real Monday NAV); each fund's
@@ -8,14 +8,13 @@
 // irLiveService.js (computeSide for risk-adjusted metrics, computeTradeStats for
 // trade stats) so all three are measured identically.
 //
-// COMPLIANCE: Elite + Ambush are SIMULATED (paper) — flagged simulated:true. Past /
+// COMPLIANCE: Elite + AI Sector Momentum are SIMULATED (paper) — flagged simulated:true. Past /
 // simulated performance does not guarantee future results. The dashboard renders the
 // mandatory hypothetical-performance disclaimers around this data.
 // ────────────────────────────────────────────────────────────────────────────
 import { connectToDatabase, getUserProfile } from './database.js';
 import { computeSide, computeTradeStats } from './irLiveService.js';
 import { getElitePositions } from './eliteAiEngine.js';
-import { getAmbushPaperPositions } from './ambushPaperEngine.js';
 import { getSectorRotationPaperPositions } from './sectorRotationPaperEngine.js';
 import { getPnthrTreeState } from './pnthrTreeEngine.js';
 import { getPaperBookState } from './treePaperBook.js';
@@ -115,14 +114,6 @@ export async function getFundComparison() {
   const eliteTotalPnl = eliteOpenPnl + eliteRealized;
   const eliteRisk = elitePos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice || 0)) * (+p.totalShares || 0)), 0);
 
-  // Ambush V7.6 (PAPER)
-  const ambPos = await getAmbushPaperPositions().catch(() => []);
-  const ambClosed = await db.collection('pnthr_ambush_paper_trades').find({}).toArray();
-  const ambOpenPnl = ambPos.reduce((s, p) => s + (+p.livePnl || 0), 0);
-  const ambRealized = ambClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
-  const ambTotalPnl = ambOpenPnl + ambRealized;
-  const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
-
   // AI Sector Momentum (PAPER) — 6mo momentum, top-2/sector, quarterly. Forward-live from 2026-07-10.
   const srPos = await getSectorRotationPaperPositions().catch(() => []);
   const srClosed = await db.collection('pnthr_sectrot_paper_trades').find({}).toArray();
@@ -144,7 +135,7 @@ export async function getFundComparison() {
   let cfg = await db.collection(CFG).findOne({ key: 'fund_compare' });
   if (started && (!cfg || !cfg.locked) && IS_WRITER) {
     cfg = { key: 'fund_compare', locked: true, startDate: today, baselineNav: treeNav || 100000,
-      treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, ambushBaselinePnl: ambTotalPnl, lockedAt: new Date() };
+      treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, lockedAt: new Date() };
     await db.collection(CFG).updateOne({ key: 'fund_compare' }, { $set: cfg }, { upsert: true });
   }
   const baselineNav = cfg?.baselineNav || treeNav || 100000;
@@ -152,7 +143,6 @@ export async function getFundComparison() {
   // ── Current equity per fund (forward from the common baseline) ─────────────
   const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : treeNav;
   const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
-  const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
   const sectrotEquity = started && cfg ? baselineNav + (srTotalPnl - (cfg.sectrotBaselinePnl || 0)) : baselineNav;
   // Hands-off Tree paper book is seeded at the $89,882 baseline and marks itself to market,
   // so its NAV IS its equity on the common scale (forward-only — begins the day it was stood up).
@@ -189,7 +179,7 @@ export async function getFundComparison() {
   // Writer-gated, and the tree point is recorded ONLY off a trusted NAV with a
   // confirmed IBKR snapshot — a fallback/default NAV must never enter the history.
   if (started && IS_WRITER) {
-    const rows = [['elite', eliteEquity], ['ambush', ambushEquity], ['sectrot', sectrotEquity]];
+    const rows = [['elite', eliteEquity], ['sectrot', sectrotEquity]];
     if (treeNavTrusted && tree?.snapshotConfirmed) rows.push(['tree', treeEquity]);
     else console.warn(`[FundCompare] tree equity point SKIPPED — navTrusted=${treeNavTrusted} snapshotConfirmed=${tree?.snapshotConfirmed}`);
     if (treePaperState) rows.push(['treePaper', treePaperEquity]);   // only once the house book is live
@@ -217,7 +207,7 @@ export async function getFundComparison() {
   // simulations into the same collection with mode:'paper' (they belong to the hands-off
   // column's own suffixed collection, never here). Same filter treeJourneyCompare uses.
   const treeTrades = recent(await db.collection('pnthr_tree_trades').find({ mode: { $ne: 'paper' } }).toArray());
-  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed), srTr = recent(srClosed);
+  const eliteTr = recent(eliteClosed), srTr = recent(srClosed);
   const funds = [
     // Mode label follows the ENGINE's actual mode — hardcoding 'LIVE' showed paper-mode
     // periods (like right now) as live performance on an investor-facing page.
@@ -238,12 +228,6 @@ export async function getFundComparison() {
       riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.map(slim),
       tradeStats: computeTradeStats(eliteTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(eliteTr),
       risk: riskMetrics(await series('elite')) },
-    { id: 'ambush', name: 'Ambush V7.6', strategy: 'AI-300 intraday breakout + pyramid (long/short)', mode: 'PAPER', simulated: true,
-      baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity), returnPctNet: pctNet(ambushEquity),
-      pnlSinceStart: Math.round(ambushEquity - baselineNav), openPnl: Math.round(ambOpenPnl),
-      riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slim),
-      tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
-      risk: riskMetrics(await series('ambush')) },
     { id: 'sectrot', name: 'AI Sector Momentum', strategy: 'AI-300 top-2/sector · 6mo momentum · quarterly rebalance (long-only)', mode: 'PAPER', simulated: true,
       baselineNav, currentEquity: Math.round(sectrotEquity), returnPct: pct(sectrotEquity), returnPctNet: pctNet(sectrotEquity),
       pnlSinceStart: Math.round(sectrotEquity - baselineNav), openPnl: Math.round(srOpenPnl),
@@ -281,7 +265,7 @@ export async function getFundComparison() {
     fees: { mgmtPct: FEE_MGMT * 100, perfPct: FEE_PERF * 100, basis: '2% annual management + 30% performance (Filet tier), high-water mark — net = what an investor keeps' },
     note: started ? `Common start ${START_DATE} at $${Math.round(baselineNav).toLocaleString()} NAV.`
                    : `Comparison begins ${START_DATE} (Tree's first live trading day). Showing live previews.`,
-    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. The PNTHR Tree column reflects the house account (its mode label shows whether the engine is currently live or paper); its recorded 06/22–07/02 history is quarantined as corrupted and its return-since-start is not a reliable strategy track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
+    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. Elite AI and AI Sector Momentum are PAPER-TRADED simulations — not real trading and not a track record. The PNTHR Tree column reflects the house account (its mode label shows whether the engine is currently live or paper); its recorded 06/22–07/02 history is quarantined as corrupted and its return-since-start is not a reliable strategy track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
     funds,
   };
   _cache.at = Date.now(); _cache.data = result;
@@ -312,7 +296,7 @@ export async function getFundComparisonForMember(db, ownerId) {
 
   // Owner-scoped collections (every read/write below is walled to this member).
   const CFG_M = `${CFG}__${oid}`, DAILY_M = `${DAILY}__${oid}`;
-  const treeTradesC = `pnthr_tree_trades__${oid}`, eliteTradesC = `pnthr_elite_trades__${oid}`, ambTradesC = `pnthr_ambush_paper_trades__${oid}`;
+  const treeTradesC = `pnthr_tree_trades__${oid}`, eliteTradesC = `pnthr_elite_trades__${oid}`;
 
   // Tree — the member's PAPER book (NOT getPnthrTreeState — that's the live house book).
   let tree = { nav: base, positions: [], treePnl: 0, totalRisk: { actual: 0 } };
@@ -330,14 +314,6 @@ export async function getFundComparisonForMember(db, ownerId) {
   const eliteTotalPnl = eliteOpenPnl + eliteRealized;
   const eliteRisk = elitePos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || +p.stopPrice || 0)) * (+p.totalShares || 0)), 0);
 
-  // Ambush — the member's PAPER book (owner-scoped via ownerId).
-  const ambPos = await getAmbushPaperPositions({ ownerId: oid }).catch(() => []);
-  const ambClosed = await db.collection(ambTradesC).find({}).toArray();
-  const ambOpenPnl = ambPos.reduce((s, p) => s + (+p.livePnl || 0), 0);
-  const ambRealized = ambClosed.reduce((s, t) => s + (+t.pnl || 0), 0);
-  const ambTotalPnl = ambOpenPnl + ambRealized;
-  const ambRisk = ambPos.reduce((s, p) => s + Math.abs(((+p.avgCost || +p.entryPrice) - (+p.stop || 0)) * (+p.totalShares || 0)), 0);
-
   // AI Sector Momentum — the member's PAPER book (owner-scoped).
   const srPos = await getSectorRotationPaperPositions({ ownerId: oid }).catch(() => []);
   const srClosed = await db.collection(`pnthr_sectrot_paper_trades__${oid}`).find({}).toArray();
@@ -349,14 +325,13 @@ export async function getFundComparisonForMember(db, ownerId) {
   let cfg = await db.collection(CFG_M).findOne({ key: 'fund_compare' });
   if (started && (!cfg || !cfg.locked) && IS_WRITER) {
     cfg = { key: 'fund_compare', locked: true, startDate: today, baselineNav: base,
-      treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, ambushBaselinePnl: ambTotalPnl, lockedAt: new Date() };
+      treeBaselineNav: treeNav, eliteBaselinePnl: eliteTotalPnl, lockedAt: new Date() };
     await db.collection(CFG_M).updateOne({ key: 'fund_compare' }, { $set: cfg }, { upsert: true });
   }
   const baselineNav = cfg?.baselineNav || base;
 
   const treeEquity   = started && cfg ? baselineNav + (treeNav - (cfg.treeBaselineNav || treeNav)) : baselineNav;
   const eliteEquity  = started && cfg ? baselineNav + (eliteTotalPnl - (cfg.eliteBaselinePnl || 0)) : baselineNav;
-  const ambushEquity = started && cfg ? baselineNav + (ambTotalPnl - (cfg.ambushBaselinePnl || 0)) : baselineNav;
   const sectrotEquity = started && cfg ? baselineNav + (srTotalPnl - (cfg.sectrotBaselinePnl || 0)) : baselineNav;
   const pct = (eq) => baselineNav > 0 ? +(((eq / baselineNav) - 1) * 100).toFixed(2) : 0;
 
@@ -372,14 +347,14 @@ export async function getFundComparisonForMember(db, ownerId) {
   };
 
   if (started && IS_WRITER) {
-    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['ambush', ambushEquity], ['sectrot', sectrotEquity]]) {
+    for (const [fund, eq] of [['tree', treeEquity], ['elite', eliteEquity], ['sectrot', sectrotEquity]]) {
       await db.collection(DAILY_M).updateOne({ fund, date: today }, { $set: { fund, date: today, equity: +(+eq).toFixed(2), updatedAt: new Date() } }, { upsert: true });
     }
   }
   const series = async (fund) => (await db.collection(DAILY_M).find({ fund }, { projection: { _id: 0, date: 1, equity: 1 } }).sort({ date: 1 }).toArray());
   const recent = (trades) => normTrades(trades).filter(t => !started || t.exitDate >= START_DATE);
   const treeTrades = recent(await db.collection(treeTradesC).find({}).toArray());
-  const eliteTr = recent(eliteClosed), ambTr = recent(ambClosed), srTr = recent(srClosed);
+  const eliteTr = recent(eliteClosed), srTr = recent(srClosed);
 
   // ALL THREE are PAPER for a member (he has no live account).
   const funds = [
@@ -395,12 +370,6 @@ export async function getFundComparisonForMember(db, ownerId) {
       riskAtStop: Math.round(eliteRisk), openCount: elitePos.length, positions: elitePos.map(slimPos),
       tradeStats: computeTradeStats(eliteTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(eliteTr),
       risk: riskMetrics(await series('elite')) },
-    { id: 'ambush', name: 'Ambush V7.6', strategy: 'AI-300 intraday breakout + pyramid (long/short)', mode: 'PAPER', simulated: true,
-      baselineNav, currentEquity: Math.round(ambushEquity), returnPct: pct(ambushEquity), returnPctNet: pctNet(ambushEquity),
-      pnlSinceStart: Math.round(ambushEquity - baselineNav), openPnl: Math.round(ambOpenPnl),
-      riskAtStop: Math.round(ambRisk), openCount: ambPos.length, positions: ambPos.map(slimPos),
-      tradeStats: computeTradeStats(ambTr, baselineNav, 1), avgWinnerHold: avgWinnerHold(ambTr),
-      risk: riskMetrics(await series('ambush')) },
     { id: 'sectrot', name: 'AI Sector Momentum', strategy: 'AI-300 top-2/sector · 6mo momentum · quarterly rebalance (long-only)', mode: 'PAPER', simulated: true,
       baselineNav, currentEquity: Math.round(sectrotEquity), returnPct: pct(sectrotEquity), returnPctNet: pctNet(sectrotEquity),
       pnlSinceStart: Math.round(sectrotEquity - baselineNav), openPnl: Math.round(srOpenPnl),
@@ -415,7 +384,7 @@ export async function getFundComparisonForMember(db, ownerId) {
     fees: { mgmtPct: FEE_MGMT * 100, perfPct: FEE_PERF * 100, basis: '2% annual management + 30% performance (Filet tier), high-water mark — net = what an investor keeps' },
     note: started ? `Common start ${START_DATE} at $${Math.round(baselineNav).toLocaleString()} NAV (paper).`
                    : `Comparison begins ${START_DATE}. Showing live previews.`,
-    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. All three strategies shown here — PNTHR Tree, Elite AI, and Ambush V7.6 — are PAPER-TRADED simulations seeded from a $50,000 starting balance; none reflect real trading and none are a track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
+    disclaimer: 'HYPOTHETICAL / SIMULATED PERFORMANCE. All three strategies shown here — PNTHR Tree, Elite AI, and AI Sector Momentum — are PAPER-TRADED simulations seeded from a $50,000 starting balance; none reflect real trading and none are a track record. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.',
     funds,
   };
   _memCache.set(oid, { at: Date.now(), data: result });

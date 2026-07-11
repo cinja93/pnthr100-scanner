@@ -40,16 +40,16 @@ const CAPITAL_RESERVE   = 0.20;  // 20% NAV kept as buying power reserve
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI-300 AUTO-EXECUTION RETIRED — 2026-06-03.
-// Ambush V7.4 is the sole engine for the AI-300 universe (Scott's decision after
+// PNTHR Tree is the sole engine for the AI-300 universe (Scott's decision after
 // the shadow-contamination incident). The ai300 auto-executor (weekly stage/exec,
 // intraday upgrades, MCE daily) ran on the SAME AI-300 names in the SAME single
-// IBKR account, so it collided with Ambush — duplicate records, competing stops,
-// pyramid lot-adds that churned -$709, and a rogue AVGO short.
+// IBKR account, so it collided with the primary engine — duplicate records,
+// competing stops, pyramid lot-adds that churned -$709, and a rogue AVGO short.
 //
-// CRITICAL: these engines were gated only by `!isAmbushModeActive()`, i.e.
-// "Ambush is OFF" — a see-saw. Disabling Ambush AUTO-ENABLED this suite. So an
-// env flag or the Ambush gate alone is NOT enough; this is a hard code-level OFF
-// that holds regardless of env or Ambush state. Do not flip without re-reading
+// CRITICAL: these engines were once gated only by `!isAi300SoloModeActive()`, i.e.
+// they auto-enabled the moment the solo-mode gate went false — a see-saw. A gate
+// or env flag alone is NOT enough; this is a hard code-level OFF that holds
+// regardless of env or gate state. Do not flip without re-reading
 // AUDIT_PROTOCOL.md §1 and confirming one-engine-per-ticker still holds.
 const AI300_AUTO_EXEC_RETIRED = true;
 

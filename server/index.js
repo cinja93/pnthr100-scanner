@@ -6596,13 +6596,14 @@ cron.schedule('50 16 * * 5', async () => {
   }
 }, { timezone: 'America/New_York' });
 
-// ── AMBUSH MODE GATE ─────────────────────────────────────────────────────────
-// When Ambush V7 is enabled, competing AI 300 automation crons are suppressed.
-// This prevents conflicting order placement from two strategies in the same
-// IBKR account. Ambush is the sole strategy when enabled.
-async function isAmbushModeActive() {
+// ── AI-300 SOLO-MODE GATE ────────────────────────────────────────────────────
+// When PNTHR Tree owns the AI-300 account, the competing legacy AI-300 automation
+// crons are suppressed. This prevents conflicting order placement from two
+// strategies in the same IBKR account. Tree is the sole strategy when running.
+async function isAi300SoloModeActive() {
   try {
     const db = await connectToDatabase();
+    // Legacy retired-strategy enable flag (kept for safety; false in production).
     const config = await getAmbushConfigForGate(db);
     if (config?.enabled) return true;
     // PNTHR Tree also owns AI-300 when running (paper or live) → suppress the legacy
@@ -6615,11 +6616,11 @@ async function isAmbushModeActive() {
 
 // ── Cron: PNTHR Orders — Friday 2:00 PM ET (PREVIEW) ─────────────────────────
 // Generates weekly order sheet 2 hours before close so user can set up GTD limit orders.
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 let fridayPreviewRunning = false;
 cron.schedule('0 14 * * 5', async () => {
   if (fridayPreviewRunning) return;
-  if (await isAmbushModeActive()) { console.log('[Orders] Friday PREVIEW skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[Orders] Friday PREVIEW skipped — AI-300 solo mode active'); return; }
   fridayPreviewRunning = true;
   try {
     console.log('[Orders] Running Friday PREVIEW pipeline...');
@@ -6634,7 +6635,7 @@ cron.schedule('0 14 * * 5', async () => {
 
 // ── Cron: PNTHR Orders — Daily 4:40 PM ET Mon–Fri (DAILY_UPDATE) ─────────────
 // Checks lot additions (time gate + +1% trigger), stale hunts, and exit signals.
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 let dailyOrdersRunning = false;
 // PNTHR Tree — 42wk-high engine tick (every 2 min during the ET cash session; no-ops when mode='off').
 // Timezone-pinned to America/New_York (matches the sibling crons) so '9-16' is correct regardless of
@@ -6760,7 +6761,7 @@ cron.schedule('35 16 * * 1-5', async () => {
 
 cron.schedule('40 16 * * 1-5', async () => {
   if (dailyOrdersRunning) return;
-  if (await isAmbushModeActive()) { console.log('[Orders] Daily update skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[Orders] Daily update skipped — AI-300 solo mode active'); return; }
   dailyOrdersRunning = true;
   try {
     console.log('[Orders] Running daily update...');
@@ -6934,7 +6935,7 @@ cron.schedule('15 16 * * 1-5', async () => {
     // The 679 carnivore refresh + the AI Orders sheet are READ-ONLY (verified: no
     // enqueueOutbox / order placement anywhere in ordersPipeline.js or aiOrdersPipeline.js).
     // They power the AI Orders display, which Scott/Brennan read manually. They MUST stay
-    // fresh every day regardless of Ambush — so they are NO LONGER gated by Ambush mode.
+    // fresh every day regardless of the solo-mode gate — so they are NO LONGER gated by AI-300 solo mode.
     // (Previously the whole block was skipped when Ambush was active, which silently
     //  froze the AI Orders sheet — it went stale from May 29.) The data pipeline above is
     //  likewise ungated. Only ORDER STAGING/EXECUTION stays gated (and is permanently retired).
@@ -6950,7 +6951,7 @@ cron.schedule('15 16 * * 1-5', async () => {
     // ── ORDER STAGING (Friday) — GATED by Ambush AND permanently retired ─────────
     // Defense-in-depth: stageWeeklyOrders returns DISABLED (retirement flag) regardless,
     // and we still gate it on Ambush. It can never create positions under current config.
-    if (!(await isAmbushModeActive())) {
+    if (!(await isAi300SoloModeActive())) {
       const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
       if (today === 'Friday') {
         try {
@@ -6982,9 +6983,9 @@ cron.schedule('0 20 * * 0', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 stale hunt check — daily at 4:32pm ET (after 4:15 pipeline)
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 cron.schedule('32 16 * * 1-5', async () => {
-  if (await isAmbushModeActive()) { console.log('[AI PosManager] stale hunt skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[AI PosManager] stale hunt skipped — AI-300 solo mode active'); return; }
   try {
     console.log('[AI PosManager] running daily stale hunt check...');
     const result = await runAiStaleHuntCheck();
@@ -6993,9 +6994,9 @@ cron.schedule('32 16 * * 1-5', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: AI 300 Monday execution — promotes STAGED → ACTIVE, enqueues orders
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 cron.schedule('35 9 * * 1', async () => {
-  if (await isAmbushModeActive()) { console.log('[AI AutoExec] Monday exec skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[AI AutoExec] Monday exec skipped — AI-300 solo mode active'); return; }
   try {
     console.log('[AI AutoExec] Monday execution — promoting STAGED positions...');
     const result = await executeWeeklyOrders();
@@ -7006,9 +7007,9 @@ cron.schedule('35 9 * * 1', async () => {
 }, { timezone: 'America/New_York' });
 
 // ── Cron: PNTHR MCE — daily 10:30 AM ET, Mon-Fri — auto-execute MCE breakout signals
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 cron.schedule('30 10 * * 1-5', async () => {
-  if (await isAmbushModeActive()) { console.log('[MCE AutoExec] MCE scan skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[MCE AutoExec] MCE scan skipped — AI-300 solo mode active'); return; }
   try {
     console.log('[MCE AutoExec] Daily MCE scan — checking for breakout signals...');
     const result = await executeMceEntries();
@@ -7021,17 +7022,17 @@ cron.schedule('30 10 * * 1-5', async () => {
 // ── Cron: AI 300 intraday grade monitor — every 60s during market hours ──────
 // Recomputes gap% + EMA slope for WAIT LONG / LONG orders using live prices.
 // When an order upgrades to ★ BUY LONG (BEST), it auto-stages for execution.
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 let aiGradeMonitorRunning = false;
-let _ambushModeCache = { value: false, checkedAt: 0 };
+let _ai300SoloModeCache = { value: false, checkedAt: 0 };
 setInterval(async () => {
   if (aiGradeMonitorRunning) return;
-  // Cache Ambush mode check for 5 min to avoid DB hit every 60s
-  if (Date.now() - _ambushModeCache.checkedAt > 300_000) {
-    _ambushModeCache.value = await isAmbushModeActive();
-    _ambushModeCache.checkedAt = Date.now();
+  // Cache the solo-mode check for 5 min to avoid DB hit every 60s
+  if (Date.now() - _ai300SoloModeCache.checkedAt > 300_000) {
+    _ai300SoloModeCache.value = await isAi300SoloModeActive();
+    _ai300SoloModeCache.checkedAt = Date.now();
   }
-  if (_ambushModeCache.value) return;
+  if (_ai300SoloModeCache.value) return;
   const now = new Date();
   const etOpts = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
   const [hStr, mStr] = now.toLocaleString('en-US', etOpts).split(':');
@@ -7110,9 +7111,9 @@ setInterval(async () => {
 }, 60_000);
 
 // ── Cron: AI 300 weekly stop ratchet + structural exit — Friday 4:35pm ET
-// ⚡ GATED by Ambush mode — suppressed when Ambush V7 is the active strategy.
+// ⚡ GATED by AI-300 solo mode — suppressed when PNTHR Tree owns the AI-300 account.
 cron.schedule('35 16 * * 5', async () => {
-  if (await isAmbushModeActive()) { console.log('[AI PosManager] weekly ratchet skipped — AMBUSH MODE active'); return; }
+  if (await isAi300SoloModeActive()) { console.log('[AI PosManager] weekly ratchet skipped — AI-300 solo mode active'); return; }
   try {
     console.log('[AI PosManager] running weekly stop ratchet + structural exit...');
     const result = await runAiWeeklyRatchet();

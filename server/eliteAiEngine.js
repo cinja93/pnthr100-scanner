@@ -2,7 +2,7 @@
 // ── PNTHR Elite AI — DRY-RUN paper engine ───────────────────────────────────
 //
 // Isolated paper-trading engine for the AI-300 Elite strategy. Writes ONLY to
-// its own `pnthr_elite_positions` collection — NO shared state with Ambush
+// its own `pnthr_elite_positions` collection — NO shared state with the legacy short book
 // (pnthr_ambush_positions) or the Command Center (pnthr_portfolio). NO real
 // orders, NO IBKR, NO outbox. Pure paper.
 //
@@ -33,7 +33,7 @@ function todayET() {
 // carries its full entry plan: L1 trigger, weekly stop, RPS, and the 5-lot share
 // ladder. Null ownerId → not filtered by the live Command-Center book (Elite AI is
 // its own isolated paper account).
-// Real account NAV — the live balance (same source as the AUM tracker / Ambush config).
+// Real account NAV — the live balance (same source as the AUM tracker / shared config).
 // The paper engine sizes against THIS now, not a notional $100k.
 async function getActualNav(db) {
   let actualNav = 83000;
@@ -136,8 +136,8 @@ export async function getEliteSizing() {
   return { paperNav, realized, sizingPct: Math.round(getSizingMultiplier(paperNav) * 100), tier: getSizingTierLabel(paperNav), tier1: 125000, tier2: 166000 };
 }
 
-// LONG-vs-SHORT scorecard — validates the Ambush(short) / Elite(long) split on REAL data.
-// SHORT leg = Ambush live realized trades; LONG leg = Elite AI paper (realized + open).
+// LONG-vs-SHORT scorecard — validates the long (Elite) vs short (legacy) split on REAL data.
+// SHORT leg = legacy short realized trades; LONG leg = Elite AI paper (realized + open).
 export async function getEliteScorecard() {
   const db = await connectToDatabase();
   if (!db) return null;
@@ -153,7 +153,7 @@ export async function getEliteScorecard() {
   return { short, ambLong, eliteClosed, eliteOpen, from: dates[0] || null, to: dates[dates.length - 1] || null };
 }
 
-// Independent rule-recompute verification — the paper analogue of Ambush's
+// Independent rule-recompute verification — the paper analogue of the live
 // IBKR-truth reconcile. Recomputes what each value SHOULD be per the strategy
 // and flags drift. When live, the IBKR-position comparison plugs in here.
 export function verifyElitePosition(pos, nav = 100000) {
@@ -285,7 +285,7 @@ export async function getEliteTrades(limit = 30, { ownerId } = {}) {
   return db.collection(TRADES).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 
-// ── PROJECTED vs ACTUAL AUM (mirrors the Ambush projection, Elite numbers) ──────
+// ── PROJECTED vs ACTUAL AUM (mirrors the projection panel, Elite numbers) ──────
 // Backtest baseline = eliteProjectionBaseline.json (MCE gated baseline, NET of fund
 // fees). HYPOTHETICAL / survivorship-flattered — internal tracker, not a track record.
 const _eliteProjPath = new URL('./data/eliteProjectionBaseline.json', import.meta.url).pathname;
@@ -336,11 +336,11 @@ export async function getEliteProjection() {
   const factors = proj.factors || [];
   const factorsGross = proj.factorsGross || [];
 
-  // Actual AUM = the REAL account NAV (same source as the paper engine + Ambush panel).
+  // Actual AUM = the REAL account NAV (same source as the paper engine + AUM panel).
   const actualNav = await getActualNav(db);
   const todayISO = _etDateStr();
 
-  // Anchor: lock start date + AUM on first call (mirrors Ambush).
+  // Anchor: lock start date + AUM on first call (mirrors the AUM tracker).
   const cfgColl = db.collection('pnthr_elite_config');
   const cfg = (await cfgColl.findOne({ key: 'elite_config' })) || {};
   let startDate = cfg.projectionStartDate, startAum = cfg.projectionStartAum;

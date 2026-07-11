@@ -40,7 +40,7 @@ const C = (ownerId) => ({
 // opts.baseCapital → the book seeds at an explicit NAV (e.g. the house hands-off Tree
 // book at the $89,882 fund-compare baseline) instead of the member's profile accountSize.
 // opts.treeOnly  → this book runs ONLY the Tree strategy; the index.js member loop skips
-// it so it never spawns owner-scoped Elite/Ambush paper engines (house has its own).
+// it so it never spawns owner-scoped Elite paper engines (house has its own).
 export async function ensurePaperBook(db, ownerId, label = null, opts = {}) {
   const setOnInsert = { ownerId: String(ownerId), label, createdAt: new Date() };
   if (opts.baseCapital > 0) setOnInsert.baseCapital = +opts.baseCapital;

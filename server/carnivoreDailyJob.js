@@ -7,7 +7,7 @@
 // continuous bars to today instead of a frozen tail + one synthetic live bar
 // (the "phantom gap" Scott flagged 2026-06-16 — the 679 set had no recurring
 // updater and froze at 2026-04-02 since the last manual seed). Also refreshes the
-// SPY/QQQ benchmark bars that ambushIrService reads.
+// SPY/QQQ benchmark bars that the IR services read.
 //
 // What it does, per ticker ALREADY in pnthr_bt_candles (the seeded 679 + SPY/QQQ
 // + sector ETFs — names not in the collection chart fine via getAiStockChartData's

@@ -1,5 +1,5 @@
 // server/pnthrPounceEngine.js
-// ── PNTHR POUNCE — the pullback (ambush) strategy, PAPER book ─────────────────
+// ── PNTHR POUNCE — the pullback strategy, PAPER book ─────────────────
 //
 // Sister engine to pnthrTreeEngine.js. Tree buys NEW 42-week HIGHS (breakouts);
 // POUNCE buys PULLBACKS to the weekly OpEMA (sector-optimized EMA) while the

@@ -6,9 +6,9 @@
 //
 // Modes:  'off'  — nothing fires (default)
 //         'paper'— records to pnthr_tree_positions, NO real orders (safe)
-//         'live' — places real orders via the BRIDGE (reuses Ambush's tested order queue)
+//         'live' — places real orders via the BRIDGE (reuses the tested order queue)
 //
-// SAFETY: must OWN AI-300 alone — Ambush + Elite must be OFF (one auto-engine per account,
+// SAFETY: must OWN AI-300 alone — no other auto-engine may run (one auto-engine per account,
 // or you get the AVGO cross-engine contamination). Live mode requires the bridge up.
 
 import fs from 'fs';
@@ -105,7 +105,7 @@ export const AI_TICKERS = (() => {
   return [...new Set(out)];
 })();
 
-// ── NAV (same source the Ambush/Elite pages use) ────────────────────────────
+// ── NAV (same source the Elite page uses) ────────────────────────────
 // getNavInfo carries WHERE the number came from. source:'default' means every real
 // source failed — the 2026-07-02 corruption incident was this default ($80,200)
 // silently sizing orders and being written into the fund-compare history as real
@@ -846,7 +846,7 @@ export async function runPnthrTreeTick(db) {
   // A BUY_ENTRY that FAILED with an ambiguous bridge/broker timeout (NO_STATUS_AFTER /
   // BRIDGE_TIMEOUT) may actually be LIVE in TWS — treat it as in-flight for one propagation
   // window so we don't fire a duplicate entry while the truth settles (the ibkrOutbox path
-  // has this guard; the ambush/Tree path did not).
+  // has this guard; the older path did not).
   for (const c of await db.collection('pnthr_ambush_outbox').find({
     command: 'BUY_ENTRY', status: 'FAILED', updatedAt: { $gte: inflightCutoff },
   }).toArray()) {
@@ -936,8 +936,8 @@ export async function runPnthrTreeTick(db) {
       });
       actions.push({ type: 'PAPER_ENTRY', ticker: c.t, shares, price: c.price, stop: c.stop, resized });
     } else if (cfg.mode === 'live') {
-      // Bridge BUY_ENTRY places the market buy AND the protective stop in one command (Ambush shape).
-      // Requires the bridge running + draining the outbox, and the Ambush engine OFF (no reconcile contention).
+      // Bridge BUY_ENTRY places the market buy AND the protective stop in one command (bridge standard shape).
+      // Requires the bridge running + draining the outbox, and no other engine contending (no reconcile contention).
       await enqueueAmbushOrder(db, 'BUY_ENTRY', { ticker: c.t, shares, price: c.price, direction: 'LONG', stopPrice: c.stop, source: 'TREE_42WH' });
       actions.push({ type: 'LIVE_ENTRY_ENQUEUED', ticker: c.t, shares, price: c.price, stop: c.stop, resized });
     }
@@ -1195,8 +1195,8 @@ export async function resetPnthrTreePaper(db) {
   };
 }
 
-// ── Projected vs Actual AUM (Tree's OWN backtest baseline, NOT Ambush's) ──────
-// Mirrors the Ambush projection so the shared AumTracker panel renders Tree's
+// ── Projected vs Actual AUM (Tree's OWN backtest baseline) ──────
+// Mirrors the projection panel so the shared AumTracker panel renders Tree's
 // real numbers. Baseline = server/data/treeProjectionBaseline.json (build_tree_baseline.mjs).
 const _treeBaselinePath = new URL('./data/treeProjectionBaseline.json', import.meta.url).pathname;
 let _treeBaseline = null;

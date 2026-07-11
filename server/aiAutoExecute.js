@@ -622,7 +622,7 @@ export async function monitorAndStageUpgrades(opts = {}) {
 // Kill switch: IBKR_MCE_AUTO_EXECUTE (default OFF)
 // ═══════════════════════════════════════════════════════════════════════════════
 function isMceEnabled() {
-  if (AI300_AUTO_EXEC_RETIRED) return false; // see AI300_AUTO_EXEC_RETIRED note above — Ambush owns AI-300
+  if (AI300_AUTO_EXEC_RETIRED) return false; // see AI300_AUTO_EXEC_RETIRED note above — Tree owns AI-300
   return process.env.IBKR_MCE_AUTO_EXECUTE === 'true';
 }
 

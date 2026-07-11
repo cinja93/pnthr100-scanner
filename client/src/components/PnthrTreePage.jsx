@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch, authHeaders, API_BASE, fetchPnthrTreeProjection } from '../services/api';
 import PouncePanel from './PouncePanel';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker, ForwardProjection } from './AmbushPage';
+import { AumTracker, ForwardProjection } from './AumWidgets';
 
 // PNTHR Tree — 42-week-high momentum cockpit.
 // Funnel: Stalking (outline green) → Approaching (flashing) → Attack (filled green) → Devour (cards).

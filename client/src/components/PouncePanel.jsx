@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker, ForwardProjection } from './AmbushPage';
+import { AumTracker, ForwardProjection } from './AumWidgets';
 
 // PNTHR POUNCE — the pullback (ambush) strategy, PAPER book. Sister to PNTHR Tree,
 // shown on the same page in the fund's black-and-gold, mirroring Tree's section order:

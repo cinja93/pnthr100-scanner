@@ -15,8 +15,8 @@ import PageHeader from './PageHeader';
 import AumShield from './AumShield';
 import LongShortScorecard from './LongShortScorecard';
 import AiTickerChartModal from './AiTickerChartModal';
-import { AumTracker } from './AmbushPage';
-import styles from './AmbushPage.module.css';
+import { AumTracker } from './AumWidgets';
+import styles from './EliteAiPage.module.css';
 
 // MCE funnel — the 4 stages the engine actually has (no intraday tripwire / re-entry loop).
 const STAGES = [

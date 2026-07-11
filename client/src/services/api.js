@@ -1179,21 +1179,6 @@ export async function fetchIbkrDiscrepancies() {
   return res.json();
 }
 
-// Ambush ↔ IBKR discrepancy banner: detect mismatches + act on them.
-export async function fetchAmbushDiscrepancies() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/discrepancies`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-// action = 'flatten' | 'adopt' | 'clear'
-export async function ambushDiscrepancyAction(ticker, action) {
-  const res = await apiFetch(`${API_BASE}/api/ambush/discrepancy/${encodeURIComponent(ticker)}/${action}`, {
-    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: '{}',
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
 // Returns { ema: { [TICKER]: { ema21h, computedAt } }, closedToday: { [TICKER]: { direction, exitPrice, exitReason, closedAt } } }
 // Server-cached for 60 minutes per ticker — safe to call every 60s on the client.
 export async function fetchHourlyEma() {
@@ -1406,25 +1391,6 @@ export async function dismissTrendlineAlert(id) {
   return res.json();
 }
 
-// ── PNTHR Ambush API ──
-export async function fetchAmbushSummary() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/summary`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function fetchAmbushConfig() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/config`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function fetchAmbushProjection() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/projection`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
 export async function fetchPnthrTreeProjection() {
   const res = await apiFetch(`${API_BASE}/api/pnthr-tree/projection`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1460,61 +1426,6 @@ export async function fetchAiObOs(forceRefresh = false) {
 // Used by the OB/OS page to flash tickers that are live Tree 42-wk-high names.
 export async function fetchPnthrTreeState() {
   const res = await apiFetch(`${API_BASE}/api/pnthr-tree`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function fetchAmbushReconcile() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/live-reconcile`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function updateAmbushConfig(updates) {
-  const res = await apiFetch(`${API_BASE}/api/ambush/config`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(updates),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function setAmbushReopen(ticker, restrict) {
-  const res = await apiFetch(`${API_BASE}/api/ambush/reopen`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ ticker, restrict }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function triggerAmbushTick() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/tick`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function deleteAmbushPosition(ticker) {
-  const res = await apiFetch(`${API_BASE}/api/ambush/position/${ticker}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-export async function resetAmbush() {
-  const res = await apiFetch(`${API_BASE}/api/ambush/reset`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ confirm: 'RESET_ALL_AMBUSH' }),
-  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

@@ -1,13 +1,13 @@
 // client/src/components/EliteAiPage.jsx
 // ── PNTHR Elite AI — automated funnel for the AI 300 Elite strategy ──────────
 //
-// The funnel (Ambush stair-step UX) wired to the AI-300 Elite brain:
+// The funnel (stair-step UX) wired to the AI-300 Elite brain:
 //   STALKING → HUNTING → DEVOUR → PROTECT
 //
 // STALKING / HUNTING = weekly BL/SS candidates from the orders pipeline, chips
 // brightening by qualityGrade (GOOD → BETTER → BEST). DEVOUR / PROTECT = the
 // isolated DRY-RUN paper engine (pnthr_elite_positions) rendered as lot ladders.
-// Paper only — no orders, no IBKR, nothing shared with Ambush or the portfolio.
+// Paper only — no orders, no IBKR, nothing shared with the live account or the portfolio.
 // ────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react';
 import { fetchReentrySignals, fetchLatestAiOrders, fetchEliteAiPositions, fetchEliteSizing, fetchEliteScorecard, fetchEliteProjection, runEliteDryRun, resetEliteDryRun, manageEliteDryRun } from '../services/api';
@@ -92,7 +92,7 @@ function LadderCard({ pos, onChart, allTickers }) {
         <span style={{ color: '#999' }}>RPS <b style={{ ...mono, color: '#ddd' }}>{fmtUsd(rps)}</b></span>
       </div>
 
-      {/* RULE VERIFICATION — paper analogue of Ambush's IBKR-truth checks */}
+      {/* RULE VERIFICATION — paper analogue of the live IBKR-truth checks */}
       {pos.rec && (
         <div style={{ border: '1px solid #2a2a33', borderRadius: 6, padding: '6px 9px', marginTop: 9, background: '#121217' }}>
           <span style={{ fontSize: 10, fontWeight: 800, color: '#9a9aa6', letterSpacing: 0.5 }}>RULE VERIFICATION <span style={{ color: '#555', fontWeight: 400 }}>· paper (IBKR-truth when live)</span></span>

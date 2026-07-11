@@ -1,6 +1,6 @@
 // client/src/components/FundComparisonPage.jsx
-// Investor-facing 3-fund comparison: PNTHR Tree (LIVE) vs Elite AI (PAPER) vs
-// Ambush V7.6 (PAPER). Refreshes every 10s. Data: GET /api/fund-compare.
+// Investor-facing fund comparison: PNTHR Tree (LIVE) vs Elite AI (PAPER) vs
+// AI Sector Momentum (PAPER). Refreshes every 10s. Data: GET /api/fund-compare.
 // COMPLIANCE: simulated/paper results carry mandatory hypothetical-performance
 // disclaimers; the only investor action is a non-binding expression of interest.
 import { useState, useEffect, useCallback } from 'react';
@@ -203,7 +203,7 @@ export default function FundComparisonPage() {
             {funds.some(f => rc(f)) && (() => { const tp = funds.find(f => rc(f)); const r = rc(tp);
               return (
                 <div style={{ fontSize: 10.5, color: '#b8935a', lineHeight: 1.5, marginTop: 10, borderTop: `1px dashed ${AMBER}`, paddingTop: 8 }}>
-                  <b style={{ color: AMBER }}>* PNTHR Tree (hands-off) since-{r.start} figures are a HYPOTHETICAL RECONSTRUCTION</b>, not live results: what the pure 42-week-high strategy would have done with NO manual intervention, replayed on the locked, executable (no-look-ahead) engine from a warm-up-matured book rebased to the ${Math.round(tp.baselineNav).toLocaleString()} baseline. Central ~{r.centralPct}% (range {r.lowPct}% to {r.highPct}% depending on which same-day breakout wins scarce capital under the 2× cap). The live paper book tracks forward from {tp.forwardStart} and will converge to a single real line over time. Gross of costs, matching Elite/Ambush paper.
+                  <b style={{ color: AMBER }}>* PNTHR Tree (hands-off) since-{r.start} figures are a HYPOTHETICAL RECONSTRUCTION</b>, not live results: what the pure 42-week-high strategy would have done with NO manual intervention, replayed on the locked, executable (no-look-ahead) engine from a warm-up-matured book rebased to the ${Math.round(tp.baselineNav).toLocaleString()} baseline. Central ~{r.centralPct}% (range {r.lowPct}% to {r.highPct}% depending on which same-day breakout wins scarce capital under the 2× cap). The live paper book tracks forward from {tp.forwardStart} and will converge to a single real line over time. Gross of costs, matching Elite/AI Sector Momentum paper.
                 </div>
               ); })()}
           </div>
@@ -211,7 +211,7 @@ export default function FundComparisonPage() {
           {/* Accredited acknowledgment gate for the interest buttons */}
           <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11.5, color: MUT, marginBottom: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>I am a verified accredited investor, I understand that Elite AI, Ambush V7.6, and the PNTHR Tree (hands-off) figures above are <b>simulated / paper / reconstructed</b> results and not a track record, and I have read the disclosures. (Required to express interest.)</span>
+            <span>I am a verified accredited investor, I understand that Elite AI, AI Sector Momentum, and the PNTHR Tree (hands-off) figures above are <b>simulated / paper / reconstructed</b> results and not a track record, and I have read the disclosures. (Required to express interest.)</span>
           </label>
           <div style={{ fontSize: 10.5, color: '#666', lineHeight: 1.5, marginTop: 8 }}>
             <b>Gross vs net:</b> {data.fees?.basis || 'net is after 2% management + 30% performance fee (high-water mark)'}. Gross figures are before fund fees; paper figures are also gross of commissions and borrow costs, with modeled slippage where the strategy specifies. PNTHR Tree gross reflects the actual live account. Risk-adjusted statistics require several weeks of data before they are meaningful. This page is an internal comparison tool; nothing herein is an offer, solicitation, or recommendation to buy or sell any security.
@@ -222,7 +222,7 @@ export default function FundComparisonPage() {
       {/* MANDATORY disclaimer banner — pinned to the BOTTOM of the page (always rendered) */}
       <div style={{ background: '#1a1206', border: `1px solid ${AMBER}`, borderRadius: 8, padding: '10px 14px', marginTop: 16, fontSize: 11.5, color: '#e8c88a', lineHeight: 1.5 }}>
         <b style={{ color: AMBER }}>HYPOTHETICAL / SIMULATED PERFORMANCE.</b> {data?.disclaimer ||
-          'Elite AI and Ambush V7.6 are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.'}
+          'Elite AI and AI Sector Momentum are PAPER-TRADED simulations — not real trading and not a track record. PNTHR Tree reflects a live account with a very short history. Past and simulated performance does not guarantee future results. For evaluation only; not an offer to sell securities. Reg D 506(c) — available only to verified accredited investors.'}
       </div>
     </div>
   );

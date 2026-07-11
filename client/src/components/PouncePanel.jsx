@@ -3,7 +3,7 @@ import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import { AumTracker, ForwardProjection } from './AumWidgets';
 
-// PNTHR POUNCE — the pullback (ambush) strategy, PAPER book. Sister to PNTHR Tree,
+// PNTHR POUNCE — the pullback strategy, PAPER book. Sister to PNTHR Tree,
 // shown on the same page in the fund's black-and-gold, mirroring Tree's section order:
 // PROTECT → RECENTLY STOPPED → DEVOUR → POUNCING → APPROACHING → STALKING.
 const GOLD = '#facc15', GOLD_DIM = '#a3891f', PANEL_BG = '#0a0a0a';

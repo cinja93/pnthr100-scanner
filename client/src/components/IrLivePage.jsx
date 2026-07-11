@@ -700,16 +700,6 @@ const FUND_CONFIG = {
     curveLabel: 'Carnivore Quant Fund',
     crisisHeader: 'Carnivore',
   },
-  ambush: {
-    name: 'PNTHR Ambush V7.6',
-    netLabel: 'AMBUSH (NET)',
-    compLabel: 'AMBUSH V7.6',
-    subtitle: (endDate) => `Backtest Performance Report | Nov 2022 – ${endDate} | Automated Intraday Pyramid (Long + Short, Any Regime) + 2-Bar Trailing Exit | PNTHR AI 300 Universe (~300 Names) | v7.6.0`,
-    apiBase: 'ambush-ir',
-    footer: 'AMBUSH V7.6',
-    curveLabel: 'Ambush V7.6',
-    crisisHeader: 'Ambush',
-  },
   tree: {
     name: 'PNTHR Tree Fund, LP',
     netLabel: 'TREE (NET)',
@@ -742,17 +732,6 @@ const CARNIVORE_METHODOLOGY = [
   { title: 'Execution Model', content: 'Signals are generated on Friday close; all entries execute at Monday open. Lot fills are capped at 2% of 20-day average daily volume per lot to ensure institutional executability. Stop fills use gap-through pricing (fill at open when gap exceeds stop level) for conservative modeling. All friction costs (commission, slippage, borrow) are included in net figures.' },
 ];
 
-const AMBUSH_METHODOLOGY = [
-  { title: 'The PNTHR AI 300 Universe', content: 'Approximately 300 AI-economy U.S. equities across 18 proprietary sectors of the artificial intelligence economy. Ambush trades this universe intraday on hourly bars, hunting opening-range breakouts in both directions.' },
-  { title: 'No Regime Gate, Directional Sector Filter (V7.6)', content: 'V7.6 takes Buy Long (BL+1) and Sell Short (SS+1) setups in ANY PNTHR AI 300 index regime — long breakouts and short breakdowns trade on their own merit. A directional sector filter applies: a long is taken only in a BULL sector and a short only in a BEAR sector, judged by the sector\'s 5-day return. The two-sided book contributes positive P&L across regimes by capturing rotations and selloffs a long-only system sits out.' },
-  { title: 'Opening-Range Breakout Entry', content: 'The engine works on :00 clock-hour bars that match the trader\'s broker chart. The opening bar (09:30–10:00 ET) sets the opening range; from 10:00 the engine enters on a real-time break of the most-recent completed clock-hour bar\'s high (long) / low (short), once price has cleared the prior two-day high/low. The opening-range low (long) / high (short) is the initial disaster stop — because the stop is tight, share count is maximized for a fixed dollar risk.' },
-  { title: 'Position Sizing & Five-Lot Pyramid', content: 'Fixed dollar risk per position: approximately $150 at the 50% launch tier (NAV below $125K), scaling to ~$300 at full size, capped by a 10% single-name limit and a 1% vitality limit. Graduated sizing runs 50% of full size below $125K NAV, 75% to $166K, then 100%. Each position pyramids across five lots (35/25/20/12/8% of planned shares) that add at +0/+3/+6/+10/+14% from the original entry. As lots fill, the stop ratchets up to the prior lot trigger, never worse than breakeven.' },
-  { title: 'Two-Bar Trailing Exit (V7.6)', content: 'V7.6 removes the fixed +$75 breakeven checkpoint. From the moment of entry, the two-bar broken-low trail governs the exit: the position exits when price breaks one cent below the lower of the two most recent completed hourly bars. The first-hour low remains the disaster floor beneath the trail. This keeps winners running and reduced portfolio drawdown versus the prior breakeven-snap logic.' },
-  { title: 'Green-Confirmed Re-Entry (V7.6)', content: 'After a stop-out the engine re-arms, but re-enters only when a clock-hour bar CLOSES green above the prior bar\'s high (long) / red below the prior bar\'s low (short) AND price still holds above the original, frozen two-day breakout level. The re-entry stop starts at that confirming bar\'s low (tight), then hands off to the two-bar trail. This green confirmation is the decisive V7.6 fix: it recycles capital into names that genuinely resume their move while eliminating the in-and-out churn an any-color re-entry produces.' },
-  { title: 'Capital Discipline & Withdrawal Rule', content: 'A real-time cash ledger funds every entry — no leverage; peak gross deployed stays at or below 100% of NAV (a standard margin account permits roughly 2x). At every $2,000,000 of account value, $1,000,000 is banked and the engine trades only the remainder, bounding money-at-risk while compounding realized gains off the table.' },
-  { title: 'Execution Model & Costs', content: 'Sixty-second intraday tick engine. Entries and lot adds fill at the trigger price with adverse slippage; exits fill at the stop/trail with adverse slippage. All friction costs (real IBKR commissions, 5 bps slippage, modeled short borrow) are included in net figures. No look-ahead — signals and regime use only data available at each bar. Validated under stress: borrow ×10, gap/squeeze slippage, pessimistic fills, and year-by-year persistence.' },
-];
-
 const TREE_METHODOLOGY = [
   { title: 'Mandate vs. Current Implementation', content: 'PNTHR Tree Fund, LP is authorized as a long/short equity strategy and may take long and short positions at the Investment Manager\'s discretion. The current systematic implementation — and the entirety of this backtest — is LONG-ONLY: it buys new 42-week highs in the PNTHR AI 300 universe and trails a protective stop. No short positions were taken in the backtest, and no short performance is presented or implied. The long/short authorization preserves flexibility to add a short sleeve in the future; any such change would be disclosed to investors.' },
   { title: 'The PNTHR AI 300 Universe', content: 'Approximately 300 AI-economy U.S. equities across 18 proprietary sectors of the artificial intelligence economy, from semiconductors and cloud infrastructure to autonomous systems and AI-powered healthcare. The backtest uses the CURRENT index members only, which makes the historical result survivorship-flattered (see disclosures).' },
@@ -764,8 +743,7 @@ const TREE_METHODOLOGY = [
 ];
 
 function MethodologySection({ fund }) {
-  const sections = fund === 'ambush' ? AMBUSH_METHODOLOGY
-    : fund === 'tree' ? TREE_METHODOLOGY
+  const sections = fund === 'tree' ? TREE_METHODOLOGY
     : fund === 'carnivore' ? CARNIVORE_METHODOLOGY : AI300_METHODOLOGY;
 
   return (

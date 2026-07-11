@@ -368,7 +368,7 @@ export default function PnthrTreePage() {
   }, []);
 
   const setMode = async (mode) => {
-    if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 42-week high. Make sure Ambush & Elite are OFF (one engine per account). Proceed?')) return;
+    if (mode === 'live' && !window.confirm('AUTO-EXECUTE places REAL orders on every new 42-week high. Make sure no other engine is managing this account (one engine per account). Proceed?')) return;
     setBusy(true);
     try {
       const r = await apiFetch(`${API_BASE}/api/admin/pnthr-tree/mode`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
@@ -535,7 +535,7 @@ export default function PnthrTreePage() {
           . This is an AI-300 membership change or a trade-moving data revision, not a routine split. Regenerate + verify the baseline. Last checked {data.baselineDrift.checkedAt ? new Date(data.baselineDrift.checkedAt).toLocaleString() : '—'}.
         </div>
       )}
-      {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 42-week highs. Verify the first fill, and confirm Ambush/Elite are OFF.</div>}
+      {mode === 'live' && <div style={{ background: '#3b0d0d', border: '1px solid #ef4444', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#fca5a5', fontSize: 12 }}>⚠️ AUTO-EXECUTE is LIVE — real orders fire on new 42-week highs. Verify the first fill, and confirm no other engine is managing this account.</div>}
       {data?.readOnly && (
         <div style={{ background: '#0b1f3a', border: '1px dashed #3b82f6', borderRadius: 8, padding: '8px 12px', marginTop: 10, color: '#93c5fd', fontSize: 12 }}>
           📝 This is your PNTHR Tree paper book, sized to {fmt(data.baseCapital || data.nav || 0)}. The strategy runs automatically: every new 42-week high is a simulated buy with a 2-week-low trailing stop and a $250 breakeven snap. These are hypothetical paper trades, place NO real orders, and are not held in any brokerage account. When you connect your own brokerage down the road, this can switch to live trading.
@@ -924,7 +924,7 @@ export default function PnthrTreePage() {
       )}
 
       <div style={{ color: '#9a9a9a', fontSize: 10, marginTop: 18, borderTop: '1px solid #222', paddingTop: 8 }}>
-        Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (Ambush & Elite off). Backtest is hypothetical & survivorship-flattered; not a track record.
+        Updates every 30s. PAPER records to a paper book (no real orders). AUTO-EXECUTE places real orders via the bridge — must own AI-300 alone (no other engine running). Backtest is hypothetical & survivorship-flattered; not a track record.
       </div>
 
       {dailyLog !== null && (

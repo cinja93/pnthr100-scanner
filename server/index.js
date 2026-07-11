@@ -2728,9 +2728,9 @@ app.get('/api/elite-ai/projection', authenticateJWT, async (req, res) => {
 });
 
 
-// ── 3-fund comparison (Tree LIVE vs Elite PAPER vs Ambush PAPER) — investor dashboard ──
+// ── 3-fund comparison (Tree LIVE vs Elite + AI Sector Momentum PAPER) — investor dashboard ──
 app.get('/api/fund-compare', authenticateJWT, async (req, res) => {
-  // Admin (Scott) → the HOUSE comparison (live Tree + house paper Elite/Ambush, real NAV).
+  // Admin (Scott) → the HOUSE comparison (live Tree + house paper Elite / AI Sector Momentum, real NAV).
   // Any non-admin member (e.g. Brennan) → his OWN fully-isolated $50k paper comparison —
   // owner-scoped books only, never the house account.
   try {
@@ -3296,7 +3296,7 @@ app.get('/api/carnivore-ir/:tier/trades',  authenticateJWT, requireIrLiveAccess,
 
 // ── PNTHR Tree Fund — Intelligence Report (AI-300 42wk-high; 3 tiers) ────────
 // Gated by its OWN page key ('tree-ir-live') so a Tree-only investor can be granted
-// the Tree IR without the AI Elite / Carnivore / Ambush reports (separate fund).
+// the Tree IR without the AI Elite / Carnivore reports (separate fund).
 async function requireTreeIrAccess(req, res, next) {
   if (req.user?.role === 'admin') return next();
   if (req.user?.source === 'den_investors') {
@@ -4286,15 +4286,13 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       ).map(p => p.ticker?.toUpperCase()).filter(Boolean)
     );
 
-    // Ambush ownership guard (mirrors ibkrSync.js Phase-3 + orphanOrderJanitor.js):
-    // tickers in pnthr_ambush_positions are managed END TO END by the intraday
-    // Ambush engine (entries, exits, lot pyramids, protective/trailing stops, all
-    // via pnthr_ambush_outbox) and live in their OWN book + reconcile banner
-    // (/api/ambush/discrepancies). They are NEVER written to the old Command book
-    // (pnthr_portfolio), so this legacy reconcile would otherwise flag every Ambush
-    // fill as IBKR_ONLY "TICKER MISSING — NOT in PNTHR Assistant". Skip them here so
-    // the false alerts stop; the Ambush banner owns their reconcile. This does NOT
-    // touch PNTHR AI Orders (different collections) or any real Command position.
+    // Outbox-pipeline ownership guard (mirrors ibkrSync.js Phase-3 + orphanOrderJanitor.js):
+    // tickers in pnthr_ambush_positions are managed END TO END via pnthr_ambush_outbox
+    // (entries, exits, protective/trailing stops) and live in their OWN book. They are
+    // NEVER written to the old Command book (pnthr_portfolio), so this legacy reconcile
+    // would otherwise flag every such fill as IBKR_ONLY "TICKER MISSING — NOT in PNTHR
+    // Assistant". Skip them here so the false alerts stop. This does NOT touch PNTHR AI
+    // Orders (different collections) or any real Command position.
     const ambushOwnedTickers = new Set(
       (await db.collection('pnthr_ambush_positions')
         .find({}, { projection: { ticker: 1 } }).toArray()
@@ -4523,7 +4521,7 @@ app.get('/api/ibkr/discrepancies', authenticateJWT, async (req, res) => {
       if (!pnthrByTicker[ticker]) {
         // Suppress alert if the ticker was recently closed in PNTHR (within 7 days)
         if (recentlyClosedTickers.has(ticker)) continue;
-        // Owned by the Ambush engine — handled end-to-end in its own book/banner,
+        // Owned by the outbox pipeline — handled end-to-end in its own book,
         // never the old Command book. Suppress the false IBKR_ONLY alert.
         if (ambushOwnedTickers.has(ticker)) continue;
         const rawIbkrShares = +(ibkrByTicker[ticker].shares) || 0;
@@ -4591,16 +4589,16 @@ app.post('/api/ibkr/import-position', requireAdmin, async (req, res) => {
     const ticker = (req.body.ticker || '').toUpperCase();
     if (!ticker) return res.status(400).json({ error: 'ticker required' });
 
-    // Ambush ownership guard: refuse to create a Command card for a ticker the
-    // intraday Ambush engine owns (pnthr_ambush_positions). Both engines share ONE
+    // Outbox-pipeline ownership guard: refuse to create a Command card for a ticker the
+    // automated order pipeline owns (pnthr_ambush_positions). Both share ONE
     // IBKR account; a shadow Command record + its competing protective stop is the
-    // exact AVGO 2026-06-02 contamination (Ambush opened long, closed it, the
-    // orphaned shadow stop fired → account flipped short). The Ambush engine
+    // exact AVGO 2026-06-02 contamination (the pipeline opened long, closed it, the
+    // orphaned shadow stop fired → account flipped short). The pipeline
     // manages these end to end in its own book. Mirrors ibkrSync.js Phase-3 hand-off.
     const ambushOwned = await db.collection('pnthr_ambush_positions')
       .findOne({ ticker }, { projection: { _id: 1 } });
     if (ambushOwned) {
-      return res.status(409).json({ error: `${ticker} is managed by the Ambush engine and cannot be imported into the Command book (Ambush owns its entries, stops, and exits).` });
+      return res.status(409).json({ error: `${ticker} is managed by the automated order pipeline and cannot be imported into the Command book (the pipeline owns its entries, stops, and exits).` });
     }
 
     // Pull live IBKR snapshot for this user
@@ -6663,10 +6661,10 @@ cron.schedule('*/1 9-16 * * 1-5', async () => {   // every 1 min (was */2) — f
     // Member paper books (e.g. Brennan $50k) — same strategy, simulated, no IBKR.
     const pb = await runAllPaperBookTicks(db);
     if (pb.length) console.log('[PNTHR Tree] paper books:', JSON.stringify(pb.map(x => ({ owner: x.ownerId, actions: x.actions.length }))));
-    // Member Elite + Ambush PAPER books — owner-scoped (pnthr_elite_*__<id> / pnthr_ambush_paper_*__<id>),
+    // Member Elite + Sector Momentum PAPER books — owner-scoped (pnthr_elite_*__<id> / pnthr_sectrot_paper_*__<id>),
     // sized to the member's own $50k, NEVER touch the house books or IBKR. Same 2-min cadence as Tree.
     // treeOnly books (the house hands-off Tree paper book) run ONLY the Tree strategy above via
-    // runAllPaperBookTicks — skip them here so they don't spawn owner-scoped Elite/Ambush engines.
+    // runAllPaperBookTicks — skip them here so they don't spawn owner-scoped Elite / Sector Momentum engines.
     for (const bk of await listPaperBooks(db)) {
       if (bk.treeOnly) continue;
       try {
@@ -6933,7 +6931,7 @@ cron.schedule('15 16 * * 1-5', async () => {
     // enqueueOutbox / order placement anywhere in ordersPipeline.js or aiOrdersPipeline.js).
     // They power the AI Orders display, which Scott/Brennan read manually. They MUST stay
     // fresh every day regardless of the solo-mode gate — so they are NO LONGER gated by AI-300 solo mode.
-    // (Previously the whole block was skipped when Ambush was active, which silently
+    // (Previously the whole block was skipped when solo-mode was active, which silently
     //  froze the AI Orders sheet — it went stale from May 29.) The data pipeline above is
     //  likewise ungated. Only ORDER STAGING/EXECUTION stays gated (and is permanently retired).
     try {
@@ -6945,9 +6943,9 @@ cron.schedule('15 16 * * 1-5', async () => {
       const ordersDoc = await runAiOrdersPipeline({ type: 'DAILY' });
       console.log(`[AI Orders] done: ${ordersDoc.stats.totalOrders} orders this week`);
     } catch (e) { console.error('[CRON] AI Orders pipeline failed:', e.message); }
-    // ── ORDER STAGING (Friday) — GATED by Ambush AND permanently retired ─────────
+    // ── ORDER STAGING (Friday) — GATED by AI-300 solo-mode AND permanently retired ─────────
     // Defense-in-depth: stageWeeklyOrders returns DISABLED (retirement flag) regardless,
-    // and we still gate it on Ambush. It can never create positions under current config.
+    // and we still gate it on AI-300 solo-mode. It can never create positions under current config.
     if (!(await isAi300SoloModeActive())) {
       const today = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
       if (today === 'Friday') {
@@ -7058,7 +7056,7 @@ setInterval(async () => {
 // RECONCILIATION_CRON_ENABLED=true) runs the engine loops below, so a stray
 // local/dev server can never double-process against the same Atlas DB. Set
 // AMBUSH_CRON_ENABLED=true to force a specific instance on; an instance with
-// neither stays silent. Gates the live Ambush cron AND the Elite AI paper loop, so
+// neither stays silent. Gates the Elite AI and Sector Momentum paper loops, so
 // the background paper book ticks ONCE, on the always-on server — never twice (no
 // double-processing if a dev laptop also runs index.js) and never dependent on that
 // laptop being up. (Confirm Monday's open that it ticks server-side.)
@@ -7068,7 +7066,7 @@ const AMBUSH_CRON_IS_WRITER =
 // ── Elite AI — paper dry-run manage loop — every 10s during market hours ──────
 // Paper only: fills L2-L5 as price clears triggers, ratchets the stop, exits on
 // a stop hit. Writes ONLY to pnthr_elite_positions / pnthr_elite_trades — never
-// touches Ambush, pnthr_portfolio, or any live order path. Runs ONLY on the
+// touches pnthr_portfolio, or any live order path. Runs ONLY on the
 // always-on writer instance (gate above) so it keeps papering in the background
 // server-side, independent of PNTHR Tree and of whether the dev laptop is up.
 // 10s cadence (Scott): the fund-comparison dashboard refreshes every 10s; the MCE
@@ -8964,8 +8962,8 @@ app.post('/api/admin/ibkr-outbox/:id/failed', authenticateJWT, requireAdmin, asy
   }
 });
 
-// ── PNTHR AMBUSH outbox endpoints ─────────────────────────────────────────
-// Separate outbox for Ambush strategy. The bridge polls these endpoints
+// ── Order outbox endpoints (pnthr_ambush_outbox) ─────────────────────────────────────────
+// Separate outbox for the live order pipeline. The bridge polls these endpoints
 // alongside the main ibkr-outbox. Commands: BUY_ENTRY, SHORT_ENTRY,
 // SELL_EXIT, COVER_EXIT, MODIFY_STOP, PLACE_LOT_TRIGGER, CANCEL_LOT_TRIGGER.
 
@@ -9014,7 +9012,7 @@ app.post('/api/admin/ambush-outbox/:id/failed', authenticateJWT, requireAdmin, a
 });
 
 // ── IBKR hourly-bar feed (2026-06-03) ────────────────────────────────────────
-// The Ambush 2-bar-low exit and breakout re-entry must run on TRUE IBKR hourly
+// Hourly-bar exit and re-entry confirmation must run on TRUE IBKR hourly
 // bars (matching the trader's TWS chart), not the engine's live-sampled synthetic
 // bars (which gap after any restart) and not FMP (whose 1h bars are :30-aligned,
 // offset from TWS :00 bars). The local bridge fetches IBKR historical hourly bars

@@ -1072,7 +1072,7 @@ export async function runPnthrTreeTick(db) {
       // Cancel every OTHER cancellable stop (real orderId) by permId — auto-heals a cancellable
       // duplicate the moment the snapshot shows it. The tightest is ALWAYS kept, so protection is
       // never loosened. A non-tightest ORPHAN can't be cancelled here; it is flagged for a manual
-      // clear. (Mirrors the proven Ambush V7.6 trim — server/ambush/ambushCron.js ~L1552.)
+      // clear. (Mirrors the trim logic in server/ambush/ambushCron.js ~L1552.)
       if (stops.length > 1) {
         const tightest = stops.reduce((best, o) => (o.price > best.price ? o : best), stops[0]);
         for (const o of stops) {

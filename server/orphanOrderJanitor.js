@@ -62,10 +62,10 @@ export async function runOrphanCleanup({ db, dryRun = false } = {}) {
       activePositions.map(p => (p.ticker || '').toUpperCase()).filter(Boolean)
     );
 
-    // Also include tickers with active Ambush V7 positions. Ambush places
-    // stops via the bridge with orderRef='PNTHR', but positions live in
+    // Also include tickers with active positions in the outbox-managed book. The
+    // pipeline places stops via the bridge with orderRef='PNTHR', but positions live in
     // pnthr_ambush_positions (not pnthr_portfolio). Without this check,
-    // all Ambush stops would be classified as orphans and cancelled.
+    // all such stops would be classified as orphans and cancelled.
     const ambushPositions = await db.collection('pnthr_ambush_positions').find({
       state: { $in: ['ACTIVE', 'PROTECT', 'STALKING', 'ATTACK'] },
     }).project({ ticker: 1 }).toArray();

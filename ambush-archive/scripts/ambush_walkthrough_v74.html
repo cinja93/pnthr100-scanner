@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PNTHR Ambush V7.4 — System Walkthrough</title>
+<style>
+  @page { margin: 54px 48px; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1a1a; font-size: 14px; line-height: 1.55; max-width: 760px; margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; margin: 6px 0 10px; }
+  .lede { font-size: 15px; color: #333; margin: 0 0 10px; }
+  .meta { font-size: 12px; color: #888; margin: 0 0 4px; line-height: 1.5; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em;
+         background: #f0f0f0; border-radius: 4px; padding: 1px 5px; color: #222; }
+  .sec { background: #111; color: #fff; font-size: 18px; font-weight: 700;
+         border-radius: 8px; padding: 11px 16px; margin: 30px 0 16px; }
+  h3 { font-size: 15px; font-weight: 700; margin: 22px 0 6px; padding-bottom: 5px;
+       border-bottom: 2px solid #f2c200; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 9px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .small { font-size: 12.5px; color: #666; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f4f4f4; font-weight: 700; }
+  .callout { border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px; }
+  .c-watch { background: #fffbe6; border-left: 4px solid #f2c200; }
+  .c-new   { background: #eef7ff; border-left: 4px solid #3b82f6; }
+  .c-good  { background: #eefaf0; border-left: 4px solid #22c55e; }
+  .c-warn  { background: #fff5f5; border-left: 4px solid #ef4444; }
+  .badge { display: inline-block; font-family: "SF Mono", Menlo, monospace; font-size: 11px;
+           font-weight: 700; padding: 2px 7px; border-radius: 5px; letter-spacing: 0.3px; }
+  .b-stalk { background: #ede9fe; color: #7c3aed; }   /* purple */
+  .b-hunt  { background: #fef3c7; color: #b45309; }   /* amber */
+  .b-attack{ background: #ffedd5; color: #c2410c; }   /* orange */
+  .b-fill  { background: #ececec; color: #6b7280; }   /* hidden / background */
+  .b-devour{ background: #dcfce7; color: #15803d; }   /* green (engine ACTIVE) */
+  .b-protect{ background: #dbeafe; color: #1d4ed8; }  /* blue */
+  .b-hungry{ background: #fbe2fb; color: #a21caf; }   /* pink */
+  .arrow { color: #888; }
+  .nowrap { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<h1>PNTHR Ambush V7.4 &mdash; Walkthrough Rev. 4</h1>
+<p class="lede">Complete, plain-language walkthrough of the entire live trading system — every entry, every exit, start to end of the trading day.</p>
+<p class="meta"><strong>Document revision 4 · 2026-06-04.</strong> Written from a full read of <code>ambushEngine.js</code> (state constants), <code>ambushCron.js</code>, <code>ambushStateManager.js</code>, <code>signalDetection.js</code>, the IBKR bridge, and the dashboard (<code>AmbushPage.jsx</code>). Reflects all changes through commit <code>4820945</code>. Rev. 4 rewrites Section 5 to lead with the PNTHR Hunt Cycle (the funnel you see on screen) and maps each stage to its underlying engine state. Purpose: a sanity check before the open — read it like a pre-flight checklist and flag anything that doesn't match your intent.</p>
+
+<div class="callout c-new">
+  <strong>What changed tonight (2026-06-04)</strong>
+  <ul style="margin-bottom:0">
+    <li><strong>New entries now fire right up to the 4:00 close.</strong> The only "no new entry" windows left are the open blackout (9:25–9:35) and a five-minute post-bell window (16:00–16:05). Institutions often place big orders into the close and that momentum carries overnight — so Ambush now hunts all the way to the bell.</li>
+    <li><strong>Re-entry is gated on two frozen trigger levels.</strong> A name that already traded this cycle can only re-enter while price holds above (long) / below (short) <em>both</em> its frozen <strong>Weekly Trigger</strong> and <strong>Daily Trigger</strong>. If price sells off below either, it waits; if it reclaims both, it's eligible again. (Section 8c.)</li>
+    <li><strong>Dashboard rebuilt as a funnel</strong> — WEEKLY → DAILY → HOURLY → DEVOUR → STILL HUNGRY → PROTECT — with clickable tickers (weekly + daily charts), Weekly/Daily Trigger columns, and a new <strong>PNTHR Goals</strong> forward-projection table. (Section 14.)</li>
+  </ul>
+</div>
+
+<div class="sec">1. What Ambush is, in one paragraph</div>
+<p>Ambush is an intraday momentum engine that trades the <strong>AI 300</strong> universe (~300 names). It does not invent its own opinion of a stock. Instead it waits for three things to line up — a <strong>weekly</strong> trend signal, a <strong>daily</strong> breakout, and an <strong>hourly</strong> trigger — and only then takes a position, in the direction of the trend. It pyramids into winners in five lots, trails a stop two bars behind price, and exits the moment price breaks that trailing level. It manages risk per trade to a hard dollar cap, reconciles its own book against your live IBKR account every minute, and treats your IBKR account as the single source of truth. It only trades while the market is open, and it never opens a new position during the first hour or the brief open blackout — but it now takes new entries right up to the 4:00 closing bell.</p>
+
+<div class="sec">2. The heartbeat — how often it thinks</div>
+<ul>
+  <li><strong>Every 60 seconds</strong>, Monday–Friday, while the market is open (9:30 AM – 4:05 PM ET). A scheduler fires every minute; the engine itself refuses to run outside <code>9:30–16:05 ET</code> or on weekends.</li>
+  <li><strong>One tick at a time.</strong> A database lock guarantees only one server instance can process a given minute — so a deploy, autoscale, or stray server can never double-process and double an order.</li>
+  <li><strong>One designated writer.</strong> Only the instance with the writer flag set actually ticks; everything else stays silent. This is why there's exactly one engine acting on the account.</li>
+  <li>If Ambush is turned <strong>off</strong> in its config, or it's outside hours, the tick exits immediately and does nothing.</li>
+</ul>
+<p class="small">Each minute the engine does the same nine-step sequence (Section 7). Between ticks it does nothing — all state lives in the database, so it survives restarts.</p>
+
+<div class="sec">3. The signal stack — what has to line up before it enters</div>
+<p>Think of three filters stacked on top of each other. A name must pass <em>all three, at the present moment,</em> to be entered. This is the heart of the system.</p>
+
+<h3>Layer 1 — WEEKLY: "is this a valid trend setup?"</h3>
+<p>Computed once from weekly bars using a sector-tuned moving average (the "OpEMA", roughly 18–30 weeks depending on the sector). A name is in an active <strong>Buy-Long (BL)</strong> setup when, on the weekly chart: price closed above a rising average, broke the prior two weeks' high, and the pullback low sat in a "daylight zone" just above the average (about 1%–25% above it) — i.e. a healthy uptrend that isn't overextended. <strong>Sell-Short (SS)</strong> is the mirror image below a falling average. The weekly signal stays "active" until a weekly exit (a break of the two-week low for longs). The engine checks <em>is this week inside an active BL/SS window?</em> — that's the weekly gate.</p>
+<p class="small">Plain version: the weekly signal decides <em>which</em> ~handful of the 300 names are even eligible today, and in which direction. Everything else is timing.</p>
+
+<h3>Layer 2 — DAILY: "is the breakout intact right now?"</h3>
+<p>The engine pulls the last two <em>daily</em> bars and requires the current price to be <strong>above the higher of the prior two days' highs</strong> (for a long) or <strong>below the lower of the prior two days' lows</strong> (for a short), plus a penny. This is the daily breakout, checked against the live price. If price falls back inside that 2-day range, the daily breakout is no longer intact and the name is not a candidate this minute.</p>
+
+<h3>Layer 3 — HOURLY: "has it just triggered?"</h3>
+<p>The precise tripwire. The engine takes the <strong>most recent completed hourly bar</strong> and waits for the live price to break its high by a penny (long) / its low by a penny (short). This is an <strong>N=1, 1-bar live break</strong> — it fires the instant price crosses, on the 60-second tick, not after a bar closes. That break is the entry.</p>
+
+<div class="callout c-watch">
+  <strong>Regime &amp; sector, two side-filters:</strong> A market-regime read (the PAI300 index vs its 36-week average) is computed but the <em>gate is turned off</em> in V7.4 — longs and shorts are taken in any regime. A sector filter <em>is</em> active: if a name's sector is ranked "AVOID," it's skipped. So the full eligibility test is: <strong>weekly signal + sector not-AVOID + daily breakout + hourly trigger.</strong>
+</div>
+
+<div class="sec">4. Money — sizing, risk, and the five lots</div>
+<h3>How big a position gets</h3>
+<p>For every entry the engine computes the <strong>risk per share</strong> = entry price − stop price (long). Then total shares = the <em>smallest</em> of three caps:</p>
+<table>
+  <tr><th>Cap</th><th>Formula</th><th>Means</th></tr>
+  <tr><td>Max dollar risk</td><td>$300 ÷ risk-per-share</td><td>Never risk more than <strong>$300</strong> on one trade</td></tr>
+  <tr><td>1% of NAV risk</td><td>(1% × NAV) ÷ risk-per-share</td><td>Risk ≤ 1% of the account per trade</td></tr>
+  <tr><td>10% ticker cap</td><td>(10% × NAV) ÷ entry price</td><td>No single name &gt; 10% of NAV</td></tr>
+</table>
+<p>That share count is then multiplied by a <strong>graduated sizing factor</strong> based on account size, so risk stays proportional as the fund grows:</p>
+<table>
+  <tr><th>NAV</th><th>Sizing</th><th>Effect</th></tr>
+  <tr><td>Below $125K</td><td><strong>50%</strong></td><td>~$150 max risk per trade (current tier)</td></tr>
+  <tr><td>$125K – $166K</td><td>75%</td><td>~$225 max risk</td></tr>
+  <tr><td>$166K and up</td><td>100%</td><td>full $300 max risk</td></tr>
+</table>
+
+<h3>The five-lot pyramid</h3>
+<p>The total share count is split into five lots: <strong>35% / 25% / 20% / 12% / 8%</strong>. Only Lot 1 (35%) goes on at entry. The other four are "lot triggers" that fire as price moves <em>in your favor</em>, at these distances above the original entry (for a long):</p>
+<table>
+  <tr><th>Lot</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Trigger (above entry)</td><td>entry (0%)</td><td>+3%</td><td>+6%</td><td>+10%</td><td>+14%</td></tr>
+  <tr><td>Share share</td><td>35%</td><td>25%</td><td>20%</td><td>12%</td><td>8%</td></tr>
+</table>
+<p>So it adds the most size early and tapers off — building a bigger position only as the trade proves itself. Each add updates the average cost. Shorts mirror this downward.</p>
+<p class="small"><strong>Costs baked in:</strong> 5 basis points of slippage on every entry and exit, $0.005/share IBKR commission, and borrow cost on shorts.</p>
+
+<div class="sec">5. The states — the PNTHR Hunt Cycle</div>
+<p>This is the dashboard funnel, top to bottom — exactly the order the boxes appear on the page. The same names flow down it: in each box a name is <strong>grey while it waits</strong> and turns <strong>green the moment it fires that stage</strong>. If a stage closes out (an exit), the name drops back to grey and waits to go green again.</p>
+<p style="font-family:monospace;background:#111;color:#fff;border-radius:8px;padding:11px 16px;font-size:12.5px">
+STALKING <span class="arrow">&rarr;</span> HUNTING <span class="arrow">&rarr;</span> ATTACK <span class="arrow">&rarr;</span> DEVOUR <span class="arrow">&rarr;</span> PROTECT<br>
+<span style="color:#bbb">re-entry loop:&nbsp; exit <span class="arrow">&rarr;</span> STILL HUNGRY <span class="arrow">&rarr;</span> re-fires the stack</span>
+</p>
+<table>
+  <tr><th>Stage (box)</th><th>Color</th><th>What it is</th><th>Engine state</th></tr>
+  <tr><td><span class="badge b-stalk">① STALKING</span><br><span class="small">Weekly Candidates</span></td><td>purple</td><td>The prey pool: every AI-300 name with an active weekly BL+1 (long) / SS+1 (short). Waiting for the daily to clear. A dimmed chip has the signal but its sector is AVOID or it's already in a position.</td><td><code>STALKING</code></td></tr>
+  <tr><td><span class="badge b-hunt">② HUNTING</span><br><span class="small">Cleared the Daily</span></td><td>amber</td><td><strong>This is where "daily" lives.</strong> The same names re-listed; a name goes green once price clears the prior 2-day high (long) / low (short) today, grey = still waiting. Header counts FIRED vs WAITING.</td><td><code>STALKING</code><br><span class="small">(daily cleared)</span></td></tr>
+  <tr><td><span class="badge b-attack">③ ATTACK</span><br><span class="small">The Hourly Breakout</span></td><td>orange</td><td>The daily-green names, watched every 60s for the 1-bar hourly break. Grey = armed; green ⚡ = it just broke the prior hourly bar and the entry fires this tick.</td><td><code>ATTACK</code></td></tr>
+  <tr><td><span class="badge b-fill">(hidden)</span><br><span class="small">order sent</span></td><td>—</td><td>The order is sent to IBKR but <strong>not yet confirmed filled</strong> — 0 shares on the books until IBKR confirms. The phantom-proof hand-off; a sub-second step, <em>not shown</em> on the dashboard.</td><td><code>FILLING</code></td></tr>
+  <tr><td><span class="badge b-devour">④ DEVOUR</span><br><span class="small">Live Positions</span></td><td>green</td><td>A confirmed, held position. Stop is still the first-hour disaster stop below entry. <strong>This is the engine's ACTIVE state, shown as DEVOUR.</strong></td><td><code>ACTIVE</code></td></tr>
+  <tr><td><span class="badge b-hungry">⑤ STILL HUNGRY</span><br><span class="small">Re-Entry Watch</span></td><td>pink</td><td>Names that exited or were manually closed and are hunting another bite. Re-entry needs price above BOTH frozen triggers + a fresh 1-bar break (Section 8c). Shows the Weekly &amp; Daily Trigger columns.</td><td><code>STALKING</code><br><span class="small">(re-entry)</span></td></tr>
+  <tr><td><span class="badge b-protect">⑥ PROTECT</span><br><span class="small">Break-Even or Better</span></td><td>blue</td><td>The 2-bar trailing stop has ratcheted past cost, so the kill is secured — the trade can no longer lose money.</td><td><code>PROTECT</code></td></tr>
+</table>
+<div class="callout c-new">
+  <strong>Funnel names vs. the raw engine.</strong> Under the hood the engine stores just <strong>five</strong> state values — <code>STALKING</code>, <code>ATTACK</code>, <code>FILLING</code>, <code>ACTIVE</code>, <code>PROTECT</code> (the <code>STATES</code> map in <code>ambushEngine.js</code>). The dashboard relabels them into the hunt cycle above: <strong>ACTIVE</strong> is shown as <strong>DEVOUR</strong>; daily-cleared <strong>STALKING</strong> names are grouped into <strong>HUNTING</strong>; re-entry <strong>STALKING</strong> names are shown as <strong>STILL HUNGRY</strong>; and <strong>FILLING</strong> is the invisible phantom-proof step between ATTACK and DEVOUR. There is no separate "daily" state — the daily 2-day breakout is a gate, made visible as the HUNTING box.
+</div>
+
+<div class="sec">6. The trading day, hour by hour</div>
+<table>
+  <tr><th>Time (ET)</th><th>What the engine does</th></tr>
+  <tr><td class="nowrap">Before 9:30</td><td>Asleep. Nothing runs.</td></tr>
+  <tr><td class="nowrap">9:25–9:35</td><td><strong>Open blackout.</strong> No new entries (the bridge would reject them). Existing positions are still protected by their resting IBKR stops.</td></tr>
+  <tr><td class="nowrap">9:30–10:30<br>(First Hour)</td><td><strong>Watch &amp; gather only.</strong> The engine records each name's first-hour high and low (this becomes the disaster-floor stop for any entry today) and builds its hourly bars. It does <strong>NOT</strong> open new positions, does <strong>NOT</strong> re-enter, and does <strong>NOT</strong> run its own exit checks. Held positions are still protected — their resting stops sit live in IBKR the whole time.</td></tr>
+  <tr><td class="nowrap">10:30–16:00</td><td><strong>Full operation.</strong> Every minute: confirm fills, reconcile to IBKR, manage held positions (pyramids + trailing stop + exits), check re-entries, and scan for brand-new entries — <strong>right up to the 4:00 close.</strong> This is the main trading window.</td></tr>
+  <tr><td class="nowrap">16:00–16:05</td><td><strong>Post-bell blackout.</strong> No new entries. Held positions are still fully managed (stops, exits) through this window.</td></tr>
+  <tr><td class="nowrap">After 16:05</td><td>Asleep. Resting stops remain live in IBKR overnight for anything still held.</td></tr>
+</table>
+<div class="callout c-warn">
+  <strong>Worth confirming this matches your intent:</strong> during the 9:30–10:30 first hour, the engine does not run its own exit logic — it relies entirely on the resting IBKR stop already sitting on each held position. That's by design (the strategy enters after the first hour), but it means a held position's <em>trailing</em> stop is not recomputed until 10:30. The hard stop from the prior session is still live the whole time.
+</div>
+
+<div class="sec">7. What happens inside one 60-second tick (the 9 steps)</div>
+<ol>
+  <li><strong>Wake &amp; lock.</strong> Confirm it's market hours, Ambush is enabled, and grab the one-tick lock. Read NAV from your IBKR-synced account size; compute the sizing tier.</li>
+  <li><strong>Load the live IBKR snapshot</strong> — your real positions and your real resting stops — as the source of truth.</li>
+  <li><strong>Confirm FILLING entries.</strong> Any order sent last tick: if IBKR now shows the position → promote to ACTIVE; if still flat after 3 minutes → it never filled, revert to STALKING. (Section 8.)</li>
+  <li><strong>Auto-adopt.</strong> Any position IBKR holds that the engine isn't managing → adopt it (give it a 2-bar stop + a pyramid plan). Covers manual trades. (Section 11.)</li>
+  <li><strong>Reconcile phantoms.</strong> Any position the engine thinks it holds but IBKR shows flat → clear it to STALKING. The book always converges to IBKR. (Section 11.)</li>
+  <li><strong>Get live prices</strong> (IBKR for held names, a market-data quote for the rest) and roll each name's 60-second price into its hourly bar.</li>
+  <li><strong>Manage held positions</strong> (Phase A): pyramids, trailing stop, exits. (Sections 8–9.) Also freezes/refreshes each name's Weekly + Daily Trigger levels.</li>
+  <li><strong>Process triggered re-entries</strong> (Phase B) and <strong>watch for new re-entry triggers</strong> (Phase C).</li>
+  <li><strong>Scan for brand-new entries</strong> (Phase D), then save all state and send any orders to the bridge.</li>
+</ol>
+
+<div class="sec">8. ENTRIES — every scenario</div>
+<h3>8a. A brand-new entry (the main case)</h3>
+<p>This is a name the engine isn't already in. Walk the stack:</p>
+<ol>
+  <li><strong>Eligible?</strong> Weekly BL/SS active + sector not "AVOID."</li>
+  <li><strong>Daily breakout intact?</strong> Live price above the prior 2-day high (long) / below the prior 2-day low (short).</li>
+  <li><strong>Hourly trigger?</strong> Live price breaks the most-recent completed hourly bar's high (long) / low (short) by a penny.</li>
+  <li><strong>Stop &amp; size.</strong> Stop = the first-hour low minus a fee (long) / first-hour high plus a fee (short). Risk-per-share = entry − stop. Size the position (Section 4). If the stop is on the wrong side of entry or the math doesn't work, skip.</li>
+  <li><strong>Final safety checks.</strong> Enough cash to fund Lot 1? Under the position cap? Not in a blackout window? A fresh IBKR snapshot confirms we're currently <strong>flat</strong> in this name (never stack on top of an existing position)?</li>
+  <li><strong>Send it.</strong> The engine writes the name as <span class="badge b-fill">FILLING</span> (0 shares — not yet "held") and sends a market BUY/SELL for Lot 1 <em>plus</em> its protective stop, together, to IBKR.</li>
+</ol>
+
+<h3>8b. The fill confirmation (why phantoms can't happen)</h3>
+<p>A position is <strong>never</strong> marked "held" on hope. After sending the order:</p>
+<ul>
+  <li>Next tick, if IBKR shows the position on the right side → <strong>promote to ACTIVE</strong> using the real fill size and price. The stop is already in place from step 6.</li>
+  <li>If the order was rejected or never filled (blackout, buying power, a halt, a dropped order) → IBKR stays flat → after 3 minutes the engine <strong>reverts it to STALKING</strong>. No fake "held" position is ever left behind.</li>
+</ul>
+<div class="callout c-good">
+  <strong>Net effect:</strong> "ACTIVE" in the engine now <em>requires</em> IBKR to confirm the shares exist. A rejected order can't become a phantom — it just quietly goes back to watching.
+</div>
+
+<h3>8c. A re-entry (after an exit)</h3>
+<p>When a position exits — by your hand, by its stop firing, or by reconciliation — it does <strong>not</strong> disappear. It drops to <span class="badge b-stalk">STALKING</span> and is treated as a fresh candidate. To re-enter, it must pass the <strong>same gates as a new entry, evaluated right now</strong>:</p>
+<ul>
+  <li>Weekly BL/SS still active (if the weekly signal has expired, the name is dropped entirely).</li>
+  <li>Sector not "AVOID."</li>
+  <li><strong>Holds above both frozen triggers</strong> (the rule added tonight — see the box below).</li>
+  <li>Daily breakout still intact at the present price (the 2-day high/low test). If the daily has reversed, it waits — it is not a candidate this minute, but it stays STALKING and keeps checking.</li>
+  <li>Then the <strong>1-bar hourly live break</strong> triggers it.</li>
+</ul>
+<div class="callout c-new">
+  <strong>The frozen-trigger re-entry gate (new tonight).</strong> When a name first trades a cycle, the engine freezes two price levels and keeps them until the weekly signal resets:
+  <ul>
+    <li><strong>Weekly Trigger</strong> — the breakout price the active weekly BL/SS signal fired at (e.g. 420.51).</li>
+    <li><strong>Daily Trigger</strong> — the <em>original</em> 2-day breakout level that first fired this cycle (e.g. 463.89).</li>
+  </ul>
+  A long can only re-enter while live price is <strong>at or above both</strong>; a short only while <strong>at or below both</strong>. The check is stateless every tick: if price dips under either level it waits (it does <em>not</em> chase), and if it later reclaims both it's eligible again. If a trigger isn't frozen yet, the engine falls back to today's rolling 2-day level — it never re-enters blind. Both levels show as columns on the dashboard.
+</div>
+<p>When it triggers, it goes <span class="badge b-attack">ATTACK</span> → the next tick sends the order → <span class="badge b-fill">FILLING</span> → <span class="badge b-devour">DEVOUR</span>, exactly like a new entry. There is <strong>no cooldown, no per-day cap, and no "already traded today" block</strong> — if the setup is valid and price holds both triggers, it re-enters.</p>
+
+<h3>8d. An adopted entry (your manual trades)</h3>
+<p>If you place a trade by hand, the engine sees a position in IBKR it isn't managing and <strong>adopts</strong> it: it sets a 2-bar trailing stop and builds a pyramid plan (lots 2–5), so your manual trade is managed exactly like an engine entry. (Details in Section 11.)</p>
+
+<div class="sec">9. PYRAMIDING &amp; EXITS — every scenario</div>
+<h3>9a. Adding to a winner (pyramiding)</h3>
+<p>While a position is ACTIVE/PROTECT, each tick checks the next lot trigger. When price reaches the next level (Section 4), the engine records the lot fill, updates the average cost, and places the order for that lot. It stops after Lot 5. Pyramiding never touches the protective stop — that's managed in one place only (next).</p>
+
+<h3>9b. The trailing stop (the primary exit) — "2-bar break"</h3>
+<p>This is the core exit. Every tick, for each held position, the engine computes the <strong>2-bar level</strong>:</p>
+<div class="callout c-watch">
+  <strong>Long:</strong> stop = (lowest low of the last <strong>two completed hourly bars</strong>) − $0.01.<br>
+  <strong>Short:</strong> stop = (highest high of the last two completed hourly bars) + $0.01.
+</div>
+<ul>
+  <li>This level <strong>tracks both up and down</strong> as new bars form — it is not a one-way ratchet. As the trend climbs, the two-bar low rises and the stop follows it up.</li>
+  <li>Whenever the level changes by a penny or more, the engine <strong>cancels and re-places a single resting stop order in IBKR</strong> at the exact new level. So IBKR always holds exactly one protective stop at the rule level — and it will execute the exit <em>even if the engine or the bridge goes down.</em></li>
+  <li><strong>Bars used are COMPLETED bars only.</strong> The bridge drops the still-forming current-hour bar, so "the last two bars" are always the two most recently finished hours.</li>
+</ul>
+
+<h3>9c. The engine's own exit + the resting stop (belt and suspenders)</h3>
+<p>There are two ways a position exits, and they agree:</p>
+<ol>
+  <li><strong>The resting IBKR stop</strong> fires on its own when price trades through the 2-bar level. This is the primary, always-on protection.</li>
+  <li><strong>The engine's fast-path:</strong> if on a tick the live price is already at/through the stop, the engine itself sends the exit (a market SELL/COVER), logs the trade with its P&amp;L, and drops the name to STALKING.</li>
+</ol>
+<p>A reconcile check prevents a double-exit: before sending any exit the engine verifies IBKR still holds the position; if IBKR is already flat (the resting stop beat it to it), the engine just cleans up its record instead of sending a second order.</p>
+
+<h3>9d. The "naked position" self-heal</h3>
+<p>Every tick the engine checks the live IBKR stop orders. If a held position has <strong>no protective stop in IBKR</strong> (e.g. an adopted position whose stop wasn't placed, or a stop that got cancelled), it <strong>places one immediately</strong> at the current 2-bar level — regardless of what its own record says. A held position is never left naked.</p>
+
+<h3>9e. Break-even snap — OFF in V7.4</h3>
+<p>An older rule that parked the stop at break-even once a trade was +$75 is <strong>disabled</strong>. The 2-bar trailing stop governs the exit from the moment of entry; the first-hour low is the disaster floor underneath it.</p>
+
+<h3>9f. Weekly signal expiry</h3>
+<p>If a STALKING name's weekly BL/SS signal ends (a weekly exit prints), the engine <strong>deletes it from the watch list</strong> — it's no longer a setup, so no re-entry. (A name that is currently <em>held</em> is still managed to its 2-bar stop regardless; the weekly expiry only removes <em>watch-list</em> names.)</p>
+
+<div class="sec">10. The full entry-to-exit story (one trade, plain English)</div>
+<ol>
+  <li>Monday's weekly close puts <code>XYZ</code> into a Buy-Long setup. It enters the watch list as <span class="badge b-stalk">STALKING</span>.</li>
+  <li>Wednesday 11:10 AM: <code>XYZ</code> is trading above its prior 2-day high (daily breakout intact) and the live price ticks above the 10:00–11:00 hourly bar's high. <strong>Trigger.</strong> → <span class="badge b-attack">ATTACK</span>.</li>
+  <li>11:11 AM: the engine sizes Lot 1 (say 35 shares at the 50% tier), sets the stop at the first-hour low, and sends a market BUY + the stop. → <span class="badge b-fill">FILLING</span>.</li>
+  <li>11:12 AM: IBKR confirms 35 shares filled. → <span class="badge b-devour">DEVOUR</span> (engine ACTIVE), stop resting in IBKR.</li>
+  <li>Price climbs +3%, +6% — Lots 2 and 3 fire and load. Average cost updates. The 2-bar trailing stop climbs behind price; once it passes the average cost the name flips to <span class="badge b-protect">PROTECT</span> (can't lose now).</li>
+  <li>Thursday 2:00 PM: price pulls back and trades through the 2-bar low. The resting stop fills the exit; the engine logs the trade and drops <code>XYZ</code> to <span class="badge b-stalk">STALKING</span>.</li>
+  <li>Thursday 3:10 PM: <code>XYZ</code>'s weekly signal is still active and price is still above both its frozen Weekly and Daily Triggers. It breaks the prior hour's high again — <strong>re-enter</strong>. The whole cycle repeats, right up to the 4:00 close.</li>
+</ol>
+
+<div class="sec">11. The safety net — how the book stays honest</div>
+<table>
+  <tr><th>Mechanism</th><th>What it guarantees</th></tr>
+  <tr><td><strong>Fill-confirmed entry</strong> (FILLING)</td><td>"Held" only ever means IBKR-confirmed. Rejected orders can't become phantoms.</td></tr>
+  <tr><td><strong>Phantom reconcile</strong></td><td>Every tick, any "held" record IBKR shows flat is cleared to STALKING — even with no live price (so it cleans up after the close too).</td></tr>
+  <tr><td><strong>Auto-adopt</strong></td><td>Any IBKR position the engine isn't managing gets a 2-bar stop + pyramid plan — so a manual trade is never left unmanaged.</td></tr>
+  <tr><td><strong>One stop per name</strong></td><td>Placing/modifying a stop sweeps every engine stop on that side and leaves exactly one. Your own manual TWS stops are never touched.</td></tr>
+  <tr><td><strong>Naked-position guard</strong></td><td>If IBKR shows a held name with no stop, the engine places one immediately.</td></tr>
+  <tr><td><strong>Reconcile-before-act</strong></td><td>The engine never places an exit/stop unless a fresh IBKR snapshot confirms it holds that position on that side. No naked orders, no flipping a position short.</td></tr>
+  <tr><td><strong>Blackout gate</strong></td><td>No new entries in the open (9:25–9:35) or post-bell (16:00–16:05) windows.</td></tr>
+  <tr><td><strong>One-tick lock + writer gate</strong></td><td>Exactly one engine, one tick at a time — no double orders.</td></tr>
+</table>
+
+<div class="sec">12. Things to watch / questions to sanity-check before the open</div>
+<div class="callout c-watch">
+<ol style="margin:0">
+  <li><strong>First-hour exits.</strong> Between 9:30 and 10:30 the engine doesn't recompute trailing stops or run exit logic — it leans on the resting IBKR stop. If a name gaps hard at the open, only that resting stop protects it until 10:30. Is that the behavior you want, or should the engine actively manage exits in the first hour too?</li>
+  <li><strong>"Daily" = the 2-day-high/low breakout.</strong> There is no separate daily moving-average signal in Ambush; the daily check is purely the 2-day range break.</li>
+  <li><strong>Re-entry has no cooldown.</strong> A whippy name that keeps breaking and failing could re-enter multiple times in a day (each time risking the per-trade cap), but it must reclaim <em>both</em> frozen triggers first. That's intentional per your rule, but worth eyeballing on a choppy day.</li>
+  <li><strong>Late-day entries (new tonight).</strong> Entries now fire right up to 4:00. A 3:55 PM breakout will be taken and held overnight with its resting stop — by design (institutional close momentum), but it means fresh overnight exposure put on minutes before the bell.</li>
+  <li><strong>Sizing tier is 50%</strong> at the current NAV — max risk ~$150/trade, not $300. It steps up only above $125K / $166K.</li>
+  <li><strong>Regime gate is OFF.</strong> Longs and shorts are taken in any market regime. (Intentional in V7.4.)</li>
+  <li><strong>Prices for non-held names come from a market-data quote feed</strong>, while held names use IBKR's price. A quote feed hiccup would only delay a <em>new</em> entry, never mismanage a held position (those use IBKR).</li>
+</ol>
+</div>
+
+<div class="sec">13. One-page cheat sheet</div>
+<table>
+  <tr><th>Question</th><th>Answer</th></tr>
+  <tr><td>Universe</td><td>AI 300 (~300 names)</td></tr>
+  <tr><td>Thinks every</td><td>60 seconds, 9:30–16:05 ET, Mon–Fri</td></tr>
+  <tr><td>Enters when</td><td>Weekly BL/SS active + sector ok + price past the 2-day high/low + 1-bar hourly break</td></tr>
+  <tr><td>Entry window</td><td>10:30 → 4:00 close (no entries 9:25–9:35 open or 16:00–16:05 post-bell)</td></tr>
+  <tr><td>First lot</td><td>35% of size; lots 2–5 add at +3/+6/+10/+14% (25/20/12/8%)</td></tr>
+  <tr><td>Risk per trade</td><td>min($300, 1% NAV, 10% NAV cap) × tier (50% now)</td></tr>
+  <tr><td>Initial stop</td><td>First-hour low (long) / high (short), minus/plus a fee</td></tr>
+  <tr><td>Trailing stop</td><td>2-bar low − $0.01 (long) / 2-bar high + $0.01 (short); tracks up &amp; down; one resting stop in IBKR</td></tr>
+  <tr><td>Exit</td><td>Price breaks the 2-bar level (resting IBKR stop + engine fast-path)</td></tr>
+  <tr><td>Re-entry</td><td>Same gates as a new entry; must hold above both frozen Weekly + Daily Triggers; 1-bar break; no cooldown</td></tr>
+</table>
+
+<div class="sec">14. The dashboard — charts, triggers &amp; PNTHR Goals (new tonight)</div>
+<p>The six-box funnel itself is described in Section 5 (the PNTHR Hunt Cycle). Beyond the funnel, three things were added tonight:</p>
+<ul>
+  <li><strong>Clickable tickers.</strong> Every ticker in every box opens a chart modal with the weekly and daily OpEMA charts; the ◀ ▶ buttons flip through the rest of that box.</li>
+  <li><strong>Trigger columns.</strong> The DEVOUR (live positions) and STILL HUNGRY boxes show each name's frozen <strong>Weekly Trigger</strong> and <strong>Daily Trigger</strong> so you can see exactly what price has to hold for a re-entry to stay live.</li>
+  <li><strong>Brighter column headers</strong> across the position tables, for readability.</li>
+</ul>
+
+<h3>PNTHR Goals — the forward projection</h3>
+<p>A new box under the performance metrics. It takes your <strong>real AUM today</strong> and rides it forward along the backtest's growth, applying the live <strong>$2M → bank $1M</strong> withdrawal rule (once the working balance reaches $2M, bank $1M and trade off the rest — banked profit is locked in and yours). For each horizon — <strong>6mo, 1yr, 18mo, 2yr, 3yr, 5yr, 10yr</strong> — it shows:</p>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td>Projected AUM</td><td>The backtest baseline ridden forward to that date.</td></tr>
+  <tr><td>Working Balance</td><td>What you're actively trading after withdrawals.</td></tr>
+  <tr><td>Profit Banked</td><td>Cumulative cash pulled out ($1M each time you cross $2M).</td></tr>
+  <tr><td>Your Total</td><td>Working balance + banked — your real net worth from this.</td></tr>
+  <tr><td>Edge</td><td>How far ahead/behind your Actual rides vs the Projected baseline.</td></tr>
+</table>
+<p class="small">Growth uses the real backtest path while inside the ~3.5-year backtest window, then the backtest CAGR beyond it — the 5yr and 10yr rows are flagged <em>extrapolated</em>. This is a motivation tool, not an investor figure.</p>
+
+</body>
+</html>

@@ -108,6 +108,19 @@ function getWeekOf(dateStr) {
 // that may contain look-ahead. The §0 sanity gate FLAGS any non-STRICT run. (See
 // server/backtest/BACKTEST_EXECUTION_RULES.md — locked 2026-06-08.)
 const STRICT = process.env.STRICT === '1';
+// Sector gate mode (Scott 2026-06-11): '5day' = the original 5-day sector-return gate (default,
+// unchanged); 'heatmap' = the NEW today's-move qualifier — gate at the breakout FILL vs the prior-day
+// close (the live green/red): LONG only if fill >= prior close, SHORT only if fill < prior close;
+// 'none' = no gate. EXECUTABLE: fill price + prior close are both known at the break (no bar-color
+// hindsight, unlike the 2026-06-08 green look-ahead). NOTE: for NEW entries the heat-map gate is a
+// PASS-THROUGH — a 2-day-high breakout fill is by definition above the prior close (green); symmetric
+// for shorts — so it never blocks a new entry. It only bites RE-ENTRIES (an hourly-high break can fire
+// on a red day). So 'heatmap' ≈ 'none' for new entries + a green-day filter on re-entries.
+const GATE_MODE = process.env.GATE_MODE || '5day';
+function heatMapOk(ep, priorClose, dir) {
+  if (!(priorClose > 0)) return true;            // no prior close → don't block
+  return dir === 'LONG' ? ep >= priorClose : ep < priorClose;
+}
 const SIGNAL_LAG_WEEKS = STRICT ? 1 : (+(process.env.SIGNAL_LAG_WEEKS) || 0);
 // ENTRY_HOURS="10:00,11:00" — only allow entries in these clock hours (winner-mining: the open
 // trends, midday chops). null = all hours. Exits/management are NOT restricted. (2026-06-08)
@@ -192,6 +205,35 @@ async function main() {
     while (lo < hi) { const mid = (lo + hi) >> 1; if (dates[mid] < date) lo = mid + 1; else hi = mid; }
     const i1 = lo - 1, i2 = lo - 2; if (i1 < 0 || i2 < 0) return null;
     return { prev1: dailyByDate[ticker][dates[i1]], prev2: dailyByDate[ticker][dates[i2]] };
+  }
+
+  // ── Per-SECTOR heat-map signal (GATE_MODE='sector') ──────────────────────────
+  // Avg member intraday move by (sector, date, hour), from each member's bar OPEN (known at the start
+  // of the hour, before any breakout) vs its prior-day close. Executable, no look-ahead. Unlike the
+  // per-stock heat-map (a pass-through for breakouts), this gates BOTH new + re-entries: LONG only in a
+  // GREEN sector that hour, SHORT only in a RED one — "only trade where money is flowing today."
+  const sectorMove = {};
+  if (GATE_MODE === 'sector') {
+    const agg = {};
+    for (const ticker of Object.keys(hourlyAll)) {
+      const sid = AI_TICKER_META[ticker]?.sectorId; if (sid === undefined) continue;
+      for (const bar of hourlyAll[ticker]) {
+        const d = bar.date.split(' ')[0];
+        const pc = priorTwoDaily(ticker, d)?.prev1?.close; if (!(pc > 0)) continue;
+        const hk = extractTime(bar.date);
+        const a = (((agg[sid] ||= {})[d] ||= {})[hk] ||= { sum: 0, n: 0 });
+        a.sum += (bar.open - pc) / pc; a.n++;
+      }
+    }
+    let nCells = 0;
+    for (const sid in agg) { sectorMove[sid] = {}; for (const d in agg[sid]) { sectorMove[sid][d] = {}; for (const hk in agg[sid][d]) { sectorMove[sid][d][hk] = agg[sid][d][hk].sum / agg[sid][d][hk].n; nCells++; } } }
+    console.log('  [SECTOR HEAT] precomputed ' + nCells.toLocaleString() + ' (sector,date,hour) cells');
+  }
+  function sectorHeatOk(ticker, date, hourKey, dir) {
+    const sid = AI_TICKER_META[ticker]?.sectorId; if (sid === undefined) return false;
+    const mv = sectorMove[sid]?.[date]?.[hourKey];
+    if (mv == null) return true;            // no sector reading → don't block
+    return dir === 'LONG' ? mv >= 0 : mv < 0;
   }
 
   const weeklyBarsByTicker = {};
@@ -402,7 +444,7 @@ async function main() {
 
     for (let dayIdx = 0; dayIdx < tradingDates.length; dayIdx++) {
       const date = tradingDates[dayIdx];
-      while (workingNav() >= WITHDRAWAL_THRESHOLD && cash >= WITHDRAWAL_AMOUNT) { cash -= WITHDRAWAL_AMOUNT; banked += WITHDRAWAL_AMOUNT; totalWithdrawn += WITHDRAWAL_AMOUNT; }
+      while (process.env.NO_WITHDRAW !== '1' && workingNav() >= WITHDRAWAL_THRESHOLD && cash >= WITHDRAWAL_AMOUNT) { cash -= WITHDRAWAL_AMOUNT; banked += WITHDRAWAL_AMOUNT; totalWithdrawn += WITHDRAWAL_AMOUNT; }
       const navToday = workingNav(); const sizeMult = sizingMultiplier(navToday);
       for (const m of MILESTONES) if (!milestoneHits[m] && (navToday + banked) >= m) milestoneHits[m] = date;
       if (openCount() > maxConcurrent) maxConcurrent = openCount();
@@ -488,7 +530,8 @@ async function main() {
             const dir = w ? w.direction : (REALTIME_GATE ? realtimeDir(ticker, date, bar) : (isActiveBL(ticker, date) ? 'LONG' : (isActiveSS(ticker, date) ? 'SHORT' : null)));
             if (!dir) continue;
             if (!(REALTIME_GATE ? realtimeActive(ticker, date, bar.close, dir) : signalActive(ticker, date, dir))) { delete waiting[ticker]; continue; }
-            if (cfg.sectorFilter && !sectorOk(ticker, date, dir)) continue;
+            if (GATE_MODE === '5day' && cfg.sectorFilter && !sectorOk(ticker, date, dir)) continue;
+            if (GATE_MODE === 'sector' && !sectorHeatOk(ticker, date, extractTime(bar.date), dir)) continue;
             const isLong = dir === 'LONG';
             const hourlyLevel = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2);
 
@@ -530,6 +573,7 @@ async function main() {
               } else {
                 ep = entrySlip(addFill(hourlyLevel, bar.open, dir), dir);
               }
+              if (GATE_MODE === 'heatmap') { const pc = priorTwoDaily(ticker, date)?.prev1?.close; if (!heatMapOk(ep, pc, dir)) continue; }
               if (cfg.reentryFrozenDaily && (isLong ? ep < w.frozenDaily : ep > w.frozenDaily)) continue;
               let stop;
               if (cfg.reentryStopMode === 'firsthour') {
@@ -559,6 +603,7 @@ async function main() {
               if (REALTIME_GATE) { const brk = realtimeBreak(ticker, date, dir); if (brk == null) continue; entryLevel = isLong ? Math.max(entryLevel, brk) : Math.min(entryLevel, brk); }
               const reached = isLong ? bar.high >= entryLevel : bar.low <= entryLevel; if (!reached) continue;
               const ep = entrySlip(addFill(entryLevel, bar.open, dir), dir);
+              if (GATE_MODE === 'heatmap' && !heatMapOk(ep, two.prev1.close, dir)) continue;
               const fhl = firstHourLow[ticker], fhh = firstHourHigh[ticker];
               if (isLong && (fhl == null || fhl >= ep)) continue;
               if (!isLong && (fhh == null || fhh <= ep)) continue;

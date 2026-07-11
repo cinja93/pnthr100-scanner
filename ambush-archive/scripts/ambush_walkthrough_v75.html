@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PNTHR Ambush V7.5 — System Walkthrough (Rev. 5)</title>
+<style>
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1a1a; font-size: 13.5px; line-height: 1.6; max-width: 780px; margin: 0 auto; padding: 0 20px 70px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 31px; font-weight: 800; letter-spacing: -0.5px; margin: 16px 0 4px; }
+  .lede { font-size: 15px; color: #333; margin: 0 0 8px; }
+  .meta { font-size: 12px; color: #888; margin: 0 0 4px; line-height: 1.5; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em;
+         background: #f0f0f0; border-radius: 4px; padding: 1px 5px; color: #222; }
+  .sec { background: #111; color: #fff; font-size: 18px; font-weight: 700;
+         border-radius: 8px; padding: 11px 16px; margin: 30px 0 14px; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 6px; padding-bottom: 5px;
+       border-bottom: 2px solid #f2c200; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 9px 0; padding-left: 24px; }
+  li { margin: 7px 0; }
+  .small { font-size: 12.5px; color: #666; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: #f4f4f4; font-weight: 700; }
+  .callout { border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px; }
+  .c-key   { background: #eef7ff; border-left: 4px solid #3b82f6; }
+  .c-good  { background: #eefaf0; border-left: 4px solid #22c55e; }
+  .c-watch { background: #fffbe6; border-left: 4px solid #f2c200; }
+  .badge { display: inline-block; font-family: "SF Mono", Menlo, monospace; font-size: 11px;
+           font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+  .b-stalk { background:#ede9fe; color:#7c3aed; } .b-hunt{ background:#fef3c7; color:#b45309; }
+  .b-attack{ background:#ffedd5; color:#c2410c; } .b-devour{ background:#dcfce7; color:#15803d; }
+  .b-protect{ background:#dbeafe; color:#1d4ed8; } .b-hungry{ background:#fbe2fb; color:#a21caf; }
+  .term { font-weight:700; }
+  .banner { background:#111; color:#fff; border-radius:10px; padding:14px 18px; margin:14px 0; font-size:13.5px; }
+  .banner b { color:#ffd84d; }
+</style>
+</head>
+<body>
+
+<h1>PNTHR Ambush — System Walkthrough</h1>
+<p class="lede">Revision 5 · the complete, plain-language explanation of the whole trading system — from the first signal of the week to the last trade of the day. Written so that someone with no background in this system can follow it start to finish.</p>
+<p class="meta"><strong>Revision 5 · 2026-06-04.</strong> This describes the <strong>V7.5</strong> design. It is the specification to be signed off, then validated by a fresh backtest, and only then coded into the live engine. Where V7.5 changes the prior version, it's called out in the last section.</p>
+
+<div class="banner"><b>Read it like a pre-flight checklist.</b> If anything below does not match what you intend the system to do, flag it. Nothing here is live until the backtest confirms the numbers and the code is updated to match this document.</div>
+
+<div class="sec">1. What Ambush is, in one paragraph</div>
+<p>Ambush is an automated trading engine. It watches a fixed list of about 300 stocks (the "AI 300"), and it only buys or sells when three separate conditions line up at the same moment: a longer-term trend is in place, a short-term breakout is happening today, and the price has just popped through a precise trigger this hour. When all three agree, it takes a position <span class="term">in the direction of the trend</span> — buying stocks that are breaking out upward (a "long"), or short-selling stocks breaking down (a "short"). It starts small and adds more only as the trade proves it's working. It always carries a protective stop — an automatic exit order — that trails behind the price and tightens as the trade goes its way, so a winner can't turn back into a loser. It checks everything against your real brokerage account (Interactive Brokers, "IBKR") every single minute, and it treats that account as the absolute truth. It runs only while the U.S. market is open.</p>
+
+<div class="sec">2. A few words you'll see throughout</div>
+<table>
+  <tr><th>Word</th><th>Plain meaning</th></tr>
+  <tr><td class="term">Long</td><td>You bought the stock expecting it to go up. You make money if it rises.</td></tr>
+  <tr><td class="term">Short</td><td>You borrowed and sold the stock expecting it to go down. You make money if it falls. Everything for a long has a mirror-image version for a short.</td></tr>
+  <tr><td class="term">Stop (stop order)</td><td>An automatic exit order resting at the broker. If the price reaches it, your position is sold (or covered) automatically — even if the engine or your computer is off. This is your safety net.</td></tr>
+  <tr><td class="term">Bar / hourly bar</td><td>One hour of trading drawn as a single candle: it has a high (the top price that hour), a low (the bottom), an open, and a close. A "completed" bar is one whose hour has fully finished.</td></tr>
+  <tr><td class="term">NAV</td><td>Net Asset Value — the total size of the account right now (cash + the value of everything held).</td></tr>
+  <tr><td class="term">Lot</td><td>One slice of a position. Ambush builds a full position in five lots, adding them one at a time as the trade works.</td></tr>
+</table>
+
+<div class="sec">3. The heartbeat — how often it thinks</div>
+<ul>
+  <li><strong>Once every 60 seconds</strong>, Monday through Friday, only while the market is open (9:30 AM to about 4:05 PM, New York time). Outside those hours, and on weekends, it does nothing.</li>
+  <li><strong>Only one copy ever runs.</strong> A lock in the database guarantees that even if the system is running on several servers, exactly one of them acts each minute. There is no way to accidentally place an order twice.</li>
+  <li><strong>It can be switched off</strong> with a single setting. If it's off, or it's outside market hours, the minute "tick" simply ends and does nothing.</li>
+  <li>Between ticks it remembers everything by saving its state to the database, so it survives restarts without losing track of any position.</li>
+</ul>
+
+<div class="sec">4. The three green lights before it enters</div>
+<p>Think of three filters stacked on top of each other. A stock has to pass <strong>all three at the same moment</strong> before Ambush will buy it. This is the heart of the whole system.</p>
+
+<h3>Green light 1 — the WEEKLY trend (the slow filter)</h3>
+<p>Once a week, Ambush looks at each stock's weekly chart and asks: <em>is this a healthy uptrend?</em> Using a <strong>proprietary sector-tuned exponential moving average</strong> (a smoothed trend line) and a <strong>proprietary PNTHR signal system</strong>, a stock earns a <strong>Buy-Long signal</strong> when its price has climbed above a rising trend line, broken above the prior two weeks' high, the slope and gap are correct, and it isn't stretched too far above the line (a healthy, not over-extended, advance). A <strong>Sell-Short signal</strong> is the exact mirror below the same conditions, just reversed. This weekly signal decides <strong>which</strong> handful of the 300 stocks are even allowed to trade today, and in which direction. It stays "on" until a weekly exit prints. Everything after this is about timing.</p>
+
+<h3>Green light 2 — the DAILY breakout (today's confirmation)</h3>
+<p>For a stock that has the weekly signal, Ambush then checks today's price against the last two daily bars: for a long, the live price must be <strong>above the higher of the previous two days' highs, plus a penny</strong>; for a short, <strong>below the lower of the previous two days' lows, minus a penny</strong>. That's the daily breakout. If the price slips back inside that two-day range, the breakout is no longer intact and the stock is not a candidate this minute.</p>
+
+<h3>Green light 3 — the HOURLY trigger (the exact moment)</h3>
+<p>The precise tripwire. Ambush takes the <strong>most recent completed hourly bar</strong> and waits for the live price to break <strong>above that bar's high by a penny</strong> (for a long) or <strong>below its low by a penny</strong> (for a short). The instant the price crosses — caught on the 60-second tick, not after waiting for a bar to close — that's the entry. The bar can be any color; all that matters is the break of its high (or low).</p>
+<p>Two things to note. First, because the engine needs a <em>completed</em> hourly bar to break, the <strong>earliest any NEW entry can fire is after the first hour ends at 10:30</strong> (the first completed bar is the 9:30–10:30 bar). Second, the trigger is always read <strong>in the direction the weekly signal set</strong>: if the weekly is a Buy-Long, the engine only looks for an upward break — never a short — and the daily breakout above is in that same upward direction too. The three lights always point the same way.</p>
+
+<div class="callout c-watch">
+  <strong>Two side-filters, and the direction rule.</strong> (1) A broad market-direction reading is calculated but is <strong>turned off</strong> in this version — Ambush takes both longs and shorts. (2) A <strong>sector filter that must agree with the trade's direction.</strong> Each of the AI sectors is rated <strong>BULL or BEAR</strong> by its own <strong>5-day return</strong> — positive over the last five days is BULL, negative is BEAR (this is exactly the badge on the "Sectors AI" page). A <strong>long is only allowed in a BULL sector</strong>, a <strong>short only in a BEAR sector</strong>. So the full test to enter, all pointing the same way, is: <strong>weekly signal on + the stock's sector agrees (BULL for a long, BEAR for a short) + daily breakout intact + hourly trigger fires.</strong>
+</div>
+
+<div class="sec">5. How big a bet it makes</div>
+<h3>The risk on any one trade</h3>
+<p>Before entering, Ambush measures the <strong>risk per share</strong> — how far the price would have to fall to hit the protective stop (for a long, that's the entry price minus the stop price). Then it picks the number of shares as the <strong>smallest</strong> of three limits, so no single rule is ever broken:</p>
+<table>
+  <tr><th>Limit</th><th>The math</th><th>What it protects</th></tr>
+  <tr><td>Dollar risk</td><td>$300 ÷ risk-per-share</td><td>Never lose more than $300 on one trade if it hits the stop</td></tr>
+  <tr><td>1% of NAV</td><td>(1% × NAV) ÷ risk-per-share</td><td>One trade never risks more than 1% of the account</td></tr>
+  <tr><td>10% of NAV</td><td>(10% × NAV) ÷ entry price</td><td>No single stock is ever more than 10% of the account</td></tr>
+</table>
+<p>That share count is then scaled by a <strong>growth dial</strong> tied to account size, so the risk stays proportional as the fund grows:</p>
+<table>
+  <tr><th>NAV</th><th>Dial</th><th>Effect</th></tr>
+  <tr><td>Below $125K</td><td><strong>50%</strong></td><td><strong>~$150 most you can lose on a trade — this is the current setting</strong></td></tr>
+  <tr><td>$125K to $166K</td><td>75%</td><td>~$225 most you can lose</td></tr>
+  <tr><td>$166K and up</td><td>100%</td><td>the full $300 most you can lose</td></tr>
+</table>
+<p class="small">At today's account size the dial is at <strong>50%</strong>, so the real most-you-can-lose per trade is about <strong>$150</strong>, not $300. It steps up only as the account grows.</p>
+
+<h3>The five-lot pyramid</h3>
+<p>The full share count is split into five lots and added one at a time, only as the price moves in your favor:</p>
+<table>
+  <tr><th>Lot</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+  <tr><td>Added when price is…</td><td>at entry</td><td>+3%</td><td>+6%</td><td>+10%</td><td>+14%</td></tr>
+  <tr><td>Share of the position</td><td>35%</td><td>25%</td><td>20%</td><td>12%</td><td>8%</td></tr>
+</table>
+<p>Only <strong>Lot 1 (35%)</strong> goes on at entry. The other four are "lot triggers" that fire automatically as the trade climbs — so the position grows biggest only when the trade is most clearly working, and tapers off near the top. Each added lot updates the average cost. Shorts mirror this downward.</p>
+
+<h3>Keeping the position inside 10% — the lots adjust themselves</h3>
+<p>Because the later lots fill at higher prices, a full five-lot position could drift past the 10%-of-NAV ceiling. Ambush prevents this automatically. <strong>Every minute it re-does the lot math against the current NAV</strong> (so the plan grows or shrinks as the account does). If adding the next lot would push the stock past 10% of NAV, the engine <strong>trims shares from the top lots first — Lot 5, then Lot 4</strong> — keeping the position at or under 10% and, as a bonus, <strong>improving the average cost</strong> (it keeps more of the cheaper early shares and fewer of the expensive top ones). The position cards on the Ambush screen show these adjusted share counts as they change. This is the same proven method already used by the fund's other order engine; Ambush carries its own copy so it never depends on anything outside itself.</p>
+<p class="small"><strong>Costs are always included:</strong> a small slippage estimate on every entry and exit, the broker's per-share commission, and borrow cost on shorts.</p>
+
+<div class="sec">6. The life of a trade — the six stages</div>
+<p>On the dashboard, a stock flows down through six boxes. It's grey while it waits in a box, and turns green the moment it fires that stage. If a trade closes, the name drops back and waits to go green again.</p>
+<table>
+  <tr><th>Stage</th><th>What it means</th></tr>
+  <tr><td><span class="badge b-stalk">① STALKING</span></td><td>The waiting pool — every stock that currently has a weekly Buy-Long or Sell-Short signal. Watching for the daily breakout.</td></tr>
+  <tr><td><span class="badge b-hunt">② HUNTING</span></td><td>The daily breakout has cleared today. Now watching, minute by minute, for the hourly trigger.</td></tr>
+  <tr><td><span class="badge b-attack">③ ATTACK</span></td><td>The hourly trigger just fired. The order goes out on the next tick.</td></tr>
+  <tr><td><span class="badge b-devour">④ DEVOUR</span></td><td>A real, confirmed position is held. The protective stop is live at the broker. (Behind the scenes there's a brief "order sent, not yet confirmed" step that's hidden from view — see the safety net.)</td></tr>
+  <tr><td><span class="badge b-hungry">⑤ STILL HUNGRY</span></td><td>A stock that was held and has since exited, now hunting another entry (a "re-entry"). Shows the price it has to hold to stay eligible.</td></tr>
+  <tr><td><span class="badge b-protect">⑥ PROTECT</span></td><td>The trailing stop has climbed above the average cost — the trade can no longer lose money. The profit is locked.</td></tr>
+</table>
+
+<div class="sec">7. A brand-new entry — step by step</div>
+<ol>
+  <li><strong>Is it eligible?</strong> The weekly signal is on and the sector is not "AVOID."</li>
+  <li><strong>Is the daily breakout intact right now?</strong> The live price is above the prior two-day high (long) or below the prior two-day low (short).</li>
+  <li><strong>Did the hourly trigger just fire?</strong> The live price broke the most recent completed hourly bar's high (long) or low (short) by a penny.</li>
+  <li><strong>Set the stop and the size.</strong> For a brand-new position the protective stop is the <strong>low of the first hour of trading</strong> (9:30–10:30), minus a small fee, for a long — the "disaster floor." (For a short it's the first-hour high plus a fee.) The risk-per-share is the entry price minus that stop, and the position is sized as in Section 5.</li>
+  <li><strong>Run the final safety checks.</strong> Is there enough cash for Lot 1? Is the position under its caps? Are we outside the no-entry windows? Does a fresh look at the broker confirm we currently hold none of this stock (never pile on top of an existing position)?</li>
+  <li><strong>Send it.</strong> The engine sends a market order for Lot 1 <em>together with</em> its protective stop, so the moment it fills it is already protected.</li>
+</ol>
+
+<div class="sec">8. The exit — the two-bar hourly trailing stop</div>
+<p>This is how Ambush protects a winner and gets out of a loser. For every held position, each minute it computes the <strong>two-bar level</strong>:</p>
+<div class="callout c-watch">
+  <strong>Long:</strong> stop = the lowest low of the last <strong>two completed hourly bars</strong>, minus a penny.<br>
+  <strong>Short:</strong> stop = the highest high of the last two completed hourly bars, plus a penny.
+</div>
+<ul>
+  <li>It is a <strong>trailing</strong> stop: as the trend climbs, the two-bar low rises and the stop follows it <strong>up</strong>. It does not slide back down underneath you — if the price ever drops below the two-bar low, the stop has already fired and you're out, with the trade closed.</li>
+  <li>Whenever this level changes by a penny or more, the engine <strong>replaces the resting stop at the broker</strong> with the new, tighter one. The broker always holds exactly one protective stop at the correct level — and it will execute on its own <strong>even if the engine or the internet goes down.</strong></li>
+  <li>The stop <em>level</em> is set from the last <strong>two completed</strong> hourly bars only — the still-forming current hour doesn't move where the level sits. But the <strong>exit itself is live</strong>: the instant the price drops below that level — even in the middle of the current hour, before it has closed — the resting stop fires and you're out. It does <strong>not</strong> wait for the current bar to close.</li>
+  <li>Once the stop has trailed up <strong>above your average cost</strong>, the position flips to <span class="badge b-protect">PROTECT</span> — from that point the trade cannot lose money.</li>
+</ul>
+<p class="small">There is also a belt-and-suspenders version: the resting stop at the broker is the primary protection, and if the engine sees on a tick that the price is already through the stop, it sends the exit itself. A check beforehand makes sure the broker still holds the position, so the two can never double-sell.</p>
+
+<div class="sec">9. Getting back in — a re-entry</div>
+<p>When a position exits — by the stop firing, by your hand, or by reconciliation — the stock does not disappear. It goes back to the waiting pool (<span class="badge b-hungry">STILL HUNGRY</span>) and can be re-entered, but only if it passes a strict set of checks. The point of these checks is simple: <strong>only get back in if the trade is genuinely still working — never chase a stock that is rolling over.</strong></p>
+<ol>
+  <li><strong>The weekly signal is still on.</strong> If the weekly Buy-Long / Sell-Short has ended, the stock is dropped entirely. (We don't need a separate weekly price check — the weekly fires long before the daily, so by the time the daily test below is met, the weekly is already satisfied.)</li>
+  <li><strong>The sector is not "AVOID."</strong></li>
+  <li><strong>The price is still above the original DAILY breakout level.</strong> When the trade first fired this cycle, the <strong>daily</strong> breakout price — the 2-day-high level, for example $463.89 — was <strong>frozen</strong> and is held. It is <em>not</em> re-figured to a new level each day. Re-entry requires the price to still be <strong>above that frozen daily level</strong>. If it falls back below, the daily uptrend that defined the trade is fading, so the stock is <strong>not</strong> eligible; the moment it climbs back above, it's eligible again. This is what keeps us from re-buying a trade that's rolling over. <strong>Important:</strong> this frozen rule applies to the <em>daily</em> level only — not the weekly (which is just a signal, no price level) and <em>not</em> the hourly.</li>
+  <li><strong>The hourly trigger fires again</strong> — the live price breaks the high of the most recent completed hourly bar (long) / its low (short). This is a <strong>fresh</strong> trigger every time, and it is perfectly fine — in fact, welcome — if it fires at a <strong>lower price</strong> than your last entry. As long as you're still above the frozen daily floor, a pullback that then breaks the prior hour's high lets you re-enter at a <strong>better, cheaper price.</strong> Same trigger as a new entry, any bar color.</li>
+</ol>
+
+<h3>The tighter stop on a re-entry</h3>
+<p>A re-entry is treated more carefully than a first entry, because you're jumping back into a trade mid-move and want quick proof that the momentum is real:</p>
+<ul>
+  <li><strong>The stop starts at the low of the entry bar</strong> — the very hourly bar during which the price broke back through. This is a tight stop.</li>
+  <li>If the price <strong>dips below that bar's low</strong>, the engine exits immediately with a <strong>very small loss</strong>. The stock is then free to re-enter again the next time it breaks the previous bar's high — no waiting period.</li>
+  <li>If the price <strong>stays above</strong> that low, the momentum is confirmed and you're holding a winner you got into early.</li>
+  <li>This tight entry-bar stop is held through the entry bar and the next <strong>two completed hourly bars</strong>. After that, there are enough bars to compute the normal two-bar hourly trailing stop, and the position switches over to that — the same trailing exit as any other held trade.</li>
+</ul>
+<p class="small">A brand-new entry, by contrast, starts with the wider <strong>first-hour low</strong> as its stop (Section 7), not the entry-bar low. That first-hour low stays the stop while it is still the lowest of the last two completed hourly bars. Once two more hourly bars have formed and the first hour ages out of that two-bar window, the stop becomes the lowest low of the most recent two bars — higher, in a rising trend — and from there it trails <strong>upward</strong>, hour by hour, like any other position. The tight entry-bar stop is for re-entries only.</p>
+
+<div class="sec">10. The trading day, hour by hour</div>
+<table>
+  <tr><th>Time (New York)</th><th>What the engine does</th></tr>
+  <tr><td>Before 9:30</td><td>Asleep. Nothing runs.</td></tr>
+  <tr><td>9:25–9:35</td><td><strong>Open blackout.</strong> No <em>new</em> positions. Anything already held is fully protected by its resting stop at the broker.</td></tr>
+  <tr><td>9:30–10:30<br>(first hour)</td><td><strong>No new positions yet, and no stop re-tightening yet.</strong> The engine spends this hour recording each stock's first-hour high and low and building its hourly bars. <strong>Existing positions are still fully protected:</strong> each one's two-bar hourly stop is a live resting order at the broker and <strong>will fire if the price hits it</strong> — first hour or not. It simply can't be re-tightened until 10:30, because that's the first moment a new hourly bar has completed to trail it to.</td></tr>
+  <tr><td>10:30–16:00</td><td><strong>Full operation.</strong> Every minute: confirm fills, check against the broker, manage held positions (add lots, trail the stop, take exits), check re-entries, and look for brand-new entries — <strong>right up to the 4:00 close.</strong></td></tr>
+  <tr><td>16:00–16:05</td><td><strong>Post-bell blackout.</strong> No new positions. Held positions are still fully managed (stops, exits).</td></tr>
+  <tr><td>After 16:05</td><td>Asleep. Resting stops stay live at the broker overnight for anything still held.</td></tr>
+</table>
+
+<div class="sec">11. What happens inside one 60-second tick</div>
+<ol>
+  <li><strong>Wake up and lock.</strong> Confirm it's market hours and the engine is on; grab the single-run lock; read the current account size and growth dial.</li>
+  <li><strong>Pull the live broker snapshot</strong> — your real positions and your real resting stops — as the source of truth.</li>
+  <li><strong>Confirm any order sent last tick.</strong> If the broker now shows the position, mark it as held. If it's still showing nothing after <strong>3 minutes</strong>, the order never filled (rejected or lost), so the engine drops it back to waiting. (This 3-minute timeout is a built-in safety so a dropped order can never become a fake "held" position — see Section 13.)</li>
+  <li><strong>Adopt any hand-placed trade</strong> the engine isn't already managing (Section 12).</li>
+  <li><strong>Clean up phantoms</strong> — if the engine thinks it holds something but the broker shows zero, clear it. The engine's books always converge to the broker.</li>
+  <li><strong>Get live prices</strong> and roll each stock's latest price into its hourly bar.</li>
+  <li><strong>Manage held positions</strong> — add lots (with the 10% trim), trail the stop, take exits.</li>
+  <li><strong>Handle re-entries</strong> — fire the ones that just triggered and watch the rest.</li>
+  <li><strong>Look for brand-new entries</strong>, then save all state and send any orders to the broker.</li>
+</ol>
+
+<div class="sec">12. Adopting your own hand-placed trades</div>
+<p>If you place a trade yourself in the broker, Ambush notices a position it isn't managing and <strong>adopts</strong> it: it treats the shares you hold as <strong>Lot 1</strong>, sets the two-bar hourly trailing stop, and arms <strong>Lots 2 through 5</strong> to add as the trade climbs — exactly as if the engine had entered it. From that point your manual trade is managed like any other.</p>
+
+<div class="sec">13. The safety net — why it can't make a mess</div>
+<table>
+  <tr><th>Safeguard</th><th>What it guarantees</th></tr>
+  <tr><td>Confirmed fills only</td><td>A position is only ever called "held" after the broker confirms the shares. A rejected order can't turn into a fake position.</td></tr>
+  <tr><td>Phantom cleanup</td><td>Anything the engine thinks it holds but the broker shows as flat is cleared every minute.</td></tr>
+  <tr><td>One stop per stock</td><td>When it sets or moves a stop, it leaves exactly one protective stop in place. Stops you placed yourself by hand are never touched.</td></tr>
+  <tr><td>Never left naked</td><td>If a held stock has no protective stop at the broker, the engine places one immediately.</td></tr>
+  <tr><td>Check before acting</td><td>The engine never sends an exit or a stop unless a fresh broker snapshot confirms it actually holds that position, on that side. No orders into thin air.</td></tr>
+  <tr><td>No-entry windows</td><td>No new positions during the open (9:25–9:35) or the post-bell window (16:00–16:05).</td></tr>
+  <tr><td>One engine, one tick</td><td>Exactly one copy of the engine acts, one minute at a time. Ambush is the only engine touching the account — no other system trades against it.</td></tr>
+</table>
+
+<div class="sec">14. One full trade, start to finish</div>
+<ol>
+  <li>Monday's weekly close puts stock <code>XYZ</code> into a Buy-Long setup. It enters the waiting pool.</li>
+  <li>Wednesday, 11:10 AM: <code>XYZ</code> is trading above its prior two-day high (daily breakout intact), and the live price ticks above the 10:00–11:00 bar's high. <strong>Trigger.</strong></li>
+  <li>11:11 AM: the engine sizes Lot 1 (say 35 shares at the 50% dial), sets the stop at the first-hour low, and sends the buy plus the stop.</li>
+  <li>11:12 AM: the broker confirms 35 shares. The position is now held, the stop resting at the broker.</li>
+  <li>The price climbs +3% and +6% — Lots 2 and 3 fill, and the average cost updates. The two-bar hourly stop trails up behind the price; once it passes the average cost, <code>XYZ</code> flips to PROTECT and can no longer lose money. (If a later lot would push the stock past 10% of NAV, the engine trims the top lots to keep it inside the cap.)</li>
+  <li>Thursday, 2:00 PM: the price pulls back through the two-bar low. The resting stop fills the exit; the engine logs the trade and drops <code>XYZ</code> back to the waiting pool.</li>
+  <li>Thursday, 3:10 PM: <code>XYZ</code>'s weekly signal is still on, and the price is still above the <strong>original</strong> breakout price that first qualified it. It breaks the prior hour's high again — <strong>re-enter</strong>, this time with the tight entry-bar-low stop. The cycle repeats, right up to the 4:00 close.</li>
+</ol>
+
+<div class="sec">15. One-page cheat sheet</div>
+<table>
+  <tr><th>Question</th><th>Answer</th></tr>
+  <tr><td>What it trades</td><td>The AI 300 (~300 stocks), longs and shorts</td></tr>
+  <tr><td>How often</td><td>Every 60 seconds, 9:30–4:05 PM ET, Mon–Fri</td></tr>
+  <tr><td>Enters when</td><td>Weekly signal on + sector agrees (BULL for a long / BEAR for a short, by 5-day return) + price past the 2-day high/low + breaks the prior hourly bar — all pointing the same way</td></tr>
+  <tr><td>Entry window</td><td>After 10:30, right up to the 4:00 close (no entries 9:25–9:35 or 16:00–16:05)</td></tr>
+  <tr><td>Position size</td><td>Smallest of $300 risk, 1% of NAV risk, 10% of NAV — times the growth dial (50% now → ~$150 most you can lose)</td></tr>
+  <tr><td>The five lots</td><td>35% at entry, then 25/20/12/8% added at +3/+6/+10/+14%. Re-figured every minute; top lots trimmed to stay ≤10% of NAV</td></tr>
+  <tr><td>New-entry stop</td><td>The first-hour low (long) / high (short), minus/plus a small fee</td></tr>
+  <tr><td>Re-entry stop</td><td>The low of the entry bar (tight) for the first ~2 bars, then the normal two-bar hourly stop</td></tr>
+  <tr><td>Trailing stop</td><td>Lowest low of the last two completed hourly bars − a penny (long); trails up, never down; one resting stop at the broker</td></tr>
+  <tr><td>Exit</td><td>Price breaks the two-bar level</td></tr>
+  <tr><td>Re-entry rule</td><td>Weekly still on + price above the original frozen breakout price + breaks the prior hourly bar again. No waiting period.</td></tr>
+</table>
+
+<div class="sec">16. What changed in this revision (V7.4 → V7.5)</div>
+<div class="callout c-key">
+<ol style="margin:0">
+  <li><strong>Re-entry now uses the original, frozen breakout DAILY price.</strong> A stock can only re-enter while the DAILY price holds above the <em>original DAILY</em> price that first qualified the trade — not a price that resets each day. If it falls below that, we don't chase it down. (This is the daily level only — not the hourly.)</li>
+  <li><strong>Re-entries get a tight entry-bar stop.</strong> A re-entry's stop starts at the low of the bar it broke in on; dip below it and we're out for a tiny loss; hold it for two bars, then the normal two-bar hourly stop takes over. (Brand-new entries keep the wider first-hour-low stop.)</li>
+  <li><strong>The entry trigger is a plain break of the prior hourly bar's high/low</strong> — no requirement that the bar be a particular color.</li>
+  <li><strong>The five-lot plan now re-balances itself every minute</strong> against the current NAV, trimming the top lots so a position never exceeds 10% of NAV and the average cost stays as low as possible.</li>
+  <li><strong>The first-hour wording is corrected:</strong> existing positions are protected and can be stopped out in the first hour; only <em>new</em> positions and stop re-tightening wait until 10:30.</li>
+  <li><strong>The sector filter is fixed and made directional.</strong> It was checking for a label ("AVOID") that the system never actually assigns, so it was doing nothing — every sector passed, and the old backtest had no sector filtering at all. It is now the simple BULL/BEAR rule: a long is only taken in a sector that's positive over the last 5 days, a short only in one that's negative. The new backtest will reflect real sector filtering.</li>
+</ol>
+</div>
+<p class="small">These changes will be confirmed by a fresh backtest before any of them go live. Once you sign off on this document, the backtest runs; if the numbers hold up, the live engine is updated to match this exactly.</p>
+
+</body>
+</html>

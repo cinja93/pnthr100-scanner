@@ -1,0 +1,17 @@
+import dotenv from 'dotenv'; dotenv.config({ path: new URL('./.env', import.meta.url).pathname });
+import { connectToDatabase } from './database.js';
+const db = await connectToDatabase();
+const trades = await db.collection('pnthr_ambush_trades').find({}).sort({exitDate:1}).toArray();
+const dir = t => /short|^ss/i.test(String(t.direction||'')) ? 'SHORT' : 'LONG';
+const pnl = t => +(t.pnl||0);
+const stat = a => { const p=a.reduce((s,t)=>s+pnl(t),0), w=a.filter(t=>pnl(t)>0).length; return {n:a.length, pnl:Math.round(p), wr:a.length?Math.round(w/a.length*100):0, avg:a.length?Math.round(p/a.length):0}; };
+const L=trades.filter(t=>dir(t)==='LONG'), S=trades.filter(t=>dir(t)==='SHORT');
+const ds=trades.map(t=>t.exitDate||t.entryDate).filter(Boolean).sort();
+const days=new Set(trades.map(t=>(t.exitDate||'').slice(0,10)).filter(Boolean));
+console.log(`${trades.length} Ambush trades · ${ds[0]} → ${ds.at(-1)} · ${days.size} distinct exit days\n`);
+console.log(`LONG:  ${String(stat(L).n).padStart(2)} · win ${stat(L).wr}% · net $${stat(L).pnl} · avg $${stat(L).avg}`);
+console.log(`SHORT: ${String(stat(S).n).padStart(2)} · win ${stat(S).wr}% · net $${stat(S).pnl} · avg $${stat(S).avg}`);
+console.log(`ALL:   ${String(stat(trades).n).padStart(2)} · win ${stat(trades).wr}% · net $${stat(trades).pnl}`);
+console.log('\nSHORT trades (the leg we are validating):');
+for (const t of S) console.log(`  ${(t.ticker||'').padEnd(5)} ${t.entryDate}→${t.exitDate} ${String(t.shares).padStart(4)}sh  $${(+t.entryPrice).toFixed(2)}→$${(+t.exitPrice).toFixed(2)}  pnl $${pnl(t).toFixed(0).padStart(6)}  ${t.exitType||''}`);
+process.exit(0);

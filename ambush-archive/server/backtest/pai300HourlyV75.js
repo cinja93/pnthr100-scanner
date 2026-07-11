@@ -1,0 +1,1019 @@
+// server/backtest/pai300HourlyV7_graduated.js
+// ── V7A 1H-STOP: FULL SIZE vs GRADUATED SIZE ────────────────────────────
+//
+// Both use firstHourLow - fees as initial stop (1H stop = winner).
+// FULL  = 100% sizing from day 1
+// GRAD  = 50% sizing until $125K NAV, 75% until $166K, then 100%
+//
+// Tracks NAV milestones with dates to answer: when do we hit $1M?
+//
+// Usage: cd server && node backtest/pai300HourlyV7_graduated.js
+// ────────────────────────────────────────────────────────────────────────
+
+import dotenv from 'dotenv';
+dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
+
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { connectToDatabase } from '../database.js';
+import { SECTORS } from '../scripts/aiUniverse/aiUniverseData.js';
+import { SECTOR_EMA_PERIODS } from '../data/pnthrAiSectorsConfig.js';
+import { getSectorEmaPeriod } from '../sectorEmaConfig.js';
+import { CARNIVORE_MODE_TICKERS } from '../data/strategyMode.js';
+import { detectAllSignals, calculateEMA, blInitStop, ssInitStop, computeWilderATR } from '../signalDetection.js';
+import { calcCommission, calcBorrowCost } from './costEngine.js';
+import { computeSharpe, computeSortino } from '../irLiveService.js';
+
+let NAV_INITIAL       = 83_000;
+const VITALITY_PCT    = 0.01;
+const TICKER_CAP_PCT  = 0.10;
+const STRIKE_PCT      = [0.35, 0.25, 0.20, 0.12, 0.08];
+const LOT_OFFSETS     = [0, 0.03, 0.06, 0.10, 0.14];
+const MAX_LOSS        = 300;
+const BE_THRESHOLD    = 75;
+const PAI300_REGIME_PERIOD = 36;
+const FIRST_HOUR_END  = '10:30';
+const SLIPPAGE_BPS    = 5;
+const COMMISSION_PER_SHARE = 0.005;
+const WITHDRAWAL_THRESHOLD = 2_000_000;
+const WITHDRAWAL_AMOUNT    = 1_000_000;
+
+// ── GRADUATED SIZING THRESHOLDS ──
+const GRAD_TIER_1 = 125_000;   // 50% → 75% at $125K
+const GRAD_TIER_2 = 166_000;   // 75% → 100% at $166K
+
+function getSizingMultiplier(currentNav, useGraduated) {
+  if (!useGraduated) return 1.0;
+  if (currentNav >= GRAD_TIER_2) return 1.00;
+  if (currentNav >= GRAD_TIER_1) return 0.75;
+  return 0.50;
+}
+
+const CARNIVORE_SECTOR_MAP = {
+  'Technology':'XLK','Energy':'XLE','Healthcare':'XLV','Health Care':'XLV',
+  'Financial Services':'XLF','Financials':'XLF','Consumer Discretionary':'XLY',
+  'Consumer Cyclical':'XLY','Communication Services':'XLC','Industrials':'XLI',
+  'Basic Materials':'XLB','Materials':'XLB','Real Estate':'XLRE','Utilities':'XLU',
+  'Consumer Staples':'XLP','Consumer Defensive':'XLP',
+};
+const ETF_EMA_PERIOD = {
+  XLK: 21, XLV: 24, XLF: 25, XLI: 24, XLE: 26, XLC: 21,
+  XLRE: 26, XLU: 21, XLB: 19, XLY: 19, XLP: 18,
+};
+const CARNIVORE_GICS = {
+  AKAM:'Technology',ANET:'Technology',CDW:'Technology',COHR:'Technology',
+  INTC:'Technology',KLAC:'Technology',SNDK:'Technology',
+  META:'Communication Services',TSLA:'Consumer Discretionary',CSGP:'Real Estate',
+  CEG:'Utilities',EQT:'Energy',TRGP:'Energy',
+  APH:'Industrials',ARM:'Industrials',EMR:'Industrials',ETN:'Industrials',
+  GEV:'Industrials',HUBB:'Industrials',LDOS:'Industrials',TDG:'Industrials',
+  TRMB:'Industrials',CMI:'Industrials',
+  IBM:'Technology',ORCL:'Technology',TTD:'Technology',VST:'Utilities',LITE:'Technology',
+};
+
+const AI_TICKER_META = {};
+for (const sec of SECTORS) {
+  for (const h of sec.holdings) AI_TICKER_META[h.ticker] = { sectorId: sec.id, sector: sec.name };
+}
+
+// When running an alternate universe (e.g. S&P 500), SECTOR_OVERRIDE maps ticker->sector
+// so borrow costs + any sector lookups use the correct GICS sector. AI path: stays null.
+let SECTOR_OVERRIDE = null;
+function getSectorName(ticker) {
+  if (SECTOR_OVERRIDE) return SECTOR_OVERRIDE[ticker] || 'Technology';
+  if (CARNIVORE_GICS[ticker]) return CARNIVORE_GICS[ticker];
+  return AI_TICKER_META[ticker]?.sector || 'Technology';
+}
+function getWeekOf(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay(); const daysToMon = dow === 0 ? -6 : 1 - dow;
+  const m = new Date(d); m.setDate(d.getDate() + daysToMon);
+  return m.toISOString().split('T')[0];
+}
+function computeEMASeed(closes, period) {
+  if (closes.length < period) return [];
+  const k = 2 / (period + 1);
+  let ema = closes.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  const result = new Array(period - 1).fill(null); result.push(ema);
+  for (let i = period; i < closes.length; i++) { ema = closes[i] * k + ema * (1 - k); result.push(ema); }
+  return result;
+}
+function extractTime(dateStr) { const p = dateStr.split(' '); return p.length > 1 ? p[1].slice(0, 5) : '00:00'; }
+function isConfirmedGreenBreakout(bar, prevBar) {
+  return prevBar && bar.close > bar.open && bar.high > prevBar.high && bar.close > prevBar.high;
+}
+function isConfirmedRedBreakdown(bar, prevBar) {
+  return prevBar && bar.close < bar.open && bar.low < prevBar.low && bar.close < prevBar.low;
+}
+function applySlip(price, adverse) {
+  const s = price * (SLIPPAGE_BPS / 10000);
+  return adverse ? +(price + s).toFixed(4) : +(price - s).toFixed(4);
+}
+function entrySlip(price, dir) { return dir === 'LONG' ? applySlip(price, true) : applySlip(price, false); }
+function exitSlip(price, dir) { return dir === 'LONG' ? applySlip(price, false) : applySlip(price, true); }
+function comm(shares, price) { return calcCommission(shares, price); }
+
+async function main() {
+  const db = await connectToDatabase();
+  if (!db) { console.error('No DB'); process.exit(1); }
+
+  console.log('='.repeat(140));
+  console.log('  PNTHR AMBUSH V7.3 — LOT-TRAIL + GUARDRAIL + $2M WITHDRAWAL BACKTEST');
+  console.log('  1H Stop (firstHourLow - fees) | Post-BE stop = previous lot price | 2-bar-low-break exit | NO daily ratchet');
+  console.log(`  $83K Starting NAV / $75 Break Even / 2-bar trailing / Real IBKR fees / 5bps slippage`);
+  console.log(`  Graduated tiers: 50% until $${(GRAD_TIER_1/1000).toFixed(0)}K → 75% until $${(GRAD_TIER_2/1000).toFixed(0)}K → 100%`);
+  console.log('='.repeat(140));
+
+  // ── LOAD DATA ──────────────────────────────────────────────────────────────
+  console.log('\n[1] Loading data...');
+  // S&P 500 large-cap universe: same engine, different inputs. Daily/weekly from the 679
+  // candle store, hourly from the dedicated backfill, sectors from the FMP-sourced map.
+  const SP500 = process.argv.includes('--sp500');
+  // Structural (ex-ante) sector exclusion — e.g. drop the weak low-momentum defensives.
+  const EXCLUDE_SECTORS = process.argv.includes('--no-defensives') ? new Set(['Utilities', 'Consumer Staples']) : new Set();
+  let sp500Sector = {};
+  if (SP500) {
+    const secDocs = await db.collection('pnthr_sp500_sectors').find({ sector: { $ne: null } }).toArray();
+    for (const d of secDocs) sp500Sector[d.ticker] = d.sector;
+    SECTOR_OVERRIDE = sp500Sector;
+    console.log(`  [S&P 500 MODE] ${Object.keys(sp500Sector).length} tickers with sectors`);
+  }
+  const C = SP500
+    ? { daily: 'pnthr_bt_candles', weekly: 'pnthr_bt_candles_weekly', hourly: 'pnthr_sp500_hourly_candles' }
+    : { daily: 'pnthr_ai_bt_candles', weekly: 'pnthr_ai_bt_candles_weekly', hourly: 'pnthr_ai_hourly_candles' };
+  const dailyDocs = await db.collection(C.daily).find({}, { projection: { ticker: 1, daily: 1 } }).toArray();
+  const weeklyDocs = await db.collection(C.weekly).find({}, { projection: { ticker: 1, weekly: 1 } }).toArray();
+  const hourlyDocs = await db.collection(C.hourly).find({}, { projection: { ticker: 1, hourly: 1 } }).toArray();
+  const sectorRankDocs = SP500 ? [] : await db.collection('pnthr_ai_sector_rank_daily').find({}).sort({ date: 1 }).toArray();
+  const pai300Doc = await db.collection('pnthr_ai_index_candles_weekly').findOne({ ticker: 'PAI300' });
+  const spyWeeklyDoc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: 'SPY' });
+  const etfWeeklyDocs = {};
+  for (const etf of Object.keys(ETF_EMA_PERIOD)) {
+    const doc = await db.collection('pnthr_bt_candles_weekly').findOne({ ticker: etf });
+    if (doc) etfWeeklyDocs[etf] = doc;
+  }
+
+  const hourlyBarMap = {};
+  let hourlyMinDate = '9999', hourlyMaxDate = '0000';
+  for (const doc of hourlyDocs) {
+    const bars = (doc.hourly || []).sort((a, b) => a.date.localeCompare(b.date));
+    hourlyBarMap[doc.ticker] = bars;
+    if (bars.length) {
+      const first = bars[0].date.split(' ')[0]; const last = bars[bars.length - 1].date.split(' ')[0];
+      if (first < hourlyMinDate) hourlyMinDate = first;
+      if (last > hourlyMaxDate) hourlyMaxDate = last;
+    }
+  }
+  const dailyBarMap = {};
+  for (const doc of dailyDocs) { const map = {}; for (const b of (doc.daily || [])) map[b.date] = b; dailyBarMap[doc.ticker] = map; }
+
+  const hourlyDatesSet = new Set();
+  for (const bars of Object.values(hourlyBarMap)) { for (const b of bars) hourlyDatesSet.add(b.date.split(' ')[0]); }
+  const hourlyTradingDates = [...hourlyDatesSet].sort();
+
+  const weeklyBarsByTicker = {};
+  for (const doc of weeklyDocs) {
+    const sorted = (doc.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+    weeklyBarsByTicker[doc.ticker] = sorted.map(w => ({ time: w.weekOf || w.date, open: w.open, high: w.high, low: w.low, close: w.close }));
+  }
+
+  const pai300Weekly = (pai300Doc?.weekly || []).sort((a, b) => a.weekOf.localeCompare(b.weekOf));
+  const pai300Closes = pai300Weekly.map(w => w.close);
+  const pai300Ema = computeEMASeed(pai300Closes, PAI300_REGIME_PERIOD);
+  const pai300RegimeByWeek = {};
+  for (let i = 0; i < pai300Weekly.length; i++) { if (pai300Ema[i] != null) pai300RegimeByWeek[pai300Weekly[i].weekOf] = pai300Closes[i] > pai300Ema[i]; }
+
+  const spyWeekly = (spyWeeklyDoc?.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+  const spyCloses = spyWeekly.map(w => w.close);
+  const spyEma21 = computeEMASeed(spyCloses, 21);
+  const spyRegimeByWeek = {};
+  for (let i = 0; i < spyWeekly.length; i++) { if (spyEma21[i] != null) spyRegimeByWeek[spyWeekly[i].weekOf || spyWeekly[i].date] = spyCloses[i] > spyEma21[i]; }
+
+  const etfAboveEmaByWeek = {};
+  for (const [etf, doc] of Object.entries(etfWeeklyDocs)) {
+    const bars = (doc.weekly || []).sort((a, b) => (a.weekOf || a.date).localeCompare(b.weekOf || b.date));
+    const closes = bars.map(w => w.close); const period = ETF_EMA_PERIOD[etf] || 21;
+    const ema = computeEMASeed(closes, period); const map = {};
+    for (let i = 0; i < bars.length; i++) { if (ema[i] != null) map[bars[i].weekOf || bars[i].date] = closes[i] > ema[i]; }
+    etfAboveEmaByWeek[etf] = map;
+  }
+  const aiSectorTierByDate = {};
+  const aiSectorFiveDayByDate = {};   // V7.5: sector 5-day return per date → BULL/BEAR direction filter
+  for (const doc of sectorRankDocs) {
+    const tiers = {}; const fives = {};
+    for (const r of (doc.ranks || [])) { tiers[r.sectorId] = r.tier; fives[r.sectorId] = r.fiveDayReturn; }
+    aiSectorTierByDate[doc.date] = tiers;
+    aiSectorFiveDayByDate[doc.date] = fives;
+  }
+
+  console.log(`  Hourly: ${hourlyMinDate} to ${hourlyMaxDate} (${hourlyTradingDates.length} days)`);
+  console.log(`  Tickers: ${Object.keys(hourlyBarMap).length}`);
+
+  // ── SIGNALS ────────────────────────────────────────────────────────────────
+  console.log('\n[2] Computing signals...');
+  const allTickers = SP500
+    ? Object.keys(weeklyBarsByTicker).filter(t => sp500Sector[t] && !EXCLUDE_SECTORS.has(sp500Sector[t]))
+    : Object.keys(weeklyBarsByTicker).filter(t => AI_TICKER_META[t] || CARNIVORE_MODE_TICKERS.has(t));
+  const signalsByTicker = {};
+  for (const ticker of allTickers) {
+    const bars = weeklyBarsByTicker[ticker]; if (!bars || bars.length < 35) continue;
+    const isCarnivore = !SP500 && CARNIVORE_MODE_TICKERS.has(ticker);
+    const sectorId = AI_TICKER_META[ticker]?.sectorId;
+    const period = SP500 ? getSectorEmaPeriod(sp500Sector[ticker])
+                 : (isCarnivore ? 21 : (SECTOR_EMA_PERIODS[sectorId] ?? SECTOR_EMA_PERIODS[String(sectorId)] ?? 30));
+    const gateOffset = SP500 ? 0.10 : (isCarnivore ? 0.10 : 0.25); // 679/S&P 500 first-BL gate = 1.10x
+    const result = detectAllSignals(bars, period, false, null, gateOffset);
+    const activeBLPeriods = [], activeSSPeriods = [];
+    let blStart = null, ssStart = null;
+    for (const evt of result.events) {
+      if (evt.signal === 'BL') blStart = evt.time;
+      if ((evt.signal === 'BE' || evt.signal === 'SS') && blStart) { activeBLPeriods.push({ from: blStart, to: evt.time }); blStart = null; }
+      if (evt.signal === 'SS') ssStart = evt.time;
+      if ((evt.signal === 'SE' || evt.signal === 'BL') && ssStart) { activeSSPeriods.push({ from: ssStart, to: evt.time }); ssStart = null; }
+    }
+    if (blStart) activeBLPeriods.push({ from: blStart, to: '9999-12-31' });
+    if (ssStart) activeSSPeriods.push({ from: ssStart, to: '9999-12-31' });
+    signalsByTicker[ticker] = { activeBLPeriods, activeSSPeriods, isCarnivore };
+  }
+  console.log(`  ${Object.keys(signalsByTicker).length} tickers with signals`);
+
+  // ── GATE FUNCTIONS ─────────────────────────────────────────────────────────
+  function getRegime(ticker, dateStr) {
+    const weekOf = getWeekOf(dateStr);
+    const rm = CARNIVORE_MODE_TICKERS.has(ticker) ? spyRegimeByWeek : pai300RegimeByWeek;
+    if (rm[weekOf] !== undefined) return rm[weekOf];
+    const ws = Object.keys(rm).sort(); let best = null;
+    for (const w of ws) { if (w <= weekOf) best = w; else break; }
+    return best !== null ? rm[best] : true;
+  }
+  function getSectorOk(ticker, dateStr) {
+    const weekOf = getWeekOf(dateStr);
+    if (!CARNIVORE_MODE_TICKERS.has(ticker)) {
+      const dates = Object.keys(aiSectorTierByDate).sort(); let best = null;
+      for (const d of dates) { if (d <= dateStr) best = d; else break; }
+      if (!best) return true;
+      return aiSectorTierByDate[best]?.[AI_TICKER_META[ticker]?.sectorId] !== 'AVOID';
+    }
+    const gics = CARNIVORE_GICS[ticker]; const etf = CARNIVORE_SECTOR_MAP[gics];
+    if (!etf) return true; const etfMap = etfAboveEmaByWeek[etf]; if (!etfMap) return true;
+    let above = etfMap[weekOf];
+    if (above === undefined) { const ws = Object.keys(etfMap).sort(); let best = null; for (const w of ws) { if (w <= weekOf) best = w; else break; } above = best ? etfMap[best] : true; }
+    return above;
+  }
+  // V7.5 SECTOR FILTER (replaces the old AVOID-tier check). A trade's direction must match
+  // its sector's 5-day return sign: a LONG only in a BULL sector (5-day return >= 0), a SHORT
+  // only in a BEAR sector (5-day return < 0). Same rule as the AiSectorsPage BULL/BEAR badge.
+  function sectorAllowsDirection(ticker, dateStr, direction) {
+    const sectorId = AI_TICKER_META[ticker]?.sectorId;
+    if (sectorId == null) return true; // unknown / non-AI sector → don't block
+    const dates = Object.keys(aiSectorFiveDayByDate).sort(); let best = null;
+    for (const d of dates) { if (d <= dateStr) best = d; else break; }
+    if (!best) return true;
+    const five = aiSectorFiveDayByDate[best]?.[sectorId];
+    if (five == null) return true;
+    return direction === 'LONG' ? five >= 0 : five < 0;
+  }
+  function isActiveBL(ticker, dateStr) {
+    const sig = signalsByTicker[ticker]; if (!sig) return false; const weekOf = getWeekOf(dateStr);
+    for (const p of sig.activeBLPeriods) { if (weekOf >= p.from && weekOf <= p.to) return true; } return false;
+  }
+  function isActiveSS(ticker, dateStr) {
+    const sig = signalsByTicker[ticker]; if (!sig) return false; const weekOf = getWeekOf(dateStr);
+    for (const p of sig.activeSSPeriods) { if (weekOf >= p.from && weekOf <= p.to) return true; } return false;
+  }
+  function countTradingDays(fromDate, toDate) {
+    const from = hourlyTradingDates.indexOf(fromDate); const to = hourlyTradingDates.indexOf(toDate);
+    if (from < 0 || to < 0) return Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000 * 5/7));
+    return Math.max(1, to - from);
+  }
+
+  // ── SIMULATION ENGINE ──────────────────────────────────────────────────────
+  function runSim({ maxPositions = 999, pessimistic = false, withdrawals = false, label = '', useGraduated = false, exitMode = 'be75', gateMode = 'regime', entryMode = 'lookahead', lookbackBars = 1, greenFilter = false, wdMode = 'fixed', wdCap = null }) {
+    const twoBarTrail   = exitMode === '2bartrail'; // single ratcheting stop = 2-bar low
+    const twoBarGoverns = exitMode === '2bar' || twoBarTrail;
+    const useBE75 = exitMode === 'be75';
+    let cash = NAV_INITIAL;
+    const exits = [];
+    const positions = {};
+    const waiting = {};
+    const pendingReentry = {};
+    const dailyLedger = []; // daily cash/NAV snapshot for CSV export
+    let totalComm = 0, totalBorrow = 0;
+    let totalEntries = 0, totalExits1H = 0, totalReentries = 0;
+    let totalBEStopUps = 0, totalLotFills = 0, totalCycleRepeats = 0;
+    let totalTrailingExits = 0, skippedNoCash = 0, skippedMaxPos = 0;
+    let totalLongEntries = 0, totalShortEntries = 0;
+    let maxConcurrentPositions = 0;
+    let worstSingleTrade = 0;
+    let skippedNo1HLow = 0;
+    let totalLotStopExits = 0;
+    let totalWithdrawn = 0;
+    // Cash ledger tracking
+    let minCash = NAV_INITIAL;
+    let daysTappedOut = 0;
+    let peakDeployedPct = 0;
+
+    // ── MILESTONE TRACKING ──
+    const MILESTONES = [100_000, 125_000, 166_000, 250_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000, 8_000_000];
+    const milestoneHits = {};  // { amount: date }
+
+    // ── SIZING TIER TRACKING ──
+    let currentTierLabel = '50%';
+    const tierChanges = [];  // { date, from, to, nav }
+
+    function openCount() { return Object.keys(positions).length; }
+    function deployed() { let d = 0; for (const p of Object.values(positions)) d += p.avgCost * p.totalShares; return d; }
+    function nav() { return cash + deployed(); }
+
+    function doExit(ticker, phase, shares, exitPrice, avgCost, date, hour, cycleNum, peak, direction, entryDate) {
+      const c = comm(shares, exitPrice); totalComm += c;
+      let pnl;
+      if (direction === 'SHORT') {
+        const td = countTradingDays(entryDate, date);
+        const borrow = calcBorrowCost(shares, avgCost, td, getSectorName(ticker));
+        totalBorrow += borrow;
+        pnl = +(shares * (avgCost - exitPrice) - c - borrow).toFixed(2);
+        cash += +(shares * avgCost + pnl).toFixed(2);
+      } else {
+        const proceeds = +(shares * exitPrice - c).toFixed(2);
+        pnl = +(proceeds - shares * avgCost).toFixed(2);
+        cash += proceeds;
+      }
+      if (pnl < worstSingleTrade) worstSingleTrade = pnl;
+      exits.push({ pnl, date, hour, ticker, type: phase, direction, shares, avgCost, exitPrice, entryDate });
+      return pnl;
+    }
+
+    for (let dayIdx = 0; dayIdx < hourlyTradingDates.length; dayIdx++) {
+      const date = hourlyTradingDates[dayIdx];
+
+      // Withdrawal check at start of day
+      if (withdrawals && nav() >= WITHDRAWAL_THRESHOLD) {
+        cash -= WITHDRAWAL_AMOUNT;
+        totalWithdrawn += WITHDRAWAL_AMOUNT;
+      } else if (wdMode === 'cap' && wdCap != null) {
+        // Capacity sweep: pin working capital at wdCap, harvest the excess (up to
+        // available cash so we never drive cash negative).
+        const excess = nav() - wdCap;
+        if (excess > 0) {
+          const w = Math.min(cash, excess);
+          if (w > 0) { cash -= w; totalWithdrawn += w; }
+        }
+      }
+
+      const dayHourly = {};
+      for (const [t, bars] of Object.entries(hourlyBarMap)) {
+        const db = bars.filter(b => b.date.startsWith(date));
+        if (db.length) dayHourly[t] = db;
+      }
+
+      const curCount = openCount();
+      if (curCount > maxConcurrentPositions) maxConcurrentPositions = curCount;
+
+      // Cash ledger snapshot at start of day
+      if (cash < minCash) minCash = cash;
+      if (cash < 500) daysTappedOut++;
+      const currentNav = nav();
+      const dep = deployed();
+      if (currentNav > 0) {
+        const depPct = dep / currentNav;
+        if (depPct > peakDeployedPct) peakDeployedPct = depPct;
+      }
+
+      // ── MILESTONE CHECK ──
+      for (const m of MILESTONES) {
+        if (!milestoneHits[m] && currentNav >= m) {
+          milestoneHits[m] = date;
+        }
+      }
+
+      // ── SIZING TIER CHECK ──
+      if (useGraduated) {
+        let newTier;
+        if (currentNav >= GRAD_TIER_2) newTier = '100%';
+        else if (currentNav >= GRAD_TIER_1) newTier = '75%';
+        else newTier = '50%';
+        if (newTier !== currentTierLabel) {
+          tierChanges.push({ date, from: currentTierLabel, to: newTier, nav: Math.round(currentNav) });
+          currentTierLabel = newTier;
+        }
+      }
+
+      // Get current sizing multiplier
+      const sizeMult = getSizingMultiplier(currentNav, useGraduated);
+
+      // ═══ PHASE A: Process existing positions ═══
+      for (const [ticker, pos] of Object.entries(positions)) {
+        const hBars = dayHourly[ticker]; if (!hBars || !hBars.length) continue;
+        const isLong = pos.direction === 'LONG';
+        const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
+        const afterFirstHour = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
+        const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
+        const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
+
+        // V7.2: daily first-hour-low ratchet REMOVED. Post-BE the stop follows the lots.
+
+        let runningLow = firstHourLow ?? Infinity;
+        let runningHigh = firstHourHigh ?? -Infinity;
+
+        // First-hour bars: stop check only
+        for (const hBar of firstHourBars) {
+          if (!positions[ticker]) break;
+          if (hBar.low < runningLow) runningLow = hBar.low;
+          if (hBar.high > runningHigh) runningHigh = hBar.high;
+          if (isLong && pos.stop != null && hBar.low <= pos.stop) {
+            doExit(ticker, 'STOP_HIT_1H', pos.totalShares, exitSlip(pos.stop, 'LONG'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'LONG', pos.entryDate);
+            waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow, runningHigh, cycleNum: pos.cycleNum + 1, direction: 'LONG' };
+            delete positions[ticker]; break;
+          }
+          if (!isLong && pos.stop != null && hBar.high >= pos.stop) {
+            doExit(ticker, 'STOP_HIT_1H', pos.totalShares, exitSlip(pos.stop, 'SHORT'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'SHORT', pos.entryDate);
+            waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow, runningHigh, cycleNum: pos.cycleNum + 1, direction: 'SHORT' };
+            delete positions[ticker]; break;
+          }
+          const unr = isLong ? (hBar.high - pos.avgCost) * pos.totalShares : (pos.avgCost - hBar.low) * pos.totalShares;
+          if (unr > (pos.peak || 0)) pos.peak = +unr.toFixed(2);
+          if (useBE75 && !pos.atBE && unr >= BE_THRESHOLD) {
+            pos.atBE = true; pos.trailingActive = false; pos.beDate = date;
+            const feePer = comm(pos.totalShares, pos.avgCost) / pos.totalShares;
+            pos.stop = isLong ? +(pos.avgCost + feePer).toFixed(2) : +(pos.avgCost - feePer).toFixed(2);
+            totalBEStopUps++;
+          }
+        }
+        if (!positions[ticker]) continue;
+
+        // After-first-hour bars
+        // V7.2: lower-low / higher-high tracking persists on the position (pos._prevLow / _prevPrevLow).
+        for (const hBar of afterFirstHour) {
+          if (!positions[ticker]) break;
+          if (hBar.low < runningLow) runningLow = hBar.low;
+          if (hBar.high > runningHigh) runningHigh = hBar.high;
+
+          const checkStop = () => {
+            if (!positions[ticker]) return;
+            if (isLong) {
+              // V7.2 exit #1 (post-BE only): two prior after-hour bars formed a lower low,
+              // and this bar takes out (prev bar low - $0.01). Exit there IF above the stop.
+              if (!twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null && pos._prevLow < pos._prevPrevLow) {
+                const breakLevel = +(pos._prevLow - 0.01).toFixed(2);
+                if ((twoBarGoverns || breakLevel > pos.stop) && hBar.low <= breakLevel) {
+                  doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'LONG'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'LONG', pos.entryDate);
+                  totalTrailingExits++;
+                  waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow: hBar.low, runningHigh, cycleNum: pos.cycleNum + 1, direction: 'LONG' };
+                  delete positions[ticker]; return;
+                }
+              }
+              // V7.2 exit #2: the hard stop. Pre-BE = first-hour low; post-BE = breakeven/lot-based.
+              if (pos.stop != null && hBar.low <= pos.stop) {
+                doExit(ticker, pos.atBE ? 'LOT_STOP' : '1H_LOW_BREAK', pos.totalShares, exitSlip(pos.stop, 'LONG'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'LONG', pos.entryDate);
+                if (pos.atBE) totalLotStopExits++; else totalExits1H++;
+                waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow: hBar.low, runningHigh, cycleNum: pos.cycleNum + 1, direction: 'LONG' };
+                delete positions[ticker]; return;
+              }
+            } else {
+              if (!twoBarTrail && pos.atBE && pos._prevHigh != null && pos._prevPrevHigh != null && pos._prevHigh > pos._prevPrevHigh) {
+                const breakLevel = +(pos._prevHigh + 0.01).toFixed(2);
+                if ((twoBarGoverns || breakLevel < pos.stop) && hBar.high >= breakLevel) {
+                  doExit(ticker, 'TRAILING_STOP', pos.totalShares, exitSlip(breakLevel, 'SHORT'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'SHORT', pos.entryDate);
+                  totalTrailingExits++;
+                  waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow, runningHigh: hBar.high, cycleNum: pos.cycleNum + 1, direction: 'SHORT' };
+                  delete positions[ticker]; return;
+                }
+              }
+              if (pos.stop != null && hBar.high >= pos.stop) {
+                doExit(ticker, pos.atBE ? 'LOT_STOP' : '1H_HIGH_BREAK', pos.totalShares, exitSlip(pos.stop, 'SHORT'), pos.avgCost, date, hBar.date, pos.cycleNum, pos.peak, 'SHORT', pos.entryDate);
+                if (pos.atBE) totalLotStopExits++; else totalExits1H++;
+                waiting[ticker] = { originalEntry: pos.originalEntry, frozenDaily: pos.frozenDaily, runningLow, runningHigh: hBar.high, cycleNum: pos.cycleNum + 1, direction: 'SHORT' };
+                delete positions[ticker]; return;
+              }
+            }
+          };
+
+          const checkLots = () => {
+            if (!positions[ticker]) return;
+            if (pos.nextLot <= 4) {
+              const offset = LOT_OFFSETS[pos.nextLot];
+              const lotTrigger = isLong ? +(pos.originalEntry * (1 + offset)).toFixed(2) : +(pos.originalEntry * (1 - offset)).toFixed(2);
+              const triggered = isLong ? hBar.high >= lotTrigger : hBar.low <= lotTrigger;
+              if (triggered) {
+                let lotShares = pos.lotPlan[pos.nextLot];
+                const fillPrice = isLong ? entrySlip(lotTrigger, 'LONG') : entrySlip(lotTrigger, 'SHORT');
+                // V7.5: 10% NAV notional cap, re-checked on EVERY add. Trim this (top) lot so
+                // the position never exceeds 10% of NAV (mark-to-market at the lot price); if
+                // there's no room, take none. Trimming the top lot holds the average cost lower.
+                const roomShares = Math.floor((nav() * TICKER_CAP_PCT - pos.totalShares * fillPrice) / fillPrice);
+                if (roomShares < lotShares) lotShares = roomShares;
+                if (lotShares >= 1) {
+                  const c = comm(lotShares, fillPrice); totalComm += c;
+                  const lotCost = lotShares * fillPrice + c;
+                  if (cash >= lotCost) {
+                    const oldCost = pos.avgCost * pos.totalShares;
+                    cash -= lotCost;
+                    pos.totalShares += lotShares;
+                    pos.avgCost = +((oldCost + fillPrice * lotShares) / pos.totalShares).toFixed(4);
+                    pos.nextLot++; totalLotFills++;
+                    // V7.5: pyramiding NEVER touches the protective stop — the 2-bar trail is the
+                    // sole stop manager (matches the live engine; the old lot-based stop bump is gone).
+                  }
+                }
+              }
+            }
+          };
+
+          if (pessimistic) { checkStop(); checkLots(); } else { checkLots(); checkStop(); }
+
+          if (!positions[ticker]) { continue; }
+
+          const unr = isLong ? (hBar.high - pos.avgCost) * pos.totalShares : (pos.avgCost - hBar.low) * pos.totalShares;
+          if (unr > (pos.peak || 0)) pos.peak = +unr.toFixed(2);
+          if (useBE75 && !pos.atBE && unr >= BE_THRESHOLD) {
+            pos.atBE = true; pos.trailingActive = false; pos.beDate = date;
+            const feePer = comm(pos.totalShares, pos.avgCost) / pos.totalShares;
+            pos.stop = isLong ? +(pos.avgCost + feePer).toFixed(2) : +(pos.avgCost - feePer).toFixed(2);
+            totalBEStopUps++;
+          }
+          if (pos.atBE && !pos.trailingActive && pos.beDate && pos.beDate !== date) pos.trailingActive = true;
+          if (pos.atBE && !pos.beDate) pos.beDate = date;
+
+          pos._prevPrevLow = pos._prevLow; pos._prevLow = hBar.low;
+          pos._prevPrevHigh = pos._prevHigh; pos._prevHigh = hBar.high;
+
+          // ── 2-BAR TRAIL (single ratcheting stop) ─────────────────────────────
+          // Scott's model: one stop in the market = the most conservative of the
+          // disaster/lot stop and the lowest low of the last 2 completed bars,
+          // moving UP only. In live, this is the value pushed to IBKR via MODIFY_STOP
+          // (cancel + replace the prior stop). No lower-low-pattern condition — the
+          // resting stop simply fires whenever price touches the trailed level.
+          if (twoBarTrail && pos.atBE && pos._prevLow != null && pos._prevPrevLow != null) {
+            if (isLong) {
+              const trail = +(Math.min(pos._prevLow, pos._prevPrevLow) - 0.01).toFixed(2);
+              if (trail > pos.stop) pos.stop = trail;
+            } else {
+              const trail = +(Math.max(pos._prevHigh, pos._prevPrevHigh) + 0.01).toFixed(2);
+              if (trail < pos.stop) pos.stop = trail;
+            }
+          }
+        }
+      }
+
+      // ═══ PHASE B: Re-entries — 1-bar break, same bar, entry-bar-low stop (V7.5) ═══
+      // A re-entry mirrors a new entry's executable break, but: (a) gated by the FROZEN daily
+      // breakout level (only re-enter while price holds above it long / below it short), (b) any
+      // bar color (no green confirmation), and (c) the initial stop is the ENTRY BAR's low (tight),
+      // not the first-hour low. The 2-bar trail then takes over as bars build.
+      for (const [ticker, w] of Object.entries(waiting)) {
+        if (positions[ticker]) { delete waiting[ticker]; continue; }
+        const hBars = dayHourly[ticker]; if (!hBars || hBars.length < 2) continue;
+        const isLong = w.direction === 'LONG';
+        if (isLong && !isActiveBL(ticker, date)) { delete waiting[ticker]; continue; }
+        if (!isLong && !isActiveSS(ticker, date)) { delete waiting[ticker]; continue; }
+        const regime = getRegime(ticker, date);
+        if (isLong && !regime && gateMode !== 'none') continue;
+        if (!isLong && regime && gateMode === 'regime') continue;
+        if (!sectorAllowsDirection(ticker, date, w.direction)) continue;   // V7.5 directional sector
+        if (openCount() >= maxPositions) { skippedMaxPos++; continue; }
+        const seq = hBars.slice().sort((a, b) => a.date.localeCompare(b.date));
+        for (let i = 1; i < seq.length; i++) {
+          const bar = seq[i], prevBar = seq[i - 1];
+          if (extractTime(bar.date) < FIRST_HOUR_END) continue;            // only after 10:30
+          const level = isLong ? +(prevBar.high + 0.01).toFixed(2) : +(prevBar.low - 0.01).toFixed(2);
+          const broke = isLong ? bar.high >= level : bar.low <= level;     // 1-bar break, any color
+          if (!broke) continue;
+          // FROZEN daily gate: don't re-enter while the break is below (long) / above (short) the
+          // ORIGINAL daily breakout level that first qualified this cycle. Keep scanning later bars.
+          if (w.frozenDaily != null && (isLong ? level < w.frozenDaily : level > w.frozenDaily)) continue;
+          const rePrice = isLong ? entrySlip(Math.max(level, bar.open), 'LONG') : entrySlip(Math.min(level, bar.open), 'SHORT');
+          const reStop = isLong ? +(bar.low - 0.01).toFixed(2) : +(bar.high + 0.01).toFixed(2);  // entry-bar low/high
+          if (isLong ? reStop >= rePrice : reStop <= rePrice) continue;
+          const rps = isLong ? rePrice - reStop : reStop - rePrice;
+          if (rps <= 0.01) continue;
+          const n = nav();
+          let totalShares = Math.min(Math.floor(MAX_LOSS / rps), Math.floor((n * VITALITY_PCT) / rps), Math.floor((n * TICKER_CAP_PCT) / rePrice));
+          totalShares = Math.max(1, Math.floor(totalShares * sizeMult));
+          if (totalShares < 1) continue;
+          const l1 = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
+          const lotPlan = STRIKE_PCT.map(p => Math.max(1, Math.round(totalShares * p)));
+          const c = comm(l1, rePrice); totalComm += c;
+          if (cash < l1 * rePrice + c) { skippedNoCash++; break; }
+          cash -= l1 * rePrice + c;
+          positions[ticker] = {
+            ticker, entryPrice: rePrice, avgCost: rePrice, entryDate: date,
+            originalEntry: w.originalEntry || rePrice, totalShares: l1, lotPlan,
+            stop: reStop, atBE: twoBarGoverns, trailingActive: false, peak: 0, nextLot: 1,
+            cycleNum: w.cycleNum, direction: w.direction, frozenDaily: w.frozenDaily,
+          };
+          totalReentries++;
+          if (isLong) totalLongEntries++; else totalShortEntries++;
+          if ((w.cycleNum || 0) > 1) totalCycleRepeats++;
+          delete waiting[ticker];
+          // ── EXECUTABLE same-day management (V7.5): test the tight entry-bar stop + trail + lots
+          //    against the REST of today's bars. Without this the tight re-entry stop is never
+          //    tested on the entry day and whippy re-entries are massively over-counted.
+          {
+            const P = positions[ticker];
+            let pl = bar.low, ppl = null, ph = bar.high, pph = null;   // entry bar seeds the 2-bar trail
+            for (let j = i + 1; j < seq.length; j++) {
+              const fb = seq[j];
+              if (P.nextLot <= 4) {                                    // lot adds (with 10% trim)
+                const off = LOT_OFFSETS[P.nextLot];
+                const lt = isLong ? +(P.originalEntry * (1 + off)).toFixed(2) : +(P.originalEntry * (1 - off)).toFixed(2);
+                if (isLong ? fb.high >= lt : fb.low <= lt) {
+                  let ls = P.lotPlan[P.nextLot];
+                  const fp = isLong ? entrySlip(lt, 'LONG') : entrySlip(lt, 'SHORT');
+                  const room = Math.floor((nav() * TICKER_CAP_PCT - P.totalShares * fp) / fp);
+                  if (room < ls) ls = room;
+                  if (ls >= 1) {
+                    const cc = comm(ls, fp); const cost = ls * fp + cc;
+                    if (cash >= cost) { totalComm += cc; const oc = P.avgCost * P.totalShares; cash -= cost; P.totalShares += ls; P.avgCost = +((oc + fp * ls) / P.totalShares).toFixed(4); P.nextLot++; totalLotFills++; }
+                  }
+                }
+              }
+              if (isLong ? fb.low <= P.stop : fb.high >= P.stop) {     // hard stop hit same-day
+                doExit(ticker, 'LOT_STOP', P.totalShares, exitSlip(P.stop, P.direction), P.avgCost, date, fb.date, P.cycleNum, P.peak, P.direction, P.entryDate);
+                totalLotStopExits++;
+                waiting[ticker] = { originalEntry: P.originalEntry, frozenDaily: P.frozenDaily, runningLow: fb.low, runningHigh: fb.high, cycleNum: P.cycleNum + 1, direction: P.direction };
+                delete positions[ticker];
+                break;
+              }
+              const unr = isLong ? (fb.high - P.avgCost) * P.totalShares : (P.avgCost - fb.low) * P.totalShares;
+              if (unr > (P.peak || 0)) P.peak = +unr.toFixed(2);
+              ppl = pl; pl = fb.low; pph = ph; ph = fb.high;           // advance the 2-bar trail (one-way)
+              if (twoBarTrail && ppl != null) {
+                if (isLong) { const tr = +(Math.min(pl, ppl) - 0.01).toFixed(2); if (tr > P.stop) P.stop = tr; }
+                else { const tr = +(Math.max(ph, pph) + 0.01).toFixed(2); if (tr < P.stop) P.stop = tr; }
+              }
+              P._prevPrevLow = ppl; P._prevLow = pl; P._prevPrevHigh = pph; P._prevHigh = ph;
+            }
+          }
+          break;
+        }
+      }
+
+      // ═══ PHASE C: New MCE entries (always use 1H stop) ═══
+      if (dayIdx >= 2) {
+        const p1 = hourlyTradingDates[dayIdx - 1], p2 = hourlyTradingDates[dayIdx - 2];
+        const candidates = [];
+        for (const ticker of Object.keys(signalsByTicker)) {
+          if (positions[ticker] || waiting[ticker] || pendingReentry[ticker]) continue;
+          if (!hourlyBarMap[ticker]) continue;
+          const regime = getRegime(ticker, date);
+          const bar = dailyBarMap[ticker]?.[date], prev1 = dailyBarMap[ticker]?.[p1], prev2 = dailyBarMap[ticker]?.[p2];
+          if (!bar || !prev1 || !prev2) continue;
+          const hBars = dayHourly[ticker]; if (!hBars || hBars.length < 2) continue;
+          const afterFirst = hBars.filter(b => extractTime(b.date) >= FIRST_HOUR_END);
+          // gateMode: 'regime' = longs in bull only / shorts in bear only (LOCKED)
+          //           'none'   = take BL+1 longs AND SS+1 shorts in ANY regime
+          //           'shorts-ungated' = longs still need bull; shorts allowed any regime
+          const tryLong  = gateMode === 'none' ? true : regime;
+          const tryShort = (gateMode === 'none' || gateMode === 'shorts-ungated') ? true : !regime;
+
+          if (tryLong) (() => {
+            if (!isActiveBL(ticker, date)) return;
+            if (!sectorAllowsDirection(ticker, date, 'LONG')) return;   // V7.5: long only in a BULL sector
+            const dailyTrigger = Math.max(prev1.high, prev2.high) + 0.01;
+            const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
+            const firstHourLow = firstHourBars.length ? Math.min(...firstHourBars.map(b => b.low)) : null;
+            if (!firstHourLow) { skippedNo1HLow++; return; }
+            let ep = null;
+            if (entryMode === 'realtime') {
+              // EXECUTABLE: resting stop-buy at max(2-day high, prior-N-bar high). Entry only
+              // after 10:30 (1H stop is set). Fill at the level, or the bar open if it gapped
+              // above by the time we can act. No look-ahead — only prior bars + this bar's high.
+              const seq = hBars.slice().sort((a, b) => a.date.localeCompare(b.date));
+              for (let i = 0; i < seq.length; i++) {
+                const b = seq[i];
+                if (extractTime(b.date) < FIRST_HOUR_END) continue;   // entry only after 10:30
+                if (i < lookbackBars) continue;                       // need N prior bars
+                const priorNHigh = Math.max(...seq.slice(i - lookbackBars, i).map(x => x.high));
+                const level = Math.max(dailyTrigger, +(priorNHigh + 0.01).toFixed(2));
+                if (b.high >= level) {                                // stop-buy triggered this bar
+                  if (greenFilter && !(b.close > b.open)) continue;
+                  ep = entrySlip(Math.max(level, b.open), 'LONG');    // fill at level, or open if gapped above
+                  break;
+                }
+              }
+              if (ep == null) return;
+            } else {
+              if (bar.high < dailyTrigger) return;                    // ORIGINAL look-ahead (daily full-day high)
+              let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedGreenBreakout(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
+              if (!ok) return;
+              ep = entrySlip(Math.max(bar.open, dailyTrigger), 'LONG'); // ORIGINAL: fill at 9:30 open / trigger
+            }
+            if (firstHourLow >= ep) { skippedNo1HLow++; return; }
+            const stop = +(firstHourLow - COMMISSION_PER_SHARE).toFixed(2);
+            if (stop >= ep) return;
+            candidates.push({ ticker, ep, stop, rps: ep - stop, direction: 'LONG', frozenDaily: dailyTrigger });
+          })();
+
+          if (tryShort) (() => {
+            if (!isActiveSS(ticker, date)) return;
+            if (!sectorAllowsDirection(ticker, date, 'SHORT')) return;   // V7.5: short only in a BEAR sector
+            const dailyTrigger = Math.min(prev1.low, prev2.low) - 0.01;
+            const firstHourBars = hBars.filter(b => extractTime(b.date) < FIRST_HOUR_END);
+            const firstHourHigh = firstHourBars.length ? Math.max(...firstHourBars.map(b => b.high)) : null;
+            if (!firstHourHigh) { skippedNo1HLow++; return; }
+            let ep = null;
+            if (entryMode === 'realtime') {
+              // EXECUTABLE: resting stop-sell at min(2-day low, prior-N-bar low). Mirror of the long.
+              const seq = hBars.slice().sort((a, b) => a.date.localeCompare(b.date));
+              for (let i = 0; i < seq.length; i++) {
+                const b = seq[i];
+                if (extractTime(b.date) < FIRST_HOUR_END) continue;
+                if (i < lookbackBars) continue;
+                const priorNLow = Math.min(...seq.slice(i - lookbackBars, i).map(x => x.low));
+                const level = Math.min(dailyTrigger, +(priorNLow - 0.01).toFixed(2));
+                if (b.low <= level) {
+                  if (greenFilter && !(b.close < b.open)) continue;
+                  ep = entrySlip(Math.min(level, b.open), 'SHORT');
+                  break;
+                }
+              }
+              if (ep == null) return;
+            } else {
+              if (bar.low > dailyTrigger) return;
+              let ok = false; for (let i = 1; i < afterFirst.length; i++) { if (isConfirmedRedBreakdown(afterFirst[i], afterFirst[i - 1])) { ok = true; break; } }
+              if (!ok) return;
+              ep = entrySlip(Math.min(bar.open, dailyTrigger), 'SHORT');
+            }
+            if (firstHourHigh <= ep) { skippedNo1HLow++; return; }
+            const stop = +(firstHourHigh + COMMISSION_PER_SHARE).toFixed(2);
+            if (stop <= ep) return;
+            candidates.push({ ticker, ep, stop, rps: stop - ep, direction: 'SHORT', frozenDaily: dailyTrigger });
+          })();
+        }
+        candidates.sort((a, b) => b.rps - a.rps);
+        for (const c of candidates) {
+          if (openCount() >= maxPositions) { skippedMaxPos++; continue; }
+          const { ticker, ep, stop, rps, direction, frozenDaily } = c;
+          const n = nav();
+          let totalShares = Math.min(Math.floor(MAX_LOSS / rps), Math.floor((n * VITALITY_PCT) / rps), Math.floor((n * TICKER_CAP_PCT) / ep));
+          // Apply graduated sizing
+          totalShares = Math.max(1, Math.floor(totalShares * sizeMult));
+          if (totalShares < 1) continue;
+          const l1 = Math.max(1, Math.round(totalShares * STRIKE_PCT[0]));
+          const lotPlan = STRIKE_PCT.map(p => Math.max(1, Math.round(totalShares * p)));
+          const cc = comm(l1, ep); totalComm += cc;
+          if (cash < l1 * ep + cc) { skippedNoCash++; continue; }
+          cash -= l1 * ep + cc;
+          positions[ticker] = {
+            ticker, entryPrice: ep, avgCost: ep, entryDate: date, originalEntry: ep,
+            totalShares: l1, lotPlan, stop, atBE: twoBarGoverns, trailingActive: false,
+            peak: 0, nextLot: 1, cycleNum: 0, direction, frozenDaily,
+          };
+          totalEntries++;
+          if (direction === 'LONG') totalLongEntries++; else totalShortEntries++;
+        }
+      }
+
+      // Daily snapshot for the cash-ledger CSV
+      dailyLedger.push({
+        date, positions: openCount(),
+        cash: +cash.toFixed(2), deployed: +deployed().toFixed(2),
+        nav: +nav().toFixed(2), withdrawn: totalWithdrawn,
+      });
+    }
+
+    // Close remaining
+    for (const [ticker, pos] of Object.entries(positions)) {
+      const hBars = hourlyBarMap[ticker]; if (!hBars || !hBars.length) continue;
+      const last = hBars[hBars.length - 1];
+      doExit(ticker, 'OPEN_AT_END', pos.totalShares, exitSlip(last.close, pos.direction), pos.avgCost, last.date.split(' ')[0], last.date, pos.cycleNum, pos.peak, pos.direction, pos.entryDate);
+    }
+
+    // Metrics
+    const wins = exits.filter(e => e.pnl > 0), losses = exits.filter(e => e.pnl < 0);
+    const grossWin = wins.reduce((s, e) => s + e.pnl, 0), grossLoss = losses.reduce((s, e) => s + e.pnl, 0);
+    const pf = grossLoss ? grossWin / Math.abs(grossLoss) : 999;
+    const wr = exits.length ? wins.length / exits.length : 0;
+    const avgWin = wins.length ? grossWin / wins.length : 0;
+    const avgLoss = losses.length ? Math.abs(grossLoss / losses.length) : 1;
+    let equity = NAV_INITIAL, peak = NAV_INITIAL, maxDD = 0, maxDDDollar = 0;
+    for (const e of exits.sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour))) {
+      equity += e.pnl; if (equity > peak) peak = equity;
+      const dd = (peak - equity) / peak; if (dd > maxDD) maxDD = dd;
+      const dd$ = peak - equity; if (dd$ > maxDDDollar) maxDDDollar = dd$;
+    }
+    const dailyReturns = []; let dailyEquity = NAV_INITIAL;
+    let posMonths = 0, totalMonths = 0, monthPnl = 0, currentMonth = '';
+    for (const date of hourlyTradingDates) {
+      const dayPnl = exits.filter(e => e.date === date).reduce((s, e) => s + e.pnl, 0);
+      const prev = dailyEquity; dailyEquity += dayPnl;
+      if (prev > 0) dailyReturns.push(dayPnl / prev);
+      const month = date.slice(0, 7);
+      if (month !== currentMonth) { if (currentMonth) { totalMonths++; if (monthPnl > 0) posMonths++; } currentMonth = month; monthPnl = 0; }
+      monthPnl += dayPnl;
+    }
+    if (currentMonth) { totalMonths++; if (monthPnl > 0) posMonths++; }
+    const avgRet = dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length;
+    const stdDev = Math.sqrt(dailyReturns.reduce((s, r) => s + (r - avgRet) ** 2, 0) / (dailyReturns.length - 1));
+    const downRet = dailyReturns.filter(r => r < 0);
+    const downStd = downRet.length > 1 ? Math.sqrt(downRet.reduce((s, r) => s + r ** 2, 0) / (downRet.length - 1)) : 0.0001;
+    const ann = Math.sqrt(252);
+    const sharpe = (avgRet / stdDev) * ann, sortino = (avgRet / downStd) * ann;
+    const years = (new Date(hourlyTradingDates[hourlyTradingDates.length - 1] + 'T12:00:00') - new Date(hourlyTradingDates[0] + 'T12:00:00')) / (365.25 * 24 * 60 * 60 * 1000);
+    const cagr = (Math.pow(equity / NAV_INITIAL, 1 / years) - 1) * 100;
+
+    return {
+      label, netReturn: ((equity - NAV_INITIAL) / NAV_INITIAL) * 100, cagr, sharpe, sortino,
+      pf, wr: wr * 100, payoff: avgLoss > 0 ? avgWin / avgLoss : 999,
+      maxDD: maxDD * 100, equity,
+      trades: exits.length, totalEntries, totalReentries, totalExits1H,
+      totalTrailingExits, totalBEStopUps, totalLotFills,
+      totalLongEntries, totalShortEntries,
+      maxConcurrentPositions, worstSingleTrade,
+      skippedNoCash, skippedMaxPos, skippedNo1HLow, totalLotStopExits,
+      totalComm, totalBorrow, totalWithdrawn,
+      minCash, daysTappedOut, peakDeployedPct: +(peakDeployedPct * 100).toFixed(1),
+      milestoneHits, tierChanges,
+      worstTrades: exits.slice().sort((a, b) => a.pnl - b.pnl).slice(0, 5),
+      lotStopExits: totalLotStopExits,
+      dailyLedger, closedTrades: exits,
+      positiveMonthsPct: +(totalMonths ? (posMonths / totalMonths) * 100 : 0).toFixed(1),
+      maxDDDollar: +maxDDDollar.toFixed(0),
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PNTHR AMBUSH V7.4 CANONICAL — no regime gate + 2-bar exit governs
+  //  (validated vs V7.3: +54.8% total value, DD 2.17%->1.28%, edge every year)
+  //  Regenerates the live projection baseline + V7.4 CSVs.
+  // ══════════════════════════════════════════════════════════════════════════
+  const V74 = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };  // N=1 entry + single ratcheting 2-bar-low stop
+  // ── CAPACITY SWEEP (analysis only: node pai300HourlyV74.js --sweep) ──────────
+  // Pins working capital at each W, harvests the excess, and reports how much
+  // absolute profit W can throw off. The knee (where Annual$Profit stops rising)
+  // is the ideal working AUM; everything above it just adds idle cash.
+  if (process.argv.includes('--sweep')) {
+    const V74s = { gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1 };
+    const CAPS = SP500
+      ? [1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 200_000_000]
+      : [250_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000, 8_000_000, 12_000_000];
+    const YEARS = (new Date(hourlyTradingDates[hourlyTradingDates.length - 1] + 'T12:00:00') - new Date(hourlyTradingDates[0] + 'T12:00:00')) / (365.25 * 86400000);
+    console.log(`\n[SWEEP] Capacity — working capital pinned at W, harvest excess (period ${YEARS.toFixed(2)}y)\n`);
+    console.log('  W            TotalHarvested    Annual$Profit    Yield%/yr   AvgDeploy%   Trades');
+    console.log('  ' + '-'.repeat(86));
+    for (const W of CAPS) {
+      NAV_INITIAL = W;
+      const r = runSim({ ...V74s, useGraduated: false, withdrawals: false, wdMode: 'cap', wdCap: W, label: `CAP ${W}` });
+      const harvested = r.totalWithdrawn || 0;
+      const annual = harvested / YEARS;
+      const yld = (annual / W) * 100;
+      const led = r.dailyLedger || [];
+      const avgDep = led.length ? (led.reduce((s, d) => s + (d.nav > 0 ? (d.deployed || 0) / d.nav : 0), 0) / led.length) * 100 : 0;
+      const pad = (s, n) => String(s).padStart(n);
+      console.log(`  ${pad('$' + (W / 1e6).toFixed(2) + 'M', 9)}   ${pad('$' + Math.round(harvested).toLocaleString(), 14)}   ${pad('$' + Math.round(annual).toLocaleString(), 13)}   ${pad(yld.toFixed(1) + '%', 8)}   ${pad(avgDep.toFixed(1) + '%', 9)}   ${pad((r.trades || 0).toLocaleString(), 7)}`);
+    }
+    console.log('\n[SWEEP] Done. Knee = highest W where Annual$Profit is still climbing.\n');
+    process.exit(0);
+  }
+
+  // ── TRAIL COMPARE (analysis only: node pai300HourlyV74.js --trailcompare) ────
+  // Head-to-head: current V7.4 exit (engine lower-low-breakdown) vs Scott's single
+  // ratcheting 2-bar-low resting stop. Same entry (N=1), same everything else.
+  if (process.argv.includes('--trailcompare')) {
+    console.log('\n[TRAIL COMPARE] current 2-bar (lower-low-breakdown) vs single ratcheting 2-bar-low stop\n');
+    console.log('  mode         equity          CAGR     maxDD    PF     WR     trades   trailExits  1H-exits');
+    console.log('  ' + '-'.repeat(92));
+    for (const mode of ['2bar', '2bartrail']) {
+      const r = runSim({ gateMode: 'none', exitMode: mode, entryMode: 'realtime', lookbackBars: 1, useGraduated: true, withdrawals: false, label: `V7.4 ${mode}` });
+      const p = (s, n) => String(s).padStart(n);
+      console.log(`  ${mode.padEnd(11)} ${p('$' + Math.round(r.equity).toLocaleString(), 13)}   ${p(r.cagr.toFixed(1) + '%', 7)}  ${p(r.maxDD.toFixed(2) + '%', 7)}  ${p(r.pf.toFixed(2), 5)}  ${p(r.wr.toFixed(0) + '%', 5)}  ${p(r.trades.toLocaleString(), 7)}  ${p((r.totalTrailingExits || 0).toLocaleString(), 9)}  ${p((r.totalExits1H || 0).toLocaleString(), 8)}`);
+    }
+    console.log('');
+    process.exit(0);
+  }
+
+  // ── STOCK + SECTOR RANK (analysis: node pai300HourlyV74.js [--sp500] --stockrank) ──
+  // Uncapped run (NAV huge so cash never constrains) → every signal taken at equal risk,
+  // so each ticker's / sector's true edge under the strategy is isolated. Ranks best→worst,
+  // quantifies the drag from net-negative names, writes a full CSV "winners list".
+  if (process.argv.includes('--stockrank')) {
+    const uni = SP500 ? 'S&P 500' : 'AI-300';
+    console.log(`\n[STOCK RANK] ${uni} — per-ticker + per-sector edge, uncapped (every signal taken)\n`);
+    NAV_INITIAL = 1e12;
+    const r = runSim({ gateMode: 'none', exitMode: '2bartrail', entryMode: 'realtime', lookbackBars: 1, useGraduated: false, withdrawals: false, label: 'STOCKRANK' });
+    const byT = {}, byS = {};
+    for (const e of (r.closedTrades || [])) {
+      if (e.pnl == null || e.type === 'OPEN_AT_END') continue;
+      const t = e.ticker, sec = getSectorName(t);
+      if (!byT[t]) byT[t] = { trades: 0, wins: 0, pnl: 0, sec };
+      if (!byS[sec]) byS[sec] = { trades: 0, wins: 0, pnl: 0 };
+      byT[t].trades++; byS[sec].trades++;
+      if (e.pnl > 0) { byT[t].wins++; byS[sec].wins++; }
+      byT[t].pnl += e.pnl; byS[sec].pnl += e.pnl;
+    }
+    const money = (v) => ('$' + Math.round(v).toLocaleString());
+    console.log('SECTORS (best → worst by total P&L):');
+    console.log('  sector                     trades   winRate     totalP&L        avg/trade');
+    for (const [s, v] of Object.entries(byS).sort((a, b) => b[1].pnl - a[1].pnl)) {
+      console.log(`  ${s.padEnd(24)} ${String(v.trades).padStart(7)}   ${((v.wins / v.trades) * 100).toFixed(0).padStart(5)}%   ${money(v.pnl).padStart(13)}   ${money(v.pnl / v.trades).padStart(9)}`);
+    }
+    const ranked = Object.entries(byT).sort((a, b) => b[1].pnl - a[1].pnl);
+    const row = ([t, v]) => `  ${t.padEnd(7)} ${v.sec.padEnd(22)} ${String(v.trades).padStart(5)}  ${((v.wins / v.trades) * 100).toFixed(0).padStart(4)}%  ${money(v.pnl).padStart(13)}`;
+    console.log('\nTOP 25 STOCKS:'); ranked.slice(0, 25).forEach(x => console.log(row(x)));
+    console.log('\nBOTTOM 25 STOCKS (cut candidates):'); ranked.slice(-25).forEach(x => console.log(row(x)));
+    const total = ranked.reduce((s, [, v]) => s + v.pnl, 0);
+    const losers = ranked.filter(([, v]) => v.pnl < 0);
+    const loserPnl = losers.reduce((s, [, v]) => s + v.pnl, 0);
+    console.log(`\nFILTER INSIGHT: ${ranked.length} stocks traded | ${losers.length} net-negative | cutting them adds back ${money(-loserPnl)} (+${((-loserPnl / total) * 100).toFixed(1)}% of gross P&L)`);
+    const dl = path.join(os.homedir(), 'Downloads');
+    const csv = ['ticker,sector,trades,winRatePct,totalPnl,avgPnlPerTrade', ...ranked.map(([t, v]) => `${t},${v.sec},${v.trades},${((v.wins / v.trades) * 100).toFixed(1)},${Math.round(v.pnl)},${Math.round(v.pnl / v.trades)}`)];
+    try { fs.writeFileSync(path.join(dl, `PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`), csv.join('\n')); console.log(`\nWrote ranking: ~/Downloads/PNTHR_${SP500 ? 'SP500' : 'AI300'}_StockRank.csv`); } catch {}
+    process.exit(0);
+  }
+
+  console.log('\n[3] V7.4 CANONICAL — GRAD BASELINE (projection) + GRAD WITHDRAW (CSVs)\n');
+
+  process.stdout.write('  GRAD BASELINE (pure compounding)...');
+  const base = runSim({ ...V74, useGraduated: true, withdrawals: false, label: 'V7.4 GRAD BASELINE' });
+  // Standardize Sharpe/Sortino to the IR convention (excess-return Sharpe + full-sample
+  // downside-deviation Sortino) computed on the daily NAV curve — same functions the IR
+  // page uses (irLiveService), so the dashboard and the IR always agree on method.
+  {
+    const eq = (base.dailyLedger || []).map(s => +s.nav);
+    const dts = (base.dailyLedger || []).map(s => String(s.date).slice(0, 10));
+    const dret = [];
+    for (let i = 1; i < eq.length; i++) { if (eq[i - 1] > 0) dret.push((eq[i] - eq[i - 1]) / eq[i - 1]); }
+    base.sharpe = computeSharpe(dret, dts);
+    base.sortino = computeSortino(dret);
+  }
+  console.log(` equity $${Math.round(base.equity).toLocaleString()}  CAGR ${base.cagr.toFixed(1)}%  DD ${base.maxDD.toFixed(2)}%  Sharpe ${base.sharpe.toFixed(2)}  Sortino ${base.sortino.toFixed(1)}`);
+
+  process.stdout.write('  GRAD WITHDRAW (live config, $2M -> bank $1M)...');
+  const wd = runSim({ ...V74, useGraduated: true, withdrawals: true, label: 'V7.5 GRAD WITHDRAW' });
+  console.log(` total value $${Math.round(wd.equity + wd.totalWithdrawn).toLocaleString()}  (banked $${(wd.totalWithdrawn/1e6).toFixed(1)}M + working $${Math.round(wd.equity).toLocaleString()})`);
+  {
+    const led = wd.dailyLedger || [];
+    const peakNav = led.length ? Math.max(...led.map(d => +d.nav)) : 0;
+    const peakDep = led.length ? Math.max(...led.map(d => +d.deployed || 0)) : 0;
+    console.log('  ── HEADLINE (capacity-aware, $2M->bank $1M withdrawal rule) ──');
+    console.log(`    Total value $${((wd.equity + wd.totalWithdrawn)/1e6).toFixed(2)}M = banked $${(wd.totalWithdrawn/1e6).toFixed(1)}M + working $${(wd.equity/1e6).toFixed(2)}M`);
+    console.log(`    Per-trade: PF ${wd.pf.toFixed(1)}x   WR ${wd.wr.toFixed(0)}% (${wd.payoff.toFixed(1)}x payoff)   trades ${wd.trades.toLocaleString()}   maxDD ${wd.maxDD.toFixed(2)}%   worst single $${Math.round(wd.worstSingleTrade).toLocaleString()}`);
+    console.log(`    Capacity: peak NAV $${(peakNav/1e6).toFixed(2)}M   peak deployed $${(peakDep/1e6).toFixed(2)}M   (working stays bounded by the withdrawal rule = deployable in these names)`);
+  }
+
+  // ── Projection baseline (GRAD BASELINE = pure compounding) + metric cards ──
+  const startNav = NAV_INITIAL;
+  const factors = (base.dailyLedger || []).map((s, i) => ({ i, date: s.date, factor: +(s.nav / startNav).toFixed(6) }));
+  const btStart = hourlyTradingDates[0], btEnd = hourlyTradingDates[hourlyTradingDates.length - 1];
+  const spyStartC = (spyWeekly.find(w => (w.weekOf || w.date) >= btStart) || spyWeekly[0])?.close || 0;
+  let spyEndC = spyWeekly[spyWeekly.length - 1]?.close || spyStartC;
+  for (let i = spyWeekly.length - 1; i >= 0; i--) { if ((spyWeekly[i].weekOf || spyWeekly[i].date) <= btEnd) { spyEndC = spyWeekly[i].close; break; } }
+  const spyRet = spyStartC ? (spyEndC / spyStartC - 1) : 0;
+  const calmar = base.maxDD > 0 ? +(base.cagr / base.maxDD).toFixed(2) : null;
+  const recovery = base.maxDDDollar > 0 ? +((base.equity - startNav) / base.maxDDDollar).toFixed(1) : null;
+  const metrics = {
+    netReturnPct: +base.netReturn.toFixed(1),
+    cagrPct: +base.cagr.toFixed(1),
+    sharpe: +base.sharpe.toFixed(2),
+    sortino: +base.sortino.toFixed(1),
+    profitFactor: +base.pf.toFixed(1),
+    calmar,
+    recoveryFactor: recovery,
+    positiveMonthsPct: base.positiveMonthsPct,
+    winRatePct: +base.wr.toFixed(0),
+    payoff: +base.payoff.toFixed(1),
+    maxDDPct: +base.maxDD.toFixed(2),
+    totalClosed: base.trades,
+    endingEquity: Math.round(base.equity),
+    alphaDollar: Math.round(base.equity - startNav * (1 + spyRet)),
+    alphaPct: +(base.netReturn - spyRet * 100).toFixed(1),
+    spyReturnPct: +(spyRet * 100).toFixed(1),
+    startNav,
+  };
+  const projOut = {
+    generatedFrom: 'pai300HourlyV74.js GRAD BASELINE (no-gate + 2-bar + REAL-TIME N=1 entry, pure compounding, no withdrawals)',
+    version: '7.4.0',
+    backtestStartNav: startNav,
+    backtestEndNav: Math.round(base.equity),
+    tradingDays: factors.length,
+    metrics,
+    factors,
+  };
+  const projPath = new URL('../data/ambushProjectionBaseline_v75.json', import.meta.url).pathname;
+  fs.writeFileSync(projPath, JSON.stringify(projOut));
+  console.log(`\n  Wrote projection: server/data/ambushProjectionBaseline_v75.json  (${factors.length} days, end factor ${factors[factors.length-1]?.factor})`);
+  console.log('  METRIC CARDS (V7.5):');
+  console.log(`    Net Total Return  +${metrics.netReturnPct.toLocaleString()}%      CAGR +${metrics.cagrPct}%      Sharpe ${metrics.sharpe}      Sortino ${metrics.sortino}`);
+  console.log(`    Profit Factor ${metrics.profitFactor}x   Calmar ${metrics.calmar}   Recovery ${metrics.recoveryFactor}x   Pos Months ${metrics.positiveMonthsPct}%`);
+  console.log(`    Win Rate ${metrics.winRatePct}% (${metrics.payoff}x payoff)   Max DD ${metrics.maxDDPct}%   Trades ${metrics.totalClosed.toLocaleString()}   Ending $${(metrics.endingEquity/1e6).toFixed(2)}M   Alpha +$${(metrics.alphaDollar/1e6).toFixed(2)}M`);
+
+  // ── V7.4 CSVs (GRAD WITHDRAW) ──
+  try {
+    const dl = path.join(os.homedir(), 'Downloads');
+    const tHead = ['ExitDate','Hour','Ticker','Direction','Shares','AvgCost','ExitPrice','ExitType','PnL','EntryDate'];
+    const tRows = (wd.closedTrades || []).map(e => [e.date, e.hour || '', e.ticker, e.direction, e.shares, e.avgCost, e.exitPrice, e.type, e.pnl, e.entryDate].join(','));
+    fs.writeFileSync(path.join(dl, 'PNTHR_Ambush_V7.5_ClosedTrades.csv'), [tHead.join(','), ...tRows].join('\n'));
+    const cHead = ['Date','Positions','Cash','Deployed','NAV','TotalWithdrawn'];
+    const cRows = (wd.dailyLedger || []).map(s => [s.date, s.positions, s.cash, s.deployed, s.nav, s.withdrawn].join(','));
+    fs.writeFileSync(path.join(dl, 'PNTHR_Ambush_V7.5_CashLedger.csv'), [cHead.join(','), ...cRows].join('\n'));
+    console.log(`\n  Exported ~/Downloads: PNTHR_Ambush_V7.5_ClosedTrades.csv (${tRows.length} trades), PNTHR_Ambush_V7.5_CashLedger.csv (${cRows.length} days)`);
+  } catch (e) { console.error('  CSV export failed:', e.message); }
+
+  console.log('\n' + '='.repeat(120));
+  console.log('  V7.4 CANONICAL COMPLETE');
+  console.log('='.repeat(120));
+  process.exit(0);
+}
+main().catch(err => { console.error(err); process.exit(1); });

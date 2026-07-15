@@ -195,7 +195,7 @@ export default function ValuePage() {
       <div className={styles.controls}>
         {!loading && !error && data && (
           <span className={styles.asOf}>
-            Prices {fmtAsOf(data.asOf)} {'·'} OpEMA wk ending {fmtAsOf(data.weekEnding)}
+            {data.live ? 'Live' : `Close ${fmtAsOf(data.asOf)}`} {'·'} developing wk of {fmtAsOf(data.developingWeekOf)}
             {' · '}AI 300 {data.universe?.version || ''} ({data.counts?.candidates ?? 0} candidates of {data.universe?.count ?? 0})
           </span>
         )}
@@ -210,7 +210,7 @@ export default function ValuePage() {
           <strong>Abv (last 5)</strong> = weeks above the line in the last 5 (recency) &nbsp;·&nbsp;
           <span className={styles.deepMark}>◆</span> deep (≥{K.DEEP}% off) &nbsp;·&nbsp;
           <span className={styles.rcMark}>⤴</span> crossed above the line this week &nbsp;·&nbsp;
-          reflects the last <strong>closed</strong> weekly bar (wk ending {fmtAsOf(data.weekEnding)})
+          reflects the <strong>developing</strong> (current) week{data.live ? ', live' : ''}
         </div>
       )}
 

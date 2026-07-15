@@ -5,26 +5,32 @@
 // sector-optimized EMA ("OpEMA") a long time, then stages each by where it sits
 // versus that line so you can watch a real bottom form and turn up:
 //
-//   turned  — reclaimed the line (back above within RECLAIM_W wks, >= LIGHT_BAND% light)
-//   line    — straddling the line (within NEAR_BAND% below, up to just over)
+//   turned  — back above the line by >= LIGHT_BAND%, and it crossed up within the
+//             last RECLAIM_W weeks (recently)
+//   line    — straddling the line (within NEAR_BAND% below, up to just over it)
 //   basing  — still > NEAR_BAND% under the line, building
 //   other   — not a candidate (healthy / not beaten / too young / data-suspect)
 //
-// A name is a CANDIDATE only when beaten >= BEATEN% off its 52-wk high AND below
-// the line >= BASEMIN weeks. Depth (>= DEEP%) is marked as extra conviction.
+// A name is a CANDIDATE only when beaten >= BEATEN% off its 52-wk high AND it has
+// been below the line >= BASEMIN weeks SINCE IT MADE ITS HIGH. Depth (>= DEEP%)
+// is marked as extra conviction.
+//
+// LIVE / developing week: the OpEMA line + current price use the DEVELOPING
+// (current, still-forming) week — its close set to the live FMP price — so this
+// page matches the stock chart rather than lagging a week behind on the last
+// closed bar. Falls back to the stored developing bar, then the last close, if
+// FMP is unavailable.
 //
 // Integrity (Number Integrity Protocol):
-//   • Drawdown is closing-basis off the highest close in the last 252 closed
-//     sessions, from the SAME candle store the engine uses (pnthr_ai_bt_candles).
+//   • Drawdown is closing-basis off the highest close in the last 252 sessions,
+//     from the SAME candle store the engine uses (pnthr_ai_bt_candles), with the
+//     live price folded in as the current point.
 //   • The OpEMA line uses the engine's OWN calculateEMA + SECTOR_EMA_PERIODS +
-//     the effectivePeriod fallback, so "below/above the line" cannot disagree
-//     with the Jungle's BL/SS signals.
+//     the effectivePeriod fallback, so "below/above the line" tracks the chart.
 //   • Data-suspect names are excluded from every candidate box and shown dimmed:
 //       - pending stock split (getSplitExclusions), and
-//       - a best-effort live FMP cross-check — if our stored 52-wk high or our
-//         last close is on a different scale than FMP's split-adjusted quote,
-//         the drawdown is untrustworthy (e.g. an un-resynced reverse split).
-//     If FMP is unavailable the page still renders; only the FMP flag is skipped.
+//       - a live FMP cross-check — if our stored last close or 52-wk high is on a
+//         different scale than FMP's split-adjusted quote, the name is untrusted.
 // ────────────────────────────────────────────────────────────────────────────
 
 import { connectToDatabase } from './database.js';
@@ -40,6 +46,7 @@ export const VALUE_KNOBS = {
   BEATEN:     30,   // min % off the 52-wk high to count as "beaten"
   DEEP:       50,   // % off high that earns the "deep" conviction mark
   RECLAIM_W:  5,    // "recently above" — reclaimed the line within this many weeks = turned up
+  LIGHT_BAND: 0.5,  // min % above the line for a reclaim to count (keeps hair-thin crosses in "at the line")
   NEAR_BAND:  3,    // within this % below the line = "at the line" (about to resolve)
 };
 const WK_HIGH_WINDOW = 252;   // ~52 weeks of trading sessions
@@ -67,7 +74,7 @@ function effectivePeriod(barCount, sectorPeriod) {
   return null;
 }
 
-// ── ET-aware closed-bar cutoffs (mirrors aiObOsService) ─────────────────────
+// ── ET-aware dates ──────────────────────────────────────────────────────────
 function etParts(now = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -84,21 +91,19 @@ function isoAddDays(iso, days) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().split('T')[0];
 }
-function closedBarCutoffs(now = new Date()) {
-  const { dateStr, hour, dow } = etParts(now);
-  const dailyCutoff = hour >= 16 ? dateStr : isoAddDays(dateStr, -1);
-  const thisMonday = isoAddDays(dateStr, -((dow + 6) % 7));
-  const currentWeekClosed = (dow === 6) || (dow === 0) || (dow === 5 && hour >= 16);
-  const weeklyCutoff = currentWeekClosed ? thisMonday : isoAddDays(thisMonday, -7);
-  return { dailyCutoff, weeklyCutoff };
+// last CLOSED daily bar (today only after the 16:00 ET close)
+function dailyCutoffET() {
+  const { dateStr, hour } = etParts();
+  return hour >= 16 ? dateStr : isoAddDays(dateStr, -1);
 }
-// weekOf (Monday) → that week's Friday close date, for display
-function weekOfToFriday(weekOf) {
-  if (!weekOf) return null;
-  return isoAddDays(weekOf, 4);
+// Monday of the current (developing) ET week
+function developingWeekMonday() {
+  const { dateStr, dow } = etParts();
+  return isoAddDays(dateStr, -((dow + 6) % 7));
 }
+function weekOfToFriday(weekOf) { return weekOf ? isoAddDays(weekOf, 4) : null; }
 
-// Pull one collection's bars stripped to { d, c }, sorted ascending, closed only.
+// Pull one collection's bars stripped to { d, c }, sorted ascending, up to cutoff.
 async function loadCloses(db, collection, arrayField, dateField, cutoff) {
   const docs = await db.collection(collection).aggregate([
     { $match: { ticker: { $in: ALL_TICKERS } } },
@@ -114,31 +119,33 @@ async function loadCloses(db, collection, arrayField, dateField, cutoff) {
   return out;
 }
 
-// Best-effort FMP scale cross-check → Set of suspect tickers + reason map.
-async function fmpScaleSuspects(rows) {
-  const suspect = new Map();   // ticker -> reason
-  try {
-    const fmp = {};
-    for (let i = 0; i < ALL_TICKERS.length; i += 200) {
-      const chunk = ALL_TICKERS.slice(i, i + 200);
-      const quotes = await fetchFMP(`/quote/${chunk.join(',')}`).catch(() => null);
-      if (Array.isArray(quotes)) for (const q of quotes) if (q && q.symbol) fmp[q.symbol] = q;
+// Live FMP quotes for the whole universe (2 batched calls). {} if FMP is down.
+async function fetchQuotes() {
+  const map = {};
+  for (let i = 0; i < ALL_TICKERS.length; i += 200) {
+    const chunk = ALL_TICKERS.slice(i, i + 200);
+    const quotes = await fetchFMP(`/quote/${chunk.join(',')}`).catch(() => null);
+    if (Array.isArray(quotes)) for (const q of quotes) if (q && q.symbol) map[q.symbol] = q;
+  }
+  return map;
+}
+
+// FMP scale cross-check → Map(ticker → reason). Compares our STORED last close +
+// 52-wk high against FMP's split-adjusted quote; flags names on a wrong scale.
+function fmpScaleSuspects(rows, quoteMap) {
+  const suspect = new Map();
+  if (!quoteMap || !Object.keys(quoteMap).length) return suspect;   // FMP down — skip flagging
+  for (const r of rows) {
+    const q = quoteMap[r.ticker];
+    if (!q) continue;
+    if (+q.price > 0 && r.dailyClose > 0) {
+      const pr = r.dailyClose / +q.price;
+      if (pr < 0.75 || pr > 1.33) { suspect.set(r.ticker, `price scale ${pr.toFixed(2)}x vs FMP — data-suspect`); continue; }
     }
-    if (!Object.keys(fmp).length) return suspect;   // FMP down — skip flagging
-    for (const r of rows) {
-      const q = fmp[r.ticker];
-      if (!q) continue;
-      if (+q.price > 0) {
-        const pr = r.last / +q.price;
-        if (pr < 0.75 || pr > 1.33) { suspect.set(r.ticker, `price scale ${pr.toFixed(2)}x vs FMP — data-suspect`); continue; }
-      }
-      if (+q.yearHigh > 0 && r.high52 > 0) {
-        const hr = r.high52 / +q.yearHigh;
-        if (hr < 0.70 || hr > 1.40) suspect.set(r.ticker, `52-wk-high scale ${hr.toFixed(2)}x vs FMP — data-suspect`);
-      }
+    if (+q.yearHigh > 0 && r.high52 > 0) {
+      const hr = r.high52 / +q.yearHigh;
+      if (hr < 0.70 || hr > 1.40) suspect.set(r.ticker, `52-wk-high scale ${hr.toFixed(2)}x vs FMP — data-suspect`);
     }
-  } catch (e) {
-    console.warn('[Value] FMP cross-check skipped:', e.message);
   }
   return suspect;
 }
@@ -150,34 +157,40 @@ export async function getAiValue(forceRefresh = false) {
   const db = await connectToDatabase();
   if (!db) return { ok: false, error: 'Mongo connect failed' };
 
-  const { dailyCutoff, weeklyCutoff } = closedBarCutoffs();
+  const dailyCutoff = dailyCutoffET();
+  const devMonday   = developingWeekMonday();
 
-  const [dailyBars, weeklyBars, splitExcl] = await Promise.all([
+  const [dailyBars, weeklyBars, splitExcl, quoteMap] = await Promise.all([
     loadCloses(db, 'pnthr_ai_bt_candles',        'daily',  'date',   dailyCutoff),
-    loadCloses(db, 'pnthr_ai_bt_candles_weekly',  'weekly', 'weekOf', weeklyCutoff),
+    loadCloses(db, 'pnthr_ai_bt_candles_weekly',  'weekly', 'weekOf', devMonday),   // include the developing week
     getSplitExclusions(db).catch(() => new Map()),
+    fetchQuotes().catch(() => ({})),
   ]);
+  const K = VALUE_KNOBS;
+  let dailyAsOf = '';
 
   const rows = [];
-  let dailyAsOf = '', latestWeek = '';
-
   for (const ticker of ALL_TICKERS) {
     const meta = TICKER_META[ticker];
     const dBars = dailyBars[ticker] || [];
     if (dBars.length < WEEK_SESSIONS + 1) continue;      // not enough daily history
 
-    // ── Depth + 1-wk move (daily, closing basis) ──
+    const q = quoteMap[ticker];
+    const live = q && +q.price > 0 ? +q.price : null;
+
+    // ── Depth + 1-wk move — live current price vs daily history ──
     const closes = dBars.map(b => b.c);
     const n = closes.length;
-    const last = closes[n - 1];
+    const dailyClose = closes[n - 1];
     const asOf = dBars[n - 1].d;
     if (asOf > dailyAsOf) dailyAsOf = asOf;
-    const high52 = Math.max(...closes.slice(Math.max(0, n - WK_HIGH_WINDOW)));
-    const peak   = Math.max(...closes);
-    const prevWk = closes[n - 1 - WEEK_SESSIONS];
-    const d52 = Math.round((high52 - last) / high52 * 1000) / 10;
-    const dpk = Math.round((peak   - last) / peak   * 1000) / 10;
-    const wk  = Math.round((last - prevWk) / prevWk * 1000) / 10;
+    const cur = live != null ? live : dailyClose;        // current price (live when available)
+    const high52 = Math.max(cur, ...closes.slice(Math.max(0, n - WK_HIGH_WINDOW)));
+    const peak   = Math.max(cur, ...closes);
+    const prevWk = closes[n - WEEK_SESSIONS];
+    const d52 = Math.round((high52 - cur) / high52 * 1000) / 10;
+    const dpk = Math.round((peak   - cur) / peak   * 1000) / 10;
+    const wk  = Math.round((cur - prevWk) / prevWk * 1000) / 10;
 
     // biggest single-session close move (volatility heads-up)
     let worstGap = 0;
@@ -187,25 +200,28 @@ export async function getAiValue(forceRefresh = false) {
     }
     const volatile = Math.abs(worstGap) >= 0.40;
 
-    // ── OpEMA line (weekly) — engine's calculateEMA + sector period ──
+    // ── OpEMA line (weekly) — developing week's close set to the live price ──
     const wBars = weeklyBars[ticker] || [];
+    const wSeries = wBars.map(b => ({ w: b.d, c: b.c }));
+    if (live != null && wSeries.length) {
+      if (wSeries[wSeries.length - 1].w === devMonday) wSeries[wSeries.length - 1] = { w: devMonday, c: live };
+      else if (wSeries[wSeries.length - 1].w < devMonday) wSeries.push({ w: devMonday, c: live });
+    }
     let opema = null, opemaPeriod = null, light = null, side = null;
     let wksBelow = null, wksAbove = null, aboveRun = null, reclaim = false, weekOf = null;
     const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
-    const eff = effectivePeriod(wBars.length, period);
+    const eff = effectivePeriod(wSeries.length, period);
     if (eff) {
-      const emaBars = wBars.map(b => ({ time: b.d, close: b.c }));
-      const emaData = calculateEMA(emaBars, eff);                     // ENGINE function
+      const emaData = calculateEMA(wSeries.map(b => ({ time: b.w, close: b.c })), eff);   // ENGINE function
       const emaByWeek = Object.fromEntries(emaData.map(e => [e.time, e.value]));
-      const aligned = wBars.filter(b => emaByWeek[b.d] != null)
-        .map(b => ({ w: b.d, c: b.c, e: emaByWeek[b.d], below: b.c < emaByWeek[b.d] }));
+      const aligned = wSeries.filter(b => emaByWeek[b.w] != null)
+        .map(b => ({ w: b.w, c: b.c, e: emaByWeek[b.w], below: b.c < emaByWeek[b.w] }));
       if (aligned.length) {
         const m = aligned.length;
         const lastA = aligned[m - 1];
         opema = Math.round(lastA.e * 100) / 100;
         opemaPeriod = eff;
         weekOf = lastA.w;
-        if (weekOf > latestWeek) latestWeek = weekOf;
         light = Math.round(((lastA.c / lastA.e) - 1) * 1000) / 10;
         side = lastA.below ? 'below' : 'above';
         // wksBelow = weeks the close was below the line, counted FROM WHEN IT MADE ITS HIGH
@@ -219,38 +235,38 @@ export async function getAiValue(forceRefresh = false) {
         let last5 = 0;
         for (let i = Math.max(0, m - 5); i < m; i++) if (!aligned[i].below) last5++;
         wksAbove = last5;
-        // aboveRun = consecutive weeks above the line ending now — drives the "recently
-        // reclaimed" gate (crossed up within the last RECLAIM_W weeks).
+        // aboveRun = consecutive weeks above the line ending now — the "recently reclaimed" gate.
         if (!lastA.below) { aboveRun = 1; for (let i = m - 2; i >= 0; i--) { if (!aligned[i].below) aboveRun++; else break; } }
         else aboveRun = 0;
-        reclaim = (aboveRun === 1);   // crossed above the line on the latest closed week
+        reclaim = (aboveRun === 1);   // crossed above the line this (developing) week
       }
     }
 
     rows.push({
       ticker, name: meta.name, sector: meta.sectorName,
-      d52, dpk, wk, last: Math.round(last * 100) / 100, high52: Math.round(high52 * 100) / 100,
+      d52, dpk, wk, last: Math.round(cur * 100) / 100,
+      dailyClose: Math.round(dailyClose * 100) / 100, high52: Math.round(high52 * 100) / 100,
       opema, opemaPeriod, light, side, wksBelow, wksAbove, aboveRun, reclaim, weekOf,
-      volatile, deep: d52 >= VALUE_KNOBS.DEEP,
+      volatile, deep: d52 >= K.DEEP,
       suspect: false, suspectReason: null,
     });
   }
 
   // ── Data-suspect flagging: pending splits + FMP scale cross-check ──
-  const fmpSusp = await fmpScaleSuspects(rows);
+  const fmpSusp = fmpScaleSuspects(rows, quoteMap);
   for (const r of rows) {
     if (splitExcl.has(r.ticker)) { r.suspect = true; r.suspectReason = splitExcl.get(r.ticker); }
     else if (fmpSusp.has(r.ticker)) { r.suspect = true; r.suspectReason = fmpSusp.get(r.ticker); }
   }
 
   // ── Classify into boxes ──
-  const K = VALUE_KNOBS;
   function classify(r) {
     if (r.suspect || r.opema == null) return null;
     if (!(r.d52 >= K.BEATEN && r.wksBelow >= K.BASEMIN)) return null;   // beaten + long base below the line since its high
     if (r.side === 'above') {
-      // above the line, and it crossed up within the last RECLAIM_W weeks = recently turned up
-      return (r.aboveRun != null && r.aboveRun <= K.RECLAIM_W) ? 'turned' : null;
+      // decisively above (>= LIGHT_BAND) AND crossed up recently (within RECLAIM_W weeks) = turned up
+      if (r.light >= K.LIGHT_BAND) return (r.aboveRun != null && r.aboveRun <= K.RECLAIM_W) ? 'turned' : null;
+      return 'line';                                                    // above but within the buffer = straddling
     }
     if (r.light >= -K.NEAR_BAND) return 'line';                         // still below but within NEAR_BAND
     return 'basing';
@@ -270,7 +286,9 @@ export async function getAiValue(forceRefresh = false) {
     ok: true,
     generatedAt: new Date().toISOString(),
     asOf: dailyAsOf,
-    weekEnding: weekOfToFriday(latestWeek),
+    live: Object.keys(quoteMap).length > 0,
+    developingWeekOf: devMonday,
+    weekEnding: weekOfToFriday(devMonday),
     universe: { version: FUND_META?.version || null, count: ALL_TICKERS.length, withData: rows.length },
     knobs: VALUE_KNOBS,
     counts: {

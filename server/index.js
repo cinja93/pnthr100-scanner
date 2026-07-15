@@ -59,6 +59,7 @@ import { isCarnivoreMode, getCarnivoreEmaPeriod } from './data/strategyMode.js';
 import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { getAiObOs } from './aiObOsService.js';
+import { getAiValue } from './aiValueService.js';
 import { getHalfAndHalf } from './halfAndHalfService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -2489,6 +2490,17 @@ app.get('/api/ai-obos', authenticateJWT, async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-obos:', err);
     res.status(500).json({ ok: false, error: 'Failed to load OB/OS data' });
+  }
+});
+
+// ── Value — AI-300 bottoming screen (drawdown + weeks vs OpEMA line) ─────────
+app.get('/api/ai-value', authenticateJWT, async (req, res) => {
+  try {
+    const data = await getAiValue(req.query.refresh === '1');
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/ai-value:', err);
+    res.status(500).json({ ok: false, error: 'Failed to load Value data' });
   }
 });
 

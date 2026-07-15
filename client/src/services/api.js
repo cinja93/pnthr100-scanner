@@ -1422,6 +1422,14 @@ export async function fetchAiObOs(forceRefresh = false) {
   return res.json();
 }
 
+// PNTHR Value — AI-300 bottoming screen (drawdown + weeks vs OpEMA line).
+export async function fetchAiValue(forceRefresh = false) {
+  const url = `${API_BASE}/api/ai-value${forceRefresh ? '?refresh=1' : ''}`;
+  const res = await apiFetch(url, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // Live PNTHR Tree funnel/positions state (same endpoint the Tree page polls).
 // Used by the OB/OS page to flash tickers that are live Tree 42-wk-high names.
 export async function fetchPnthrTreeState() {

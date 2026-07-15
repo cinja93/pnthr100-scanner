@@ -33,6 +33,7 @@ import CalendarPage from './components/CalendarPage';
 import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import AiObOsPage from './components/AiObOsPage';
+import ValuePage from './components/ValuePage';
 import Ai300IndexPage from './components/Ai300IndexPage';
 import AiMembersPage from './components/AiMembersPage';
 import BondHeatPage from './components/BondHeatPage';
@@ -1763,6 +1764,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
           {renderPage === 'newHighsLows' && <NewHighsLowsPage />}
 
           {renderPage === 'aiObOs' && <AiObOsPage />}
+
+          {/* Value — AI 300 bottoming screen (drawdown + weeks vs OpEMA line) */}
+          {renderPage === 'value' && <ValuePage />}
 
           {/* Half and Half — AI 300 split daily/weekly shorts & longs by price vs EMA */}
           {renderPage === 'half-and-half' && <HalfAndHalfPage />}

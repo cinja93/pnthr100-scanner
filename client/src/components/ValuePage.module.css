@@ -1,0 +1,221 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: #0d0d0d;
+  color: #fff;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 4px 24px 12px;
+  flex-shrink: 0;
+}
+.asOf {
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.02em;
+  margin-right: auto;
+  font-family: monospace;
+}
+.refreshBtn {
+  background: #fcf000;
+  color: #111;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* Grid of boxes (stacked) */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 6px 24px 40px;
+}
+
+/* Box */
+.box {
+  background: #151515;
+  border: 1.5px solid #262626;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.boxTurned { border-color: #4ade80; }
+.boxLine   { border-color: #ffa726; }
+.boxBasing { border-color: #60a5fa; }
+.boxOther  { border-color: #262626; }
+
+.boxHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #262626;
+}
+.boxTurned .boxHead { background: rgba(74, 222, 128, 0.07); }
+.boxLine   .boxHead { background: rgba(255, 167, 38, 0.07); }
+.boxBasing .boxHead { background: rgba(96, 165, 250, 0.07); }
+.boxOther  .boxHead { background: transparent; }
+
+.boxDot {
+  width: 12px; height: 12px; border-radius: 50%;
+  flex: none; margin-top: 3px;
+}
+.dotTurned { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.55); }
+.dotLine   { background: #ffa726; box-shadow: 0 0 8px rgba(255,167,38,0.55); }
+.dotBasing { background: #60a5fa; box-shadow: 0 0 8px rgba(96,165,250,0.55); }
+.dotOther  { background: #666; }
+
+.boxTitleWrap { flex: 1; min-width: 0; }
+.boxTitle { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; }
+.boxTurned .boxTitle { color: #4ade80; }
+.boxLine   .boxTitle { color: #ffa726; }
+.boxBasing .boxTitle { color: #60a5fa; }
+.boxOther  .boxTitle { color: #ccc; }
+.boxDef {
+  font-size: 11.5px;
+  color: #888;
+  line-height: 1.45;
+  margin-top: 3px;
+  max-width: 100ch;
+}
+.boxCount {
+  flex: none;
+  font-family: monospace;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollable body — this is what lets you scroll between stocks within a box */
+.boxBody {
+  max-height: 440px;
+  overflow: auto;
+}
+.empty {
+  padding: 16px;
+  font-size: 12px;
+  color: #555;
+  font-style: italic;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.table th:nth-child(1), .table td:nth-child(1) { width: 22%; }
+.table th:nth-child(2), .table td:nth-child(2) { width: 11%; }
+.table th:nth-child(3), .table td:nth-child(3) { width: 17%; }
+.table th:nth-child(4), .table td:nth-child(4) { width: 9%; }
+.table th:nth-child(5), .table td:nth-child(5) { width: 13%; }
+.table th:nth-child(6), .table td:nth-child(6) { width: 9%; }
+.table th:nth-child(7), .table td:nth-child(7) { width: 9%; }
+.table th:nth-child(8), .table td:nth-child(8) { width: 10%; }
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #151515;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #666;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-bottom: 1px solid #262626;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.thTxt { text-align: left; }
+.thNum { text-align: right; }
+.table thead th:hover { color: #aaa; }
+.table thead th::after { content: '↕'; opacity: 0.25; margin-left: 4px; font-size: 9px; }
+.sortAsc::after  { content: '▲' !important; opacity: 1 !important; color: #fcf000; }
+.sortDesc::after { content: '▼' !important; opacity: 1 !important; color: #fcf000; }
+
+.table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #1c1c1c;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+/* Company */
+.nameCell { }
+.nm { display: block; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; }
+.secsub { display: block; font-size: 10px; color: #777; overflow: hidden; text-overflow: ellipsis; }
+
+/* Ticker */
+.tickerCell { white-space: nowrap; }
+.tickerBtn {
+  background: none; border: none; color: #fcf000;
+  font-weight: 700; font-size: 12.5px; cursor: pointer;
+  padding: 0; letter-spacing: 0.02em; font-family: inherit;
+}
+.tickerBtn:hover { text-decoration: underline; }
+.rcMark   { color: #4ade80; margin-left: 5px; font-weight: 700; cursor: help; }
+.flagMark { color: #ffa726; margin-left: 5px; cursor: help; }
+.volMark  { color: #666; margin-left: 5px; font-size: 8px; vertical-align: 2px; cursor: help; }
+
+/* Off 52-wk high — bar + value */
+.d52Cell { position: relative; text-align: right; }
+.bar {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  height: 20px; border-radius: 0 3px 3px 0; z-index: 0;
+  background: linear-gradient(90deg, rgba(239,83,80,0.15), rgba(239,83,80,0.42));
+}
+.d52Val { position: relative; z-index: 1; font-weight: 700; }
+.deepMark { color: #fcf000; margin-right: 4px; font-size: 10px; }
+
+/* Numeric cells */
+.numCell { text-align: right; white-space: nowrap; }
+.wbCell { font-weight: 700; }
+.lastCell { color: #ccc; }
+.up   { color: #4ade80; font-weight: 700; }
+.down { color: #ef5350; font-weight: 700; }
+.flat { color: #888; }
+.muted { color: #555; }
+
+.flaggedRow td { opacity: 0.45; }
+.flaggedRow .bar { display: none; }
+
+/* Loading / error */
+.loadingState {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; padding: 60px 24px; color: #888;
+}
+.spinner {
+  width: 34px; height: 34px;
+  border: 3px solid #262626; border-top-color: #fcf000;
+  border-radius: 50%; animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.errorState {
+  margin: 24px; padding: 16px;
+  background: #2a1414; border: 1px solid #5c2222;
+  border-radius: 8px; color: #ef9a9a; font-size: 13px;
+}

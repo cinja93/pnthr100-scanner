@@ -13,11 +13,11 @@ import styles from './ValuePage.module.css';
 function buildBoxDefs(K) {
   return [
     { key: 'turned', title: 'Turned up', cls: styles.boxTurned, dot: styles.dotTurned,
-      def: `Beaten ≥${K.BEATEN}% off the high, below the line ≥${K.BASEMIN} wks, and now reclaimed it — back above within ${K.RECLAIM_W} wks with ≥${K.LIGHT_BAND}% light. The actionable list.` },
+      def: `Beaten ≥${K.BEATEN}% off its high, ≥${K.BASEMIN} weeks below the line since that high, and now back above it within the last ${K.RECLAIM_W} weeks. The actionable list.` },
     { key: 'line', title: 'At the line', cls: styles.boxLine, dot: styles.dotLine,
-      def: `Beaten & long-based, now straddling the line — from within ${K.NEAR_BAND}% below to just over it. About to resolve either way.` },
+      def: `Beaten & long-based, still just below the line — within ${K.NEAR_BAND}% of it. About to resolve either way.` },
     { key: 'basing', title: 'Basing', cls: styles.boxBasing, dot: styles.dotBasing,
-      def: `Beaten ≥${K.BEATEN}% off and ≥${K.BASEMIN} wks below the line, still more than ${K.NEAR_BAND}% under it. Building — the deep watch list.` },
+      def: `Beaten ≥${K.BEATEN}% off and ≥${K.BASEMIN} weeks below the line (since its high), still more than ${K.NEAR_BAND}% under it. Building — the deep watch list.` },
     { key: 'other', title: 'All others', cls: styles.boxOther, dot: styles.dotOther,
       def: `Not a bottoming candidate — healthy / long above the line, not beaten ≥${K.BEATEN}%, or too young for an OpEMA. Includes any data-flagged names.` },
   ];
@@ -31,8 +31,8 @@ const COLS = [
   { k: 'd52',    label: 'Off 52-wk high' },
   { k: 'wk',     label: '1-wk' },
   { k: 'light',  label: 'vs OpEMA' },
-  { k: 'wb',     label: 'Wks below' },
-  { k: 'wa',     label: 'Wks above' },
+  { k: 'wb',     label: 'Wks below*' },
+  { k: 'wa',     label: 'Abv (last 5)' },
   { k: 'last',   label: 'Last' },
 ];
 
@@ -41,8 +41,8 @@ function sortValue(r, k, reclaimW) {
     case 'd52':   return r.suspect ? -1 : r.d52;
     case 'wk':    return r.wk ?? 0;
     case 'light': return r.opema == null ? 999 : r.light;
-    case 'wb':    return (r.opema != null && (r.side === 'below' || (r.wksAbove != null && r.wksAbove <= reclaimW))) ? r.wksBelow : -1;
-    case 'wa':    return (r.opema != null && r.side === 'above') ? r.wksAbove : -1;
+    case 'wb':    return r.opema == null ? -1 : r.wksBelow;
+    case 'wa':    return r.opema == null ? -1 : r.wksAbove;
     case 'last':  return r.last ?? 0;
     case 'ticker': return r.ticker;
     case 'name':  return r.name;
@@ -54,8 +54,10 @@ function ValueRow({ r, list, idx, onTickerClick, reclaimW }) {
   const flagged = r.suspect;
   const wcls = r.wk > 0 ? styles.up : (r.wk < 0 ? styles.down : styles.flat);
   const barW = Math.max(0, Math.min(100, r.d52 || 0));
-  const showWb = !flagged && r.opema != null && (r.side === 'below' || (r.wksAbove != null && r.wksAbove <= reclaimW));
-  const showWa = !flagged && r.opema != null && r.side === 'above';
+  // wksBelow = weeks below the line since its high; wksAbove = # of last 5 weeks above.
+  // Both are meaningful whenever the name has an OpEMA line.
+  const showWb = !flagged && r.opema != null;
+  const showWa = !flagged && r.opema != null;
   return (
     <tr className={flagged ? styles.flaggedRow : undefined}>
       <td className={styles.nameCell}>
@@ -201,6 +203,16 @@ export default function ValuePage() {
           {loading ? 'Loading…' : '↻ Refresh'}
         </button>
       </div>
+
+      {!loading && !error && data && (
+        <div className={styles.legend}>
+          <strong>Wks below*</strong> = weeks the close was below the OpEMA line since it made its high &nbsp;·&nbsp;
+          <strong>Abv (last 5)</strong> = weeks above the line in the last 5 (recency) &nbsp;·&nbsp;
+          <span className={styles.deepMark}>◆</span> deep (≥{K.DEEP}% off) &nbsp;·&nbsp;
+          <span className={styles.rcMark}>⤴</span> crossed above the line this week &nbsp;·&nbsp;
+          reflects the last <strong>closed</strong> weekly bar (wk ending {fmtAsOf(data.weekEnding)})
+        </div>
+      )}
 
       {loading && (
         <div className={styles.loadingState}>

@@ -36,6 +36,14 @@
 }
 .refreshBtn:disabled { opacity: 0.5; cursor: default; }
 
+.legend {
+  padding: 0 24px 6px;
+  font-size: 11px;
+  color: #777;
+  line-height: 1.5;
+}
+.legend strong { color: #aaa; font-weight: 700; }
+
 /* Grid of boxes (stacked) */
 .grid {
   display: flex;

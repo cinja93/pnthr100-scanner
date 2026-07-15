@@ -36,11 +36,10 @@ import { getSplitExclusions } from './splitMaintenanceService.js';
 
 // ── Tunable knobs (locked with Scott 2026-07-15; change only on request) ─────
 export const VALUE_KNOBS = {
-  BASEMIN:    13,   // min consecutive weeks below the line to count as a "long base"
+  BASEMIN:    13,   // min weeks below the line SINCE ITS HIGH to count as a "long base"
   BEATEN:     30,   // min % off the 52-wk high to count as "beaten"
   DEEP:       50,   // % off high that earns the "deep" conviction mark
-  RECLAIM_W:  4,    // a reclaim is still "fresh" for this many weeks above the line
-  LIGHT_BAND: 2,    // % above the line for a reclaim to count as decisive (not a toe over)
+  RECLAIM_W:  5,    // "recently above" — reclaimed the line within this many weeks = turned up
   NEAR_BAND:  3,    // within this % below the line = "at the line" (about to resolve)
 };
 const WK_HIGH_WINDOW = 252;   // ~52 weeks of trading sessions
@@ -191,7 +190,7 @@ export async function getAiValue(forceRefresh = false) {
     // ── OpEMA line (weekly) — engine's calculateEMA + sector period ──
     const wBars = weeklyBars[ticker] || [];
     let opema = null, opemaPeriod = null, light = null, side = null;
-    let wksBelow = null, wksAbove = null, reclaim = false, weekOf = null;
+    let wksBelow = null, wksAbove = null, aboveRun = null, reclaim = false, weekOf = null;
     const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
     const eff = effectivePeriod(wBars.length, period);
     if (eff) {
@@ -209,23 +208,29 @@ export async function getAiValue(forceRefresh = false) {
         if (weekOf > latestWeek) latestWeek = weekOf;
         light = Math.round(((lastA.c / lastA.e) - 1) * 1000) / 10;
         side = lastA.below ? 'below' : 'above';
-        let curRun = 1;
-        for (let i = m - 2; i >= 0; i--) { if (aligned[i].below === lastA.below) curRun++; else break; }
-        if (lastA.below) { wksBelow = curRun; wksAbove = 0; }
-        else {
-          wksAbove = curRun;
-          let prior = 0;
-          for (let i = m - 1 - curRun; i >= 0; i--) { if (aligned[i].below) prior++; else break; }
-          wksBelow = prior;
-          reclaim = (wksAbove === 1 && prior >= 1);
-        }
+        // wksBelow = weeks the close was below the line, counted FROM WHEN IT MADE ITS HIGH
+        // (the peak weekly close) — the length of the decline/base since the top.
+        let hiIdx = 0;
+        for (let i = 1; i < m; i++) if (aligned[i].c >= aligned[hiIdx].c) hiIdx = i;
+        let belowCnt = 0;
+        for (let i = hiIdx; i < m; i++) if (aligned[i].below) belowCnt++;
+        wksBelow = belowCnt;
+        // wksAbove = how many of the LAST 5 weekly closes were above the line (recency).
+        let last5 = 0;
+        for (let i = Math.max(0, m - 5); i < m; i++) if (!aligned[i].below) last5++;
+        wksAbove = last5;
+        // aboveRun = consecutive weeks above the line ending now — drives the "recently
+        // reclaimed" gate (crossed up within the last RECLAIM_W weeks).
+        if (!lastA.below) { aboveRun = 1; for (let i = m - 2; i >= 0; i--) { if (!aligned[i].below) aboveRun++; else break; } }
+        else aboveRun = 0;
+        reclaim = (aboveRun === 1);   // crossed above the line on the latest closed week
       }
     }
 
     rows.push({
       ticker, name: meta.name, sector: meta.sectorName,
       d52, dpk, wk, last: Math.round(last * 100) / 100, high52: Math.round(high52 * 100) / 100,
-      opema, opemaPeriod, light, side, wksBelow, wksAbove, reclaim, weekOf,
+      opema, opemaPeriod, light, side, wksBelow, wksAbove, aboveRun, reclaim, weekOf,
       volatile, deep: d52 >= VALUE_KNOBS.DEEP,
       suspect: false, suspectReason: null,
     });
@@ -242,14 +247,12 @@ export async function getAiValue(forceRefresh = false) {
   const K = VALUE_KNOBS;
   function classify(r) {
     if (r.suspect || r.opema == null) return null;
-    if (!(r.d52 >= K.BEATEN && r.wksBelow >= K.BASEMIN)) return null;   // beaten + long base
+    if (!(r.d52 >= K.BEATEN && r.wksBelow >= K.BASEMIN)) return null;   // beaten + long base below the line since its high
     if (r.side === 'above') {
-      if (r.wksAbove > K.RECLAIM_W) return null;                        // turned long ago
-      if (r.light >= K.LIGHT_BAND) return 'turned';
-      if (r.light >= 0) return 'line';                                  // marginal reclaim
-      return null;
+      // above the line, and it crossed up within the last RECLAIM_W weeks = recently turned up
+      return (r.aboveRun != null && r.aboveRun <= K.RECLAIM_W) ? 'turned' : null;
     }
-    if (r.light >= -K.NEAR_BAND) return 'line';                         // pressing from below
+    if (r.light >= -K.NEAR_BAND) return 'line';                         // still below but within NEAR_BAND
     return 'basing';
   }
   for (const r of rows) r.state = classify(r);

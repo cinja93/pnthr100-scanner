@@ -99,6 +99,65 @@ async function saveTodaySnapshot(db, universe, today, tickers) {
   );
 }
 
+// Reconstruct the set of tickers that made a NEW `lookback`-day high on a COMPLETED day `onDate`
+// (YYYY-MM-DD), straight from the daily candle store. SAME rule as the live list, shifted to a
+// past day: high(onDate) >= max(high of the `lookback` bars strictly BEFORE onDate) + 0.01.
+// No look-ahead — the trigger uses only bars before onDate. And because a day's realized high
+// clears the trigger IFF price touched the trigger intraday, this reproduces exactly what the
+// live intraday accumulation (saveTodaySnapshot's union) would have stored for that day.
+function newHighsFromDocs(docs, lookback, onDate) {
+  const out = [];
+  for (const d of docs) {
+    const bars = (d.daily || []).filter(b => +b.high > 0 && +b.low > 0 && b.date <= onDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const last = bars[bars.length - 1];
+    if (!last || last.date !== onDate) continue;                 // no bar ON onDate → not classifiable
+    const prior = bars.slice(0, -1);                             // bars strictly BEFORE onDate
+    if (prior.length < lookback) continue;                       // need a full prior window
+    const trigger = Math.max(...prior.slice(-lookback).map(b => +b.high));
+    if (+last.high >= trigger + 0.01) out.push(d.ticker);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+// One-shot backfill: write the most recent PRIOR trading day's new-high set as the baseline so
+// "new to the list today" works the day this ships, instead of waiting for tomorrow's natural
+// baseline. Idempotent (recomputes the same set) and NON-destructive (never overwrites a snapshot
+// that already exists for that day). Returns a summary for verification.
+export async function seedPriorDayBaseline(db, { dryRun = false } = {}) {
+  const today = etDate();
+  const [base, sp400] = await Promise.all([getAllTickers(), getSp400Tickers()]);
+  const carnivoreTickers = [...new Set([...(base || []), ...(sp400 || [])])];
+  const universes = [
+    { universe: 'carnivore', coll: 'pnthr_bt_candles',    tickers: carnivoreTickers, lookback: CARN_LOOKBACK },
+    { universe: 'ai300',     coll: 'pnthr_ai_bt_candles', tickers: AI_TICKERS,       lookback: AI_LOOKBACK  },
+  ];
+  const summary = [];
+  for (const u of universes) {
+    const docs = await db.collection(u.coll)
+      .find({ ticker: { $in: u.tickers } }, { projection: { ticker: 1, daily: 1 } }).toArray();
+    // Prior completed trading day = the latest bar date < today anywhere in this universe (the
+    // liquid names always carry the last session's bar, so the global max is the market's day).
+    let priorDay = '';
+    for (const d of docs) for (const b of (d.daily || [])) {
+      if (+b.high > 0 && b.date < today && b.date > priorDay) priorDay = b.date;
+    }
+    if (!priorDay) { summary.push({ universe: u.universe, priorDay: null, count: 0, wrote: false, note: 'no prior bars' }); continue; }
+    const tickers = newHighsFromDocs(docs, u.lookback, priorDay);
+    const existing = await db.collection(SNAP_COLL).findOne({ date: priorDay, universe: u.universe });
+    if (existing) { summary.push({ universe: u.universe, priorDay, count: existing.tickers?.length || 0, wrote: false, note: 'snapshot already existed — left as is' }); continue; }
+    if (!dryRun) {
+      await db.collection(SNAP_COLL).updateOne(
+        { date: priorDay, universe: u.universe },
+        { $set: { tickers, seededAt: new Date(), updatedAt: new Date() } },
+        { upsert: true },
+      );
+    }
+    summary.push({ universe: u.universe, priorDay, count: tickers.length, wrote: !dryRun, sample: tickers.slice(0, 10), tickers });
+  }
+  return { today, summary };
+}
+
 // navOverride — when provided (e.g. a member's $50k account size), size the buy
 // suggestions to THAT account instead of the house NAV, so each viewer sees their
 // own share counts and risk. Admins pass nothing → the house NAV.

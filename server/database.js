@@ -56,6 +56,12 @@ export async function connectToDatabase() {
     // index above can't serve — add a matching index (2026-07-06 audit).
     await db.collection('pnthr_portfolio').createIndex({ ownerId: 1, status: 1, fundId: 1 });
 
+    // New Highs daily snapshot: one doc per (ET trading day, universe). Unique per day+universe
+    // for a safe upsert; the (universe, date desc) index serves the "latest prior day" lookup
+    // used to flag badges NEW to the list today. Tiny collection (~2 docs/day).
+    await db.collection('pnthr_new_highs_daily').createIndex({ date: 1, universe: 1 }, { unique: true });
+    await db.collection('pnthr_new_highs_daily').createIndex({ universe: 1, date: -1 });
+
     // TTL indexes on PURELY OPERATIONAL, high-volume, re-derivable debug logs that otherwise
     // grow forever and are the OOM risk on the single Render instance (2026-07-06 audit).
     // DELIBERATELY EXCLUDED — compliance/audit/order records a regulated fund must retain:

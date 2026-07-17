@@ -14,6 +14,20 @@ import NEW_HIGHS_CARDS from '../data/newHighsCards.json';
 
 const GREEN = { bg: 'rgba(34,197,94,0.14)', border: 'rgba(34,197,94,0.55)', text: '#86efac' };
 
+// Gentle green glow that pulses all day on badges NEW to the list today. `isNew` comes from the
+// server (on the list now, absent on the prior trading day), so the pulse auto-clears tomorrow
+// with no client-side date logic. Reduced-motion users get a steady glow instead of a pulse.
+const FLASH_CSS = `
+@keyframes pnthrNewHighPulse {
+  0%, 100% { box-shadow: 0 0 4px 0 rgba(34,197,94,0.25); }
+  50%      { box-shadow: 0 0 12px 2px rgba(34,197,94,0.65); }
+}
+.pnthr-new-high { animation: pnthrNewHighPulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pnthr-new-high { animation: none; box-shadow: 0 0 9px 1px rgba(34,197,94,0.5); }
+}
+`;
+
 // Backtest metrics for buying each new-high signal (hypothetical, survivorship-flattered — see desc).
 const CARN_METRICS = {
   dates: '2019-02-01 → 2026-06-11',
@@ -50,7 +64,8 @@ function Badge({ item, tone, onClick }) {
   return (
     <span
       onClick={onClick}
-      title={`${item.ticker} — $${(+item.price).toFixed(2)} (${item.changePct >= 0 ? '+' : ''}${(+item.changePct).toFixed(1)}%)${buyStop} · click to chart`}
+      className={item.isNew ? 'pnthr-new-high' : undefined}
+      title={`${item.ticker} — $${(+item.price).toFixed(2)} (${item.changePct >= 0 ? '+' : ''}${(+item.changePct).toFixed(1)}%)${buyStop}${item.isNew ? ' · NEW to the list today' : ''} · click to chart`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
         background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text,
@@ -137,6 +152,7 @@ export default function NewHighsLowsPage() {
 
   return (
     <div style={{ padding: '0 4px' }}>
+      <style>{FLASH_CSS}</style>
       <PageHeader
         title="New Highs"
         description="Stocks making a NEW intraday high today. Carnivore (679) at a 4-week high on the left, AI 300 at a 42-week high on the right — the lookbacks that backtested best for each. Click any badge to chart it."

@@ -17,6 +17,11 @@ const CARN_LOOKBACK = 20;    // 4-week high
 const AI_LOOKBACK = 210;     // 42-week high (= pnthrTreeEngine ENTRY_HIGH_LOOKBACK)
 const STOP_LOOKBACK = 10;    // 2-week (10 trading day) trailing-stop reference (matches the Tree)
 
+// One doc per (ET trading day, universe) holding that day's set of new-high tickers.
+// Used only to flag which badges are NEW to the list today vs the prior trading day so
+// the client can flash them for the day. Index lives in database.js connectToDatabase().
+const SNAP_COLL = 'pnthr_new_highs_daily';
+
 const AI_TICKERS = (() => {
   const out = [];
   for (const s of AI_SECTORS) for (const h of s.holdings) out.push(h.ticker);
@@ -67,23 +72,69 @@ function classifyHighs(tickers, quoteMap, bands, nav) {
   return highs;
 }
 
+// The most recent PRIOR trading day's set of new-high tickers for a universe (date < today).
+// exists=false when there is no earlier snapshot at all → the caller then flags NOTHING as
+// new, so we never claim "new today" without a real baseline (e.g. the first day after deploy).
+// Using "latest snapshot before today" (not literally yesterday) means weekends/holidays and
+// any day the page went unviewed are skipped over to the last day that actually had a list.
+async function priorDaySet(db, universe, today) {
+  const docs = await db.collection(SNAP_COLL)
+    .find({ universe, date: { $lt: today } }, { projection: { tickers: 1 } })
+    .sort({ date: -1 }).limit(1).toArray();
+  const doc = docs[0];
+  return { exists: !!doc, set: new Set(doc?.tickers || []) };
+}
+
+// Union today's tickers into today's snapshot (idempotent, concurrency-safe via $addToSet so
+// simultaneous viewers can't clobber each other). Accumulating across the day means a name that
+// appears at 10am and fades by noon still counts as "was on the list today" for tomorrow. We
+// SKIP empty lists so a market-closed day never writes an empty baseline that would flash the
+// whole board on the next trading day.
+async function saveTodaySnapshot(db, universe, today, tickers) {
+  if (!tickers.length) return;
+  await db.collection(SNAP_COLL).updateOne(
+    { date: today, universe },
+    { $addToSet: { tickers: { $each: tickers } }, $set: { updatedAt: new Date() } },
+    { upsert: true },
+  );
+}
+
 // navOverride — when provided (e.g. a member's $50k account size), size the buy
 // suggestions to THAT account instead of the house NAV, so each viewer sees their
 // own share counts and risk. Admins pass nothing → the house NAV.
 export async function getNewHighsLows(navOverride) {
   const db = await connectToDatabase();
+  const today = etDate();
   const [base, sp400] = await Promise.all([getAllTickers(), getSp400Tickers()]);
   const carnivoreTickers = [...new Set([...(base || []), ...(sp400 || [])])];
   const all = [...new Set([...carnivoreTickers, ...AI_TICKERS])];
-  const [quoteMap, carnBands, aiBands, nav] = await Promise.all([
+  const [quoteMap, carnBands, aiBands, nav, carnPrior, aiPrior] = await Promise.all([
     fetchQuotesChunked(all),
     priorBands(db, 'pnthr_bt_candles', carnivoreTickers, CARN_LOOKBACK),
     priorBands(db, 'pnthr_ai_bt_candles', AI_TICKERS, AI_LOOKBACK),
     navOverride != null ? Promise.resolve(navOverride) : getNav(db),
+    priorDaySet(db, 'carnivore', today),
+    priorDaySet(db, 'ai300', today),
   ]);
+
+  const carnHighs = classifyHighs(carnivoreTickers, quoteMap, carnBands, nav);
+  const aiHighs = classifyHighs(AI_TICKERS, quoteMap, aiBands, nav);
+
+  // Flag names NEW to the list today = on the list now but NOT on the prior trading day's list.
+  // No baseline yet → nothing is flagged new (see priorDaySet).
+  for (const h of carnHighs) h.isNew = carnPrior.exists && !carnPrior.set.has(h.ticker);
+  for (const h of aiHighs) h.isNew = aiPrior.exists && !aiPrior.set.has(h.ticker);
+
+  // Record today's set (union) so it becomes tomorrow's baseline. Persistence must never break
+  // the live read, so failures here are swallowed — the page still renders, just without flags.
+  await Promise.all([
+    saveTodaySnapshot(db, 'carnivore', today, carnHighs.map(h => h.ticker)),
+    saveTodaySnapshot(db, 'ai300', today, aiHighs.map(h => h.ticker)),
+  ]).catch(() => {});
+
   return {
-    carnivore: { highs: classifyHighs(carnivoreTickers, quoteMap, carnBands, nav), lookbackWeeks: 4 },
-    ai300: { highs: classifyHighs(AI_TICKERS, quoteMap, aiBands, nav), lookbackWeeks: 42 },
+    carnivore: { highs: carnHighs, lookbackWeeks: 4 },
+    ai300: { highs: aiHighs, lookbackWeeks: 42 },
     nav,
     updatedAt: new Date().toISOString(),
   };

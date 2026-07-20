@@ -15,6 +15,7 @@ const COLS = [
   { k: 'name',      label: 'Company',  txt: true },
   { k: 'sector',    label: 'Sector',   txt: true },
   { k: 'signal',    label: 'Signal',   txt: true },
+  { k: 'opema',     label: 'OpEMA' },
   { k: 'price',     label: 'Last' },
   { k: 'change',    label: 'Chg $' },
   { k: 'changePct', label: 'Chg %' },
@@ -28,6 +29,8 @@ function sortValue(r, k) {
     case 'name':      return r.name || '';
     case 'sector':    return r.sector || '';
     case 'signal':    return r.signalLabel || '';
+    // Names too young for a line sort to the bottom either way.
+    case 'opema':     return r.opemaPct ?? -Infinity;
     case 'price':     return r.price ?? 0;
     case 'change':    return r.change ?? 0;
     case 'changePct': return r.changePct ?? 0;
@@ -64,6 +67,19 @@ function RankRow({ r, list, idx, onTickerClick, maxAbs }) {
         {sig ? <span className={`${styles.sigChip} ${sigCls}`}>{sig}</span>
              : <span className={styles.muted}>{'—'}</span>}
       </td>
+      <td className={styles.opemaCell}>
+        {r.opemaSide == null ? (
+          <span className={styles.muted} title="Not enough weekly history for an OpEMA line yet">{'—'}</span>
+        ) : (
+          <span
+            className={r.opemaSide === 'above' ? styles.up : styles.down}
+            title={`${r.opemaSide === 'above' ? 'Above' : 'Below'} its ${r.opemaPeriod}-week OpEMA line ($${r.opema})`}
+          >
+            {r.opemaSide === 'above' ? '▲' : '▼'}
+            <span className={styles.opemaPct}>{(r.opemaPct > 0 ? '+' : '') + r.opemaPct.toFixed(1)}%</span>
+          </span>
+        )}
+      </td>
       <td className={styles.numCell}>${(r.price ?? 0).toFixed(2)}</td>
       <td className={`${styles.numCell} ${dir}`}>{fmtChg(r.change)}</td>
       <td className={styles.pctCell}>
@@ -83,8 +99,11 @@ export default function DailyRankPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [chart, setChart]     = useState(null);      // { tickers, index }
-  const [sortKey, setSortKey] = useState('changePct');
-  const [sortDir, setSortDir] = useState(-1);        // biggest gainers first
+  // Default = the server's ranking: above-OpEMA names first, biggest gainer
+  // first within each block. Clicking any header switches to plain single-column
+  // sorting; the # column always shows where a name sits in this ranking.
+  const [sortKey, setSortKey] = useState('rank');
+  const [sortDir, setSortDir] = useState(1);
   const [query, setQuery]     = useState('');
 
   function load(forceRefresh = false, { silent = false } = {}) {
@@ -151,7 +170,7 @@ export default function DailyRankPage() {
     <div className={styles.page}>
       <PageHeader
         title="Daily Rank"
-        description="Every AI Elite 300 name ranked by today's move against the previous session's close. Biggest gainers at the top, biggest decliners at the bottom. Updates live through the trading day."
+        description="Every AI Elite 300 name ranked on two things: whether it is trading above its OpEMA line, then today's move against the previous session's close. Names above the line come first, biggest gainer at the top, so row one is the strongest move that is also in an uptrend. Click any column to re-sort. Updates live through the trading day."
       />
 
       <div className={styles.controls}>
@@ -184,6 +203,14 @@ export default function DailyRankPage() {
             {' · '}
             <strong className={styles.down}>{c.decliners} down</strong>
             {c.unchanged > 0 && <>{' · '}<span className={styles.muted}>{c.unchanged} flat</span></>}
+            {(c.aboveLine != null) && (
+              <>
+                {'  |  '}
+                <span className={styles.up}>{c.aboveLine} above OpEMA</span>
+                {' · '}
+                <span className={styles.down}>{c.belowLine} below</span>
+              </>
+            )}
             {c.suspect > 0 && (
               <>{' · '}<span className={styles.flagMark} title="Prior close did not reconcile with our own candle store, or a split is pending. Shown dimmed, not ranked on trust.">
                 {'⚠'} {c.suspect} data-flagged

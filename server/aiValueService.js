@@ -35,10 +35,15 @@
 
 import { connectToDatabase } from './database.js';
 import { SECTORS, FUND_META } from './scripts/aiUniverse/aiUniverseData.js';
-import { SECTOR_EMA_PERIODS } from './data/pnthrAiSectorsConfig.js';
-import { calculateEMA } from './signalDetection.js';
 import { fetchFMP } from './stockService.js';
 import { getSplitExclusions } from './splitMaintenanceService.js';
+// The OpEMA line lives in one place (opEma.js) so this page, Daily Rank, and
+// anything added later cannot drift apart. Extraction is proven equivalent to
+// the logic that used to be inline here by opEma.test.mjs.
+import {
+  etParts, isoAddDays, developingWeekMonday,
+  loadWeeklyCloses, buildDevelopingSeries, computeOpEma,
+} from './opEma.js';
 
 // ── Tunable knobs (locked with Scott 2026-07-15; change only on request) ─────
 export const VALUE_KNOBS = {
@@ -67,39 +72,12 @@ for (const sec of SECTORS) {
   }
 }
 
-// Engine's young-name fallback (mirrors aiUniverseSignalsService.effectivePeriod)
-function effectivePeriod(barCount, sectorPeriod) {
-  if (barCount >= sectorPeriod * 3) return sectorPeriod;
-  if (barCount >= 21 + 2)           return 21;
-  return null;
-}
-
 // ── ET-aware dates ──────────────────────────────────────────────────────────
-function etParts(now = new Date()) {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', hour12: false, weekday: 'short',
-  });
-  const p = {};
-  for (const part of fmt.formatToParts(now)) p[part.type] = part.value;
-  const dow = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[p.weekday];
-  return { dateStr: `${p.year}-${p.month}-${p.day}`, hour: parseInt(p.hour, 10) % 24, dow };
-}
-function isoAddDays(iso, days) {
-  const d = new Date(iso + 'T12:00:00Z');
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split('T')[0];
-}
+// etParts / isoAddDays / developingWeekMonday now come from opEma.js.
 // last CLOSED daily bar (today only after the 16:00 ET close)
 function dailyCutoffET() {
   const { dateStr, hour } = etParts();
   return hour >= 16 ? dateStr : isoAddDays(dateStr, -1);
-}
-// Monday of the current (developing) ET week
-function developingWeekMonday() {
-  const { dateStr, dow } = etParts();
-  return isoAddDays(dateStr, -((dow + 6) % 7));
 }
 function weekOfToFriday(weekOf) { return weekOf ? isoAddDays(weekOf, 4) : null; }
 
@@ -161,8 +139,8 @@ export async function getAiValue(forceRefresh = false) {
   const devMonday   = developingWeekMonday();
 
   const [dailyBars, weeklyBars, splitExcl, quoteMap] = await Promise.all([
-    loadCloses(db, 'pnthr_ai_bt_candles',        'daily',  'date',   dailyCutoff),
-    loadCloses(db, 'pnthr_ai_bt_candles_weekly',  'weekly', 'weekOf', devMonday),   // include the developing week
+    loadCloses(db, 'pnthr_ai_bt_candles', 'daily', 'date', dailyCutoff),
+    loadWeeklyCloses(db, ALL_TICKERS, devMonday),   // include the developing week
     getSplitExclusions(db).catch(() => new Map()),
     fetchQuotes().catch(() => ({})),
   ]);
@@ -201,45 +179,28 @@ export async function getAiValue(forceRefresh = false) {
     const volatile = Math.abs(worstGap) >= 0.40;
 
     // ── OpEMA line (weekly) — developing week's close set to the live price ──
-    const wBars = weeklyBars[ticker] || [];
-    const wSeries = wBars.map(b => ({ w: b.d, c: b.c }));
-    if (live != null && wSeries.length) {
-      if (wSeries[wSeries.length - 1].w === devMonday) wSeries[wSeries.length - 1] = { w: devMonday, c: live };
-      else if (wSeries[wSeries.length - 1].w < devMonday) wSeries.push({ w: devMonday, c: live });
-    }
-    let opema = null, opemaPeriod = null, light = null, side = null;
-    let wksBelow = null, wksAbove = null, aboveRun = null, reclaim = false, weekOf = null;
-    const period = SECTOR_EMA_PERIODS[meta.sectorId] || 30;
-    const eff = effectivePeriod(wSeries.length, period);
-    if (eff) {
-      const emaData = calculateEMA(wSeries.map(b => ({ time: b.w, close: b.c })), eff);   // ENGINE function
-      const emaByWeek = Object.fromEntries(emaData.map(e => [e.time, e.value]));
-      const aligned = wSeries.filter(b => emaByWeek[b.w] != null)
-        .map(b => ({ w: b.w, c: b.c, e: emaByWeek[b.w], below: b.c < emaByWeek[b.w] }));
-      if (aligned.length) {
-        const m = aligned.length;
-        const lastA = aligned[m - 1];
-        opema = Math.round(lastA.e * 100) / 100;
-        opemaPeriod = eff;
-        weekOf = lastA.w;
-        light = Math.round(((lastA.c / lastA.e) - 1) * 1000) / 10;
-        side = lastA.below ? 'below' : 'above';
-        // wksBelow = weeks the close was below the line, counted FROM WHEN IT MADE ITS HIGH
-        // (the peak weekly close) — the length of the decline/base since the top.
-        let hiIdx = 0;
-        for (let i = 1; i < m; i++) if (aligned[i].c >= aligned[hiIdx].c) hiIdx = i;
-        let belowCnt = 0;
-        for (let i = hiIdx; i < m; i++) if (aligned[i].below) belowCnt++;
-        wksBelow = belowCnt;
-        // wksAbove = how many of the LAST 5 weekly closes were above the line (recency).
-        let last5 = 0;
-        for (let i = Math.max(0, m - 5); i < m; i++) if (!aligned[i].below) last5++;
-        wksAbove = last5;
-        // aboveRun = consecutive weeks above the line ending now — the "recently reclaimed" gate.
-        if (!lastA.below) { aboveRun = 1; for (let i = m - 2; i >= 0; i--) { if (!aligned[i].below) aboveRun++; else break; } }
-        else aboveRun = 0;
-        reclaim = (aboveRun === 1);   // crossed above the line this (developing) week
-      }
+    const wSeries = buildDevelopingSeries(weeklyBars[ticker], devMonday, live);
+    const line = computeOpEma(wSeries, meta.sectorId);
+    const { opema, opemaPeriod, light, side, weekOf, aligned } = line;
+    let wksBelow = null, wksAbove = null, aboveRun = null, reclaim = false;
+    if (aligned.length) {
+      const m = aligned.length;
+      const lastA = aligned[m - 1];
+      // wksBelow = weeks the close was below the line, counted FROM WHEN IT MADE ITS HIGH
+      // (the peak weekly close) — the length of the decline/base since the top.
+      let hiIdx = 0;
+      for (let i = 1; i < m; i++) if (aligned[i].c >= aligned[hiIdx].c) hiIdx = i;
+      let belowCnt = 0;
+      for (let i = hiIdx; i < m; i++) if (aligned[i].below) belowCnt++;
+      wksBelow = belowCnt;
+      // wksAbove = how many of the LAST 5 weekly closes were above the line (recency).
+      let last5 = 0;
+      for (let i = Math.max(0, m - 5); i < m; i++) if (!aligned[i].below) last5++;
+      wksAbove = last5;
+      // aboveRun = consecutive weeks above the line ending now — the "recently reclaimed" gate.
+      if (!lastA.below) { aboveRun = 1; for (let i = m - 2; i >= 0; i--) { if (!aligned[i].below) aboveRun++; else break; } }
+      else aboveRun = 0;
+      reclaim = (aboveRun === 1);   // crossed above the line this (developing) week
     }
 
     rows.push({

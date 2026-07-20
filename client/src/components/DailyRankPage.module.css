@@ -114,16 +114,18 @@
   font-size: 12px;
 }
 
-/* Widths sum to 100% — rewrite this block if the column count changes. */
-.table th:nth-child(1), .table td:nth-child(1) { width: 5%; }
-.table th:nth-child(2), .table td:nth-child(2) { width: 9%; }
-.table th:nth-child(3), .table td:nth-child(3) { width: 22%; }
-.table th:nth-child(4), .table td:nth-child(4) { width: 16%; }
-.table th:nth-child(5), .table td:nth-child(5) { width: 8%; }
-.table th:nth-child(6), .table td:nth-child(6) { width: 10%; }
-.table th:nth-child(7), .table td:nth-child(7) { width: 9%; }
-.table th:nth-child(8), .table td:nth-child(8) { width: 13%; }
-.table th:nth-child(9), .table td:nth-child(9) { width: 8%; }
+/* Widths sum to 100% — rewrite this block if the column count changes.
+   #  Ticker  Company  Sector  Signal  OpEMA  Last  Chg$  Chg%  RelVol */
+.table th:nth-child(1),  .table td:nth-child(1)  { width: 4%; }
+.table th:nth-child(2),  .table td:nth-child(2)  { width: 8%; }
+.table th:nth-child(3),  .table td:nth-child(3)  { width: 19%; }
+.table th:nth-child(4),  .table td:nth-child(4)  { width: 15%; }
+.table th:nth-child(5),  .table td:nth-child(5)  { width: 7%; }
+.table th:nth-child(6),  .table td:nth-child(6)  { width: 9%; }
+.table th:nth-child(7),  .table td:nth-child(7)  { width: 9%; }
+.table th:nth-child(8),  .table td:nth-child(8)  { width: 8%; }
+.table th:nth-child(9),  .table td:nth-child(9)  { width: 13%; }
+.table th:nth-child(10), .table td:nth-child(10) { width: 8%; }
 
 .table thead th {
   position: sticky;
@@ -203,6 +205,21 @@
 .sigSs { background: rgba(239, 83, 80, 0.14);  color: #ef5350; }
 
 .numCell { text-align: right; }
+
+/* Where the name sits vs its OpEMA line: arrow reads at a glance, the distance
+   is there when you look. */
+.opemaCell {
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.opemaPct {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.75;
+}
 
 /* Percent cell: magnitude bar behind the value. */
 .pctCell {

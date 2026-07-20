@@ -1,8 +1,10 @@
 // server/dailyRankService.js
 // ── PNTHR Daily Rank — every AI Elite 300 name ranked by today's move ────────
 //
-// One continuous ranking, biggest gainer at the top down to biggest decliner at
-// the bottom, measured against the PREVIOUS SESSION'S CLOSE. Live through the
+// Every name ranked on TWO keys, measured against the PREVIOUS SESSION'S CLOSE:
+//   1. is the price above its OpEMA line (above-line names rank first), then
+//   2. today's percentage move, biggest gainer first within each block.
+// So row 1 is the biggest mover that is ALSO in an uptrend. Live through the
 // trading day; after the bell it settles into the completed session's move.
 //
 // Why live quotes and not stored candles:
@@ -38,6 +40,9 @@ import { fetchAiQuotesBatch, ymdET } from './aiIntradayOverlay.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
 import { getSplitExclusions } from './splitMaintenanceService.js';
 import { signalLabel } from './moversService.js';
+// Same OpEMA line the Value page and the Jungle's BL/SS use — one definition,
+// so this column can never disagree with the chart.
+import { developingWeekMonday, loadWeeklyCloses, buildDevelopingSeries, computeOpEma } from './opEma.js';
 
 // Live board: keep this at the underlying quote cache's TTL so the page feels
 // live. The client polls every 60s, so a 30s cache means what you see is never
@@ -56,8 +61,23 @@ const STALE_CANDLE_DAYS = 5;
 // Our computed % vs FMP's changesPercentage, in percentage points.
 const PCT_AGREE_TOL = 0.05;
 
+// Weekly bars only change once a week; intraday it is the live price that moves
+// the name relative to the line. Cache that heavy read separately from the 30s
+// quote refresh so the live board stays cheap.
+const WEEKLY_CACHE_MS = 10 * 60 * 1000;
+
 let _cache = null;                      // { data, ts }
-export function clearDailyRankCache() { _cache = null; }
+let _weeklyCache = null;                // { bars, devMonday, ts }
+export function clearDailyRankCache() { _cache = null; _weeklyCache = null; }
+
+async function getWeeklyBars(db, tickers) {
+  const devMonday = developingWeekMonday();
+  if (_weeklyCache && _weeklyCache.devMonday === devMonday
+      && (Date.now() - _weeklyCache.ts) < WEEKLY_CACHE_MS) return _weeklyCache;
+  const bars = await loadWeeklyCloses(db, tickers, devMonday).catch(() => ({}));
+  _weeklyCache = { bars, devMonday, ts: Date.now() };
+  return _weeklyCache;
+}
 
 const r2 = v => Math.round(v * 100) / 100;
 const r3 = v => Math.round(v * 1000) / 1000;
@@ -132,11 +152,13 @@ export async function getDailyRank(forceRefresh = false) {
 
   const db = await connectToDatabase();
 
-  const [quoteMap, signalsRes, splitExcl, recentBars] = await Promise.all([
+  const [quoteMap, signalsRes, splitExcl, recentBars, weekly] = await Promise.all([
     fetchAiQuotesBatch(tickers).catch(() => ({})),
     getAiUniverseSignals().then(r => r.signals || {}).catch(() => ({})),
     db ? getSplitExclusions(db).catch(() => new Map()) : Promise.resolve(new Map()),
     db ? loadRecentCloses(db, tickers).catch(() => ({})) : Promise.resolve({}),
+    db ? getWeeklyBars(db, tickers)
+       : Promise.resolve({ bars: {}, devMonday: developingWeekMonday() }),
   ]);
 
   // No live quotes means no board. Say so rather than render an empty ranking.
@@ -186,6 +208,13 @@ export async function getDailyRank(forceRefresh = false) {
       suspectReason = `our ${changePct.toFixed(2)}% vs FMP ${fmpPct.toFixed(2)}% — quote internally inconsistent`;
     }
 
+    // Where it sits vs its OpEMA line. The live price drives the developing
+    // week, exactly as the Value page and the chart do it.
+    const line = computeOpEma(
+      buildDevelopingSeries(weekly.bars[t], weekly.devMonday, price),
+      meta[t]?.sectorId,
+    );
+
     const vol    = Number(q.volume);
     const avgVol = Number(q.avgVolume);
     const relVol = Number.isFinite(vol) && Number.isFinite(avgVol) && avgVol > 0 ? vol / avgVol : null;
@@ -204,14 +233,26 @@ export async function getDailyRank(forceRefresh = false) {
       avgVolume: Number.isFinite(avgVol) ? avgVol : null,
       relVol:    relVol == null ? null : r2(relVol),
       signalLabel: signalLabel(signalsRes, t),
+      opema:       line.opema,
+      opemaSide:   line.side,          // 'above' | 'below' | null (too young for a line)
+      opemaPct:    line.light,         // % above (+) or below (-) the line
+      opemaPeriod: line.opemaPeriod,
       verified:  xc.verified,
       suspect,
       suspectReason,
     });
   }
 
-  // The ranking: biggest gainer first, biggest decliner last.
-  rows.sort((a, b) => b.changePct - a.changePct);
+  // ── The ranking: two keys, OpEMA side first ────────────────────────────────
+  // Names trading ABOVE their OpEMA line rank ahead of names below it, and
+  // within each block the biggest gainer comes first. So the top of the board is
+  // "the biggest move today that is also in an uptrend" rather than simply the
+  // biggest move. Names too young for a line sort last.
+  //
+  // Consequence to be aware of: a large gainer that is still below its line lands
+  // below EVERY above-line name, not near the top. That is intended.
+  const lineRank = r => (r.opemaSide === 'above' ? 0 : r.opemaSide === 'below' ? 1 : 2);
+  rows.sort((a, b) => lineRank(a) - lineRank(b) || b.changePct - a.changePct);
   rows.forEach((r, i) => { r.rank = i + 1; });
 
   const data = {
@@ -231,7 +272,11 @@ export async function getDailyRank(forceRefresh = false) {
       unchanged:  rows.filter(r => r.changePct === 0).length,
       suspect:    rows.filter(r => r.suspect).length,
       unverified: rows.filter(r => !r.verified && !r.suspect).length,
+      aboveLine:  rows.filter(r => r.opemaSide === 'above').length,
+      belowLine:  rows.filter(r => r.opemaSide === 'below').length,
+      noLine:     rows.filter(r => r.opemaSide == null).length,
     },
+    developingWeekOf: weekly.devMonday,
     rows,
   };
 

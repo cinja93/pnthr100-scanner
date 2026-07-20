@@ -49,7 +49,7 @@ import { getPaperBookState, getPaperBookProjection, runAllPaperBookTicks, listPa
 import { refreshHandsOffBand } from './backtest/treePaperReconstruction.js';
 import { stageWeeklyOrders, executeWeeklyOrders, monitorAndStageUpgrades, executeMceEntries } from './aiAutoExecute.js';
 import { runAiKillPipeline, getLatestAiKillScores, getAiKillHistory } from './aiKillService.js';
-import { getBondHeatData, clearBondHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './bondHeatService.js';
+import { getMarketHeatData, clearMarketHeatCache, getTreasuryHistory, getFcfData, getValuationData } from './marketHeatService.js';
 import { getJungleHeatData, getJungleFcfData, getJungleValuationData } from './jungleHeatService.js';
 import { runAiWeeklyRatchet, runAiStaleHuntCheck } from './aiPositionManager.js';
 import { getAiUniverseSignals } from './aiUniverseSignalsService.js';
@@ -2347,10 +2347,10 @@ app.get('/api/ai-members', authenticateJWT, requireAdmin, async (req, res) => {
 });
 
 // ── PNTHR Bond Heat — daily heat map + treasury yields ──────────────────────
-app.get('/api/bond-heat', async (req, res) => {
+app.get(['/api/market-heat', '/api/bond-heat'], async (req, res) => {
   try {
-    if (req.query.refresh) clearBondHeatCache();
-    const data = await getBondHeatData();
+    if (req.query.refresh) clearMarketHeatCache();
+    const data = await getMarketHeatData();
     res.json(data);
   } catch (err) {
     console.error('Error in /api/bond-heat:', err);
@@ -2358,7 +2358,7 @@ app.get('/api/bond-heat', async (req, res) => {
   }
 });
 
-app.get('/api/bond-heat/history', async (req, res) => {
+app.get(['/api/market-heat/history', '/api/bond-heat/history'], async (req, res) => {
   try {
     const data = await getTreasuryHistory();
     res.json(data);
@@ -2368,7 +2368,7 @@ app.get('/api/bond-heat/history', async (req, res) => {
   }
 });
 
-app.get('/api/bond-heat/fcf', async (req, res) => {
+app.get(['/api/market-heat/fcf', '/api/bond-heat/fcf'], async (req, res) => {
   try {
     const data = await getFcfData();
     res.json(data);
@@ -7278,7 +7278,7 @@ app.get('/api/jungle-heat/valuation', async (req, res) => {
   }
 });
 
-app.get('/api/bond-heat/valuation', async (req, res) => {
+app.get(['/api/market-heat/valuation', '/api/bond-heat/valuation'], async (req, res) => {
   try {
     const data = await getValuationData();
     res.json(data);
@@ -7292,7 +7292,7 @@ app.get('/api/bond-heat/valuation', async (req, res) => {
 cron.schedule('0 18 15 2,5,8,11 *', async () => {
   try {
     console.log('[Valuation cron] Quarterly refresh starting...');
-    clearBondHeatCache();
+    clearMarketHeatCache();
     const [fcf, val] = await Promise.all([getFcfData(), getValuationData()]);
     console.log(`[Valuation cron] Refreshed FCF for ${Object.keys(fcf).length}, valuation for ${Object.keys(val).length} tickers`);
   } catch (err) {

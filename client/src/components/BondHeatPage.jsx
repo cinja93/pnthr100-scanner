@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import PageHeader from './PageHeader';
-import styles from './BondHeatPage.module.css';
+import styles from './HeatPage.module.css';
 
 // ── Chart helpers ───────────────────────────────────────────────────────────
 
@@ -651,8 +651,8 @@ export default function BondHeatPage() {
     setError(null);
     try {
       const [heatRes, histRes] = await Promise.all([
-        apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
-        apiFetch(`${API_BASE}/api/bond-heat/history`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/market-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/market-heat/history`, { headers: authHeaders() }),
       ]);
       if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
       const json = await heatRes.json();

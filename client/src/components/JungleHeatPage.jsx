@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import PageHeader from './PageHeader';
-import styles from './BondHeatPage.module.css';
+import styles from './HeatPage.module.css';
 
 function getHeatColor(pct) {
   if (pct == null) return '#333';

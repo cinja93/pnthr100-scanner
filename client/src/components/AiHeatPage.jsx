@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiFetch, authHeaders, API_BASE } from '../services/api';
 import AiTickerChartModal from './AiTickerChartModal';
 import PageHeader from './PageHeader';
-import styles from './BondHeatPage.module.css';
+import styles from './HeatPage.module.css';
 
 function getHeatColor(pct) {
   if (pct == null) return '#333';
@@ -121,9 +121,9 @@ export default function AiHeatPage() {
     setError(null);
     try {
       const [heatRes, fcfRes, valRes] = await Promise.all([
-        apiFetch(`${API_BASE}/api/bond-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
-        apiFetch(`${API_BASE}/api/bond-heat/fcf`, { headers: authHeaders() }),
-        apiFetch(`${API_BASE}/api/bond-heat/valuation`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/market-heat${refresh ? '?refresh=1' : ''}`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/market-heat/fcf`, { headers: authHeaders() }),
+        apiFetch(`${API_BASE}/api/market-heat/valuation`, { headers: authHeaders() }),
       ]);
       if (!heatRes.ok) throw new Error(`HTTP ${heatRes.status}`);
       const json = await heatRes.json();

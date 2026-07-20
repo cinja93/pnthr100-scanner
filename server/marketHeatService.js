@@ -1,4 +1,15 @@
-// server/bondHeatService.js
+// server/marketHeatService.js
+// ── Daily heat for the AI Elite 300, plus the Treasury yield backdrop ────────
+//
+// NAMING NOTE: this was called bondHeatService.js, which read as "a service
+// about bonds". It is not. The stock data here is the AI-300 universe
+// (getAiUniverseHoldings / getAiUniverseSectorMeta); the Treasury yields are
+// context layered alongside it. Two pages read from this one service:
+//   AiHeatPage   → "AI 300 Heat Map"   (the sector heat blocks, + FCF/valuation)
+//   BondHeatPage → "PNTHR Bond Yields" (the treasury curve + history)
+// The old /api/bond-heat* routes still work as aliases so nothing breaks across
+// a deploy; /api/market-heat* is the name to use going forward.
+//
 // Fetches daily % change for all AI Universe stocks + 10Y/30Y Treasury yields.
 // Also provides historical treasury + SPY data with yield shock detection.
 
@@ -25,7 +36,7 @@ let valCache = null;
 let valCacheTime = 0;
 const VAL_CACHE_MS = 6 * 60 * 60 * 1000;
 
-export function clearBondHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; fcfCache = null; fcfCacheTime = 0; valCache = null; valCacheTime = 0; }
+export function clearMarketHeatCache() { cache = null; cacheTime = 0; histCache = null; histCacheTime = 0; fcfCache = null; fcfCacheTime = 0; valCache = null; valCacheTime = 0; }
 
 export async function getFcfData() {
   const now = Date.now();
@@ -97,7 +108,7 @@ export async function getValuationData() {
   return results;
 }
 
-export async function getBondHeatData() {
+export async function getMarketHeatData() {
   const now = Date.now();
   if (cache && (now - cacheTime) < CACHE_MS) return cache;
 

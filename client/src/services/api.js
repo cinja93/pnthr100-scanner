@@ -505,7 +505,7 @@ const FCF_CLIENT_CACHE_MS = 5 * 60 * 1000;
 export async function fetchFcfData() {
   const now = Date.now();
   if (_fcfCache && (now - _fcfCacheTime) < FCF_CLIENT_CACHE_MS) return _fcfCache;
-  const url = `${API_BASE}/api/bond-heat/fcf`;
+  const url = `${API_BASE}/api/market-heat/fcf`;
   const response = await apiFetch(url, { headers: authHeaders() });
   if (!response.ok) return {};
   const data = await response.json();
@@ -520,7 +520,7 @@ let _valCacheTime = 0;
 export async function fetchValuationData() {
   const now = Date.now();
   if (_valCache && (now - _valCacheTime) < FCF_CLIENT_CACHE_MS) return _valCache;
-  const url = `${API_BASE}/api/bond-heat/valuation`;
+  const url = `${API_BASE}/api/market-heat/valuation`;
   const response = await apiFetch(url, { headers: authHeaders() });
   if (!response.ok) return {};
   const data = await response.json();

@@ -58,6 +58,30 @@ function isoShift(days) {
   return d.toISOString().slice(0, 10);
 }
 
+// Whole-day distance between two YYYY-MM-DD dates.
+function daysApart(a, b) {
+  return Math.round(Math.abs(new Date(a + 'T00:00:00Z') - new Date(b + 'T00:00:00Z')) / 86400000);
+}
+
+// True when `seamDate` lines up (within toleranceDays) with a real FMP-recorded
+// split. This is the discriminator that lets a re-sync tell a genuine
+// unadjusted split seam (FMP records the split → matches → stay excluded) apart
+// from a real price crash / short-squeeze (FMP records NO split → no match →
+// the series is legitimate, don't block on it). Exported for the unit test.
+export function seamMatchesSplit(seamDate, splitDates, toleranceDays = 5) {
+  for (const sd of splitDates) if (daysApart(seamDate, sd) <= toleranceDays) return true;
+  return false;
+}
+
+// FMP's recorded split ex-dates for a ticker, as a Set of YYYY-MM-DD. An empty
+// set means FMP knows of no split — so any large move in the price series is
+// real market action, not an unadjusted split. Shared with the 679 re-sync.
+export async function fmpSplitDates(t) {
+  const res = await fetchFMP(`/historical-price-full/stock_split/${t}`).catch(() => null);
+  const hist = Array.isArray(res?.historical) ? res.historical : [];
+  return new Set(hist.map(h => h?.date).filter(Boolean));
+}
+
 function universeTickers() {
   const set = new Set();
   for (const sec of SECTORS) for (const h of sec.holdings) set.add(h.ticker);
@@ -197,12 +221,30 @@ async function resyncTicker(db, split) {
     }
   }
 
-  // (c) no discontinuity seam in the fresh series
+  // (c) discontinuity seam guard. A >50% day-over-day move in the fresh series
+  // usually means an UNADJUSTED split (FMP has not rescaled its history yet);
+  // swapping that in would corrupt the candles, so we don't. BUT a real price
+  // crash or short-squeeze is ALSO a >50% move, and that is legitimate data.
+  // Discriminate by FMP's own split record: a genuine split seam matches an
+  // FMP-recorded split date and still blocks; a real move (no FMP split) does
+  // not, so it no longer keeps a name excluded forever. This is the PRIM case —
+  // a real -50% news crash on 2026-05-06 that FMP records no split for, which
+  // had kept PRIM data-flagged and out of the Value screen for 29 days.
   const freshAsc = [...freshDesc].reverse();
+  let splitDates = null;          // lazy — only fetched if we actually hit a seam
+  const realMoves = [];
   for (let i = 1; i < freshAsc.length; i++) {
-    const move = Math.abs(freshAsc[i].close / freshAsc[i - 1].close - 1);
-    if (move > 0.5) return { ready: false, note: `fresh series has a ${(move * 100).toFixed(0)}% seam on ${freshAsc[i].date} — not swapping` };
+    const move = freshAsc[i].close / freshAsc[i - 1].close - 1;
+    if (Math.abs(move) <= 0.5) continue;
+    const seamDate = freshAsc[i].date;
+    if (splitDates === null) splitDates = await fmpSplitDates(t);
+    if (seamMatchesSplit(seamDate, splitDates)) {
+      return { ready: false, note: `fresh series has a ${(move * 100).toFixed(0)}% seam on ${seamDate} matching an FMP split — not swapping` };
+    }
+    realMoves.push(`${(move * 100).toFixed(0)}% ${seamDate}`);
+    console.log(`[Splits] ${t}: ${(move * 100).toFixed(0)}% move on ${seamDate} has no FMP split — real price action, not a split seam`);
   }
+  const seamNote = realMoves.length ? ` (real move ${realMoves.join(', ')}, no FMP split)` : '';
 
   if (action === 'swapped') {
     await db.collection(DAILY_COLL).updateOne(
@@ -219,7 +261,7 @@ async function resyncTicker(db, split) {
     clearAiUniverseCache();
     clearAiStockChartCache(t);
   }
-  return { ready: true, action, bars: freshDesc.length };
+  return { ready: true, action: action + seamNote, bars: freshDesc.length };
 }
 
 // ── Orchestrator — wired into the 4:15pm cron + admin endpoint ──────────────

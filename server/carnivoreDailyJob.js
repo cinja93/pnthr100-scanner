@@ -32,6 +32,9 @@ import {
   lastCompleteTradingDate, isoMinusDays, mergeBarsWithRepair, detectScaleMismatch, OVERLAP_DAYS,
 } from './aiUniverseDailyJob.js';
 import { fetchFMP } from './stockService.js';
+// Shared split-seam discriminator (one definition, also used by the AI re-sync):
+// a real crash/squeeze is not an unadjusted split, so it must not freeze a name.
+import { seamMatchesSplit, fmpSplitDates } from './splitMaintenanceService.js';
 
 const HISTORY_START = '2018-12-31';   // earliest 679 candle anchor
 
@@ -200,16 +203,30 @@ export async function resyncCarnivoreSplit(db, ticker, opts = {}) {
   if (old?.daily?.length && fresh.length < old.daily.length * 0.9) {
     return { ready: false, note: `FMP history incomplete (${fresh.length} vs ${old.daily.length} stored)` };
   }
-  // (3) no discontinuity seam in the fresh (adjusted) series. A >50% one-day move is
-  // usually an un-adjusted split seam — refuse. opts.forceSeam bypasses this ONLY after
-  // a human verified the move is a real market event (e.g. CVNA 2023-06-08 +56% on 878M
-  // shares — a genuine short-squeeze, not a data error), to avoid leaving an ultra-volatile
-  // name frozen forever on the 50% rule.
+  // (3) discontinuity seam guard. A >50% one-day move is usually an unadjusted
+  // split seam — refuse. But a real crash/short-squeeze is ALSO a >50% move
+  // (e.g. CVNA 2023-06-08 +56% on 878M shares — a genuine squeeze), and those
+  // used to require a human to set opts.forceSeam, freezing the name until then.
+  // Now we discriminate automatically by FMP's split record: a seam that matches
+  // an FMP-recorded split still blocks; a real move (no FMP split) does not. This
+  // is the self-healing path — no more manual forceSeam for real market events.
+  // (forceSeam still honored as a manual override for edge cases.)
+  let seamNote = '';
   if (!opts.forceSeam) {
+    let splitDates = null;        // lazy — only fetched if we actually hit a seam
+    const realMoves = [];
     for (let i = 1; i < freshAsc.length; i++) {
-      const move = Math.abs(freshAsc[i].close / freshAsc[i - 1].close - 1);
-      if (move > 0.5) return { ready: false, note: `seam ${(move * 100).toFixed(0)}% on ${freshAsc[i].date} — not swapping (verify, then forceSeam)` };
+      const move = freshAsc[i].close / freshAsc[i - 1].close - 1;
+      if (Math.abs(move) <= 0.5) continue;
+      const seamDate = freshAsc[i].date;
+      if (splitDates === null) splitDates = await fmpSplitDates(t);
+      if (seamMatchesSplit(seamDate, splitDates)) {
+        return { ready: false, note: `seam ${(move * 100).toFixed(0)}% on ${seamDate} matches an FMP split — not swapping (verify, then forceSeam)` };
+      }
+      realMoves.push(`${(move * 100).toFixed(0)}% ${seamDate}`);
+      console.log(`[Splits/679] ${t}: ${(move * 100).toFixed(0)}% move on ${seamDate} has no FMP split — real price action, not a split seam`);
     }
+    seamNote = realMoves.length ? ` (real move ${realMoves.join(', ')}, no FMP split)` : '';
   }
 
   await dailyCol.updateOne(
@@ -223,5 +240,5 @@ export async function resyncCarnivoreSplit(db, ticker, opts = {}) {
     { $set: { ticker: t, weekly, barCount: weekly.length, fromWeek: weekly[0]?.weekOf || null, toWeek: weekly[weekly.length - 1]?.weekOf || null, builtAt: new Date(), sourceDailyBars: freshAsc.length } },
     { upsert: true },
   );
-  return { ready: true, action: 'swapped', bars: freshDesc.length, from: freshAsc[0].date, to: freshAsc[freshAsc.length - 1].date };
+  return { ready: true, action: 'swapped' + seamNote, bars: freshDesc.length, from: freshAsc[0].date, to: freshAsc[freshAsc.length - 1].date };
 }

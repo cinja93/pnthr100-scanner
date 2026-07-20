@@ -70,6 +70,18 @@ let _cache = null;                      // { data, ts }
 let _weeklyCache = null;                // { bars, devMonday, ts }
 export function clearDailyRankCache() { _cache = null; _weeklyCache = null; }
 
+// Emit a server-log line only when the data-flagged set CHANGES, so a transient
+// flag (a one-off bad quote tick) leaves a trace instead of only being catchable
+// in a screenshot. Quiet while the set is stable.
+let _lastFlaggedKey = null;
+function logFlagChange(flaggedRows) {
+  const key = flaggedRows.map(r => `${r.ticker}:${r.suspectReason}`).sort().join(' | ');
+  if (key === _lastFlaggedKey) return;
+  _lastFlaggedKey = key;
+  console.log(`[DailyRank] data-flagged set changed (${flaggedRows.length}): ` +
+    (flaggedRows.map(r => `${r.ticker} — ${r.suspectReason}`).join('; ') || '(none)'));
+}
+
 async function getWeeklyBars(db, tickers) {
   const devMonday = developingWeekMonday();
   if (_weeklyCache && _weeklyCache.devMonday === devMonday
@@ -254,6 +266,7 @@ export async function getDailyRank(forceRefresh = false) {
   const lineRank = r => (r.opemaSide === 'above' ? 0 : r.opemaSide === 'below' ? 1 : 2);
   rows.sort((a, b) => lineRank(a) - lineRank(b) || b.changePct - a.changePct);
   rows.forEach((r, i) => { r.rank = i + 1; });
+  logFlagChange(rows.filter(r => r.suspect));
 
   const data = {
     ok: true,

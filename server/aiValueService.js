@@ -59,7 +59,19 @@ const WEEK_SESSIONS  = 5;     // 1 week = 5 trading sessions (for the 1-wk move)
 
 const CACHE_MS = 5 * 60 * 1000;
 let _cache = null;            // { data, ts }
+let _lastFlaggedKey = null;   // for log-on-change of the data-flagged set
 export function clearAiValueCache() { _cache = null; }
+
+// Emit a server-log line only when the data-flagged set CHANGES, so a transient
+// flag (a one-off bad quote tick) leaves a trace instead of only being catchable
+// in a screenshot. Quiet while the set is stable. Shared shape with Daily Rank.
+function logFlagChange(label, flaggedRows) {
+  const key = flaggedRows.map(r => `${r.ticker}:${r.suspectReason}`).sort().join(' | ');
+  if (key === _lastFlaggedKey) return;
+  _lastFlaggedKey = key;
+  console.log(`[${label}] data-flagged set changed (${flaggedRows.length}): ` +
+    (flaggedRows.map(r => `${r.ticker} — ${r.suspectReason}`).join('; ') || '(none)'));
+}
 
 // ── ticker → sector (first listing wins) ────────────────────────────────────
 const TICKER_META = {};
@@ -86,7 +98,7 @@ async function loadCloses(db, collection, arrayField, dateField, cutoff) {
   const docs = await db.collection(collection).aggregate([
     { $match: { ticker: { $in: ALL_TICKERS } } },
     { $project: { ticker: 1,
-        bars: { $map: { input: `$${arrayField}`, as: 'b', in: { d: `$$b.${dateField}`, c: `$$b.close` } } } } },
+        bars: { $map: { input: `$${arrayField}`, as: 'b', in: { d: `$$b.${dateField}`, c: `$$b.close`, h: `$$b.high` } } } } },
   ]).toArray();
   const out = {};
   for (const doc of docs) {
@@ -120,8 +132,16 @@ function fmpScaleSuspects(rows, quoteMap) {
       const pr = r.dailyClose / +q.price;
       if (pr < 0.75 || pr > 1.33) { suspect.set(r.ticker, `price scale ${pr.toFixed(2)}x vs FMP — data-suspect`); continue; }
     }
-    if (+q.yearHigh > 0 && r.high52 > 0) {
-      const hr = r.high52 / +q.yearHigh;
+    // Like-for-like: our max INTRADAY high vs FMP's INTRADAY yearHigh. Comparing
+    // our CLOSING-basis high52 here was a structural bug — a stock's closing high
+    // is always <= its intraday high, so the ratio sat below 1 and volatile
+    // beaten-down names (exactly what this screen hunts) drifted under 0.70 and
+    // were falsely dimmed out of every candidate box. Verified: like-for-like
+    // median ratio = 1.000, zero false trips across the universe. A real split
+    // still trips it — stale pre-split highs would be off by the split factor,
+    // far outside the band. (Daily Rank's crossCheckPrevClose is the same idea.)
+    if (+q.yearHigh > 0 && r.intradayHigh52 > 0) {
+      const hr = r.intradayHigh52 / +q.yearHigh;
       if (hr < 0.70 || hr > 1.40) suspect.set(r.ticker, `52-wk-high scale ${hr.toFixed(2)}x vs FMP — data-suspect`);
     }
   }
@@ -164,6 +184,11 @@ export async function getAiValue(forceRefresh = false) {
     if (asOf > dailyAsOf) dailyAsOf = asOf;
     const cur = live != null ? live : dailyClose;        // current price (live when available)
     const high52 = Math.max(cur, ...closes.slice(Math.max(0, n - WK_HIGH_WINDOW)));
+    // Intraday-basis 52-wk high (max daily HIGH), used ONLY for the FMP scale
+    // cross-check so it compares like-for-like against FMP's intraday yearHigh.
+    // high52 above stays CLOSING-basis — that is the correct basis for drawdown.
+    const highs = dBars.map(b => (Number.isFinite(b.h) && b.h > 0 ? b.h : b.c));
+    const intradayHigh52 = Math.max(cur, ...highs.slice(Math.max(0, n - WK_HIGH_WINDOW)));
     const peak   = Math.max(cur, ...closes);
     const prevWk = closes[n - WEEK_SESSIONS];
     const d52 = Math.round((high52 - cur) / high52 * 1000) / 10;
@@ -207,6 +232,7 @@ export async function getAiValue(forceRefresh = false) {
       ticker, name: meta.name, sector: meta.sectorName,
       d52, dpk, wk, last: Math.round(cur * 100) / 100,
       dailyClose: Math.round(dailyClose * 100) / 100, high52: Math.round(high52 * 100) / 100,
+      intradayHigh52: Math.round(intradayHigh52 * 100) / 100,
       opema, opemaPeriod, light, side, wksBelow, wksAbove, aboveRun, reclaim, weekOf,
       volatile, deep: d52 >= K.DEEP,
       suspect: false, suspectReason: null,
@@ -219,6 +245,7 @@ export async function getAiValue(forceRefresh = false) {
     if (splitExcl.has(r.ticker)) { r.suspect = true; r.suspectReason = splitExcl.get(r.ticker); }
     else if (fmpSusp.has(r.ticker)) { r.suspect = true; r.suspectReason = fmpSusp.get(r.ticker); }
   }
+  logFlagChange('Value', rows.filter(r => r.suspect));
 
   // ── Classify into boxes ──
   function classify(r) {

@@ -1,0 +1,290 @@
+/* PNTHR Daily Rank — AI Elite 300 ranked by today's move. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: #0d0d0d;
+  color: #fff;
+}
+
+/* ── Controls strip ─────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px 12px;
+  flex-wrap: wrap;
+}
+
+.asOf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.8);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveDot { animation: none; }
+}
+
+.search {
+  margin-left: auto;
+  background: #151515;
+  border: 1px solid #262626;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 10px;
+  width: 220px;
+  outline: none;
+}
+.search:focus { border-color: #3a3a3a; }
+.search::placeholder { color: #555; }
+
+.refreshBtn {
+  background: #151515;
+  border: 1px solid #262626;
+  border-radius: 6px;
+  color: #ccc;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.refreshBtn:hover:not(:disabled) { border-color: #fcf000; color: #fcf000; }
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Breadth strip ──────────────────────────────────────────────────────── */
+.breadth {
+  padding: 0 24px 14px;
+}
+
+.breadthBar {
+  height: 4px;
+  border-radius: 2px;
+  background: #ef5350;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.breadthUp {
+  display: block;
+  height: 100%;
+  background: #4ade80;
+}
+
+.breadthText {
+  font-size: 12px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 24px 24px;
+  border: 1px solid #1c1c1c;
+  border-radius: 8px;
+  background: #151515;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+/* Widths sum to 100% — rewrite this block if the column count changes. */
+.table th:nth-child(1), .table td:nth-child(1) { width: 5%; }
+.table th:nth-child(2), .table td:nth-child(2) { width: 9%; }
+.table th:nth-child(3), .table td:nth-child(3) { width: 22%; }
+.table th:nth-child(4), .table td:nth-child(4) { width: 16%; }
+.table th:nth-child(5), .table td:nth-child(5) { width: 8%; }
+.table th:nth-child(6), .table td:nth-child(6) { width: 10%; }
+.table th:nth-child(7), .table td:nth-child(7) { width: 9%; }
+.table th:nth-child(8), .table td:nth-child(8) { width: 13%; }
+.table th:nth-child(9), .table td:nth-child(9) { width: 8%; }
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #151515;
+  border-bottom: 1px solid #262626;
+  padding: 10px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #777;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.table thead th:hover { color: #ccc; }
+
+.thTxt { text-align: left; }
+.thNum { text-align: right; }
+
+.table thead th::after {
+  content: '↕';
+  opacity: 0.25;
+  margin-left: 4px;
+  font-size: 9px;
+}
+.sortAsc::after  { content: '▲' !important; opacity: 1 !important; color: #fcf000; }
+.sortDesc::after { content: '▼' !important; opacity: 1 !important; color: #fcf000; }
+
+.table tbody td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #1c1c1c;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table tbody tr:hover { background: #1a1a1a; }
+
+.rankCell {
+  text-align: right;
+  color: #555;
+  font-size: 11px;
+}
+
+.tickerCell { white-space: nowrap; }
+
+.tickerBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #fcf000;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tickerBtn:hover { text-decoration: underline; }
+
+.nameCell   { color: #ddd; }
+.sectorCell { color: #777; font-size: 11px; }
+
+.sigCell { white-space: nowrap; }
+
+.sigChip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.sigBl { background: rgba(74, 222, 128, 0.14); color: #4ade80; }
+.sigSs { background: rgba(239, 83, 80, 0.14);  color: #ef5350; }
+
+.numCell { text-align: right; }
+
+/* Percent cell: magnitude bar behind the value. */
+.pctCell {
+  position: relative;
+  text-align: right;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 16px;
+  border-radius: 2px;
+  opacity: 0.16;
+  pointer-events: none;
+}
+.barUp   { background: #4ade80; }
+.barDown { background: #ef5350; }
+
+.pctVal {
+  position: relative;
+  font-weight: 600;
+}
+
+.up   { color: #4ade80; }
+.down { color: #ef5350; }
+.flat { color: #777; }
+
+/* Relative volume worth noticing — the move has real participation behind it. */
+.hot { color: #fcf000; font-weight: 600; }
+
+.muted { color: #555; }
+
+.flaggedRow { opacity: 0.45; }
+
+.flagMark {
+  color: #fcf000;
+  margin-left: 4px;
+  font-size: 11px;
+  cursor: help;
+}
+
+/* ── States ─────────────────────────────────────────────────────────────── */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 60px 0;
+  color: #777;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #262626;
+  border-top-color: #fcf000;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+
+.errorState {
+  margin: 24px;
+  padding: 14px 16px;
+  border: 1px solid #4a1f1f;
+  border-radius: 8px;
+  background: #1a1010;
+  color: #ef5350;
+  font-size: 13px;
+}
+
+.empty {
+  padding: 40px 0;
+  text-align: center;
+  color: #555;
+  font-size: 13px;
+}

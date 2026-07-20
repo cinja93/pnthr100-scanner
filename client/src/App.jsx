@@ -34,6 +34,7 @@ import JunglePage from './components/JunglePage';
 import AiJunglePage from './components/AiJunglePage';
 import AiObOsPage from './components/AiObOsPage';
 import ValuePage from './components/ValuePage';
+import DailyRankPage from './components/DailyRankPage';
 import Ai300IndexPage from './components/Ai300IndexPage';
 import AiMembersPage from './components/AiMembersPage';
 import BondHeatPage from './components/BondHeatPage';
@@ -1767,6 +1768,9 @@ function AppInner({ currentUser, setCurrentUser, onLogout }) {
 
           {/* Value — AI 300 bottoming screen (drawdown + weeks vs OpEMA line) */}
           {renderPage === 'value' && <ValuePage />}
+
+          {/* Daily Rank — AI 300 ranked by today's move vs the previous close */}
+          {renderPage === 'dailyRank' && <DailyRankPage />}
 
           {/* Half and Half — AI 300 split daily/weekly shorts & longs by price vs EMA */}
           {renderPage === 'half-and-half' && <HalfAndHalfPage />}

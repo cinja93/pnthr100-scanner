@@ -60,6 +60,7 @@ import { fetchAiQuotesBatch } from './aiIntradayOverlay.js';
 import { getAiStockChartData } from './aiUniverseStockChartService.js';
 import { getAiObOs } from './aiObOsService.js';
 import { getAiValue } from './aiValueService.js';
+import { getDailyRank } from './dailyRankService.js';
 import { getHalfAndHalf } from './halfAndHalfService.js';
 import { ensureIndexes as ensureIbkrOutboxIndexes, recentCommands as ibkrOutboxRecent, statusCounts as ibkrOutboxCounts, flagStuck as ibkrOutboxFlagStuck, findPending as ibkrOutboxFindPending, markExecuting as ibkrOutboxMarkExecuting, markDone as ibkrOutboxMarkDone, markFailed as ibkrOutboxMarkFailed } from './ibkrOutbox.js';
 import { runStopRatchet, registerStopRatchetCron } from './stopRatchetCron.js';
@@ -2501,6 +2502,17 @@ app.get('/api/ai-value', authenticateJWT, async (req, res) => {
   } catch (err) {
     console.error('Error in /api/ai-value:', err);
     res.status(500).json({ ok: false, error: 'Failed to load Value data' });
+  }
+});
+
+// ── Daily Rank — AI-300 ranked by today's move vs the previous close ────────
+app.get('/api/daily-rank', authenticateJWT, async (req, res) => {
+  try {
+    const data = await getDailyRank(req.query.refresh === '1');
+    res.json(data);
+  } catch (err) {
+    console.error('Error in /api/daily-rank:', err);
+    res.status(500).json({ ok: false, error: 'Failed to load Daily Rank data' });
   }
 });
 

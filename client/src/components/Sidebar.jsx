@@ -59,6 +59,7 @@ const NAV_GROUPS = [
       { key: 'newHighsLows', label: 'New Highs' },
       { key: 'aiObOs',     label: 'OB/OS',         badge: 'AI 300' },
       { key: 'value',      label: 'Value',         badge: 'AI 300' },
+      { key: 'dailyRank',  label: 'Daily Rank',    badge: 'AI 300' },
       { key: 'half-and-half', label: 'Half and Half', badge: 'AI 300' },
       { key: 'ai300Index', label: 'AI 300 Index' },
       { key: 'aiMembers',  label: 'AI Members', needsAccess: true },

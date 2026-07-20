@@ -49,7 +49,9 @@ function currentWeekMonday() {
   return d.toISOString().slice(0, 10);
 }
 
-function signalLabel(signalMap, ticker) {
+// Exported so Daily Rank builds BL+N / SS+N labels the same way this does —
+// one definition of what a signal label means, not two.
+export function signalLabel(signalMap, ticker) {
   const s = signalMap?.[ticker];
   if (!s || !s.signal) return null;
   if (s.signal !== 'BL' && s.signal !== 'SS') return null;

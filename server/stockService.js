@@ -369,8 +369,14 @@ let aiStocksCache = null;
 let aiStocksCacheTime = 0;
 const AI_CACHE_TTL = 60 * 60 * 1000; // 60 min
 
-export async function getAiTopStocks() {
-  if (aiStocksCache && Date.now() - aiStocksCacheTime < AI_CACHE_TTL) {
+// force=true bypasses the 60-min cache. Callers that need a GUARANTEED fresh scan
+// (the Friday ranking scheduler, the admin force-rescan route) must pass it: the
+// Friday save only happens on the non-cached path below, so a warm cache silently
+// skips the snapshot. index.js already called this as getAiTopStocks(true) with a
+// "force fresh scan" comment, but the parameter did not exist until now, so that
+// call had no effect whenever the cache was warm.
+export async function getAiTopStocks(force = false) {
+  if (!force && aiStocksCache && Date.now() - aiStocksCacheTime < AI_CACHE_TTL) {
     return aiStocksCache;
   }
   try {

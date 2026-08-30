@@ -12297,6 +12297,35 @@ setInterval(async () => {
   }
 }, 30 * 60 * 1000);
 
+// ── Friday scheduler: AI-300 rankings ───────────────────────────────────────
+// Sibling of the 679 scheduler above. Both AI producers (getAiTopStocks = 100 long
+// + 100 short scanner, getAiUniverse = ~324-name long-only snapshot) call
+// autoSaveAiRankingIfFriday as a SIDE EFFECT of serving a request — so before this
+// existed, a Friday's AI snapshot only got written if a human happened to load an AI
+// page that evening. That silently lost 4 Fridays between 2026-07-24 and 2026-08-28
+// (backfilled from official closes; those docs carry backfilled:true). The 679 never
+// gapped because it has had this forcing guard all along. Same shape: only force when
+// the snapshot is actually missing, so a landed save stops further scans.
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const etWeekday = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long' });
+    const etHour = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }), 10);
+    if (etWeekday !== 'Friday' || etHour < 16 || etHour > 20) return;
+    const etDate = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const db = await connectToDatabase();
+    if (!db) return;
+    const doc = await db.collection('ai_rankings').findOne({ date: etDate }, { projection: { rankings: 1, shortRankings: 1 } });
+    // "Complete" = the scanner half landed (it is the half that carries shorts).
+    if (doc?.shortRankings?.length) return;
+    console.log('⏰ AI Friday scheduler: no complete AI snapshot for', etDate, '— forcing fresh scans...');
+    await getAiTopStocks(true);                       // 100 long + 100 short
+    await getAiUniverse({ refresh: true });           // full universe long set
+  } catch (err) {
+    console.error('AI Friday scheduler error:', err.message);
+  }
+}, 30 * 60 * 1000);
+
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[FATAL] Unhandled Rejection:', reason);
 });

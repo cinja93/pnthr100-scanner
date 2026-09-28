@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import styles from './Sidebar.module.css';
 import pnthrLogo from '../assets/panther head.png';
-import builtWithLove from '../assets/Built with Love.jpg';
 import { useDemo } from '../contexts/DemoContext';
 import { usePortal } from '../contexts/PortalContext';
 import { useFund } from '../contexts/FundContext';
@@ -691,10 +690,8 @@ export default function Sidebar({ activePage, onNavigate, currentUser, isAdmin, 
             }} />
           </div>
         )}
-        <div className={styles.loveFrame}>
-          <img src={builtWithLove} alt="Built with Love" className={styles.loveImg} />
-        </div>
-        <p className={styles.loveText}>Built with love by Cindy and Blazer</p>
+        <img src={pnthrLogo} alt="PNTHR" className={styles.loveImg} />
+        <p className={styles.loveText}>The Hunt Never Sleeps</p>
       </div>
     </aside>
     </>
